@@ -6,6 +6,38 @@ This project aims to deploy and manage one or more autonomous AI developers as c
 - Learn and implement OpenClaw in production.
 - Deploy an autonomous developer within a K8s container.
 
+## 📁 Project Structure
+
+```text
+.
+├── .github/                # Pipelines (GitHub Actions Workflows)
+│   └── workflows/          # CI/CD for Docker, Terraform, and Helm
+├── infra/                  # Infrastructure as Code (IaC)
+│   ├── terraform/
+│   │   ├── aws/            # AWS Resources (EC2, VPC, EKS/K3s)
+│   │   ├── gcp/            # GCP Resources (for comparison)
+│   │   └── modules/        # Reusable modules
+├── k8s/                    # Kubernetes Orchestration
+│   ├── helm/               # Custom Helm Chart for eDev
+│   │   └── edev-agent/     # Deployment templates, PVC, ConfigMap
+│   └── overlays/           # Environment-specific differences (dev/prod)
+├── src/                    # Source Code and Scripts
+│   ├── agent/              # OpenClaw configurations and prompts
+│   ├── mcp/                # Custom MCP servers (Linear, etc.)
+│   └── telegram/           # Telegram bot webhook and handlers
+├── build/                  # Build Artifacts
+│   └── docker/
+│       ├── Dockerfile      # Base eDev image
+│       └── scripts/        # Entrypoint and bootstrap scripts
+├── tests/                  # Unit and Integration Tests
+│   ├── e2e/                # End-to-end agent workflow tests
+│   └── unit/               # Internal script tests
+├── docs/                   # Technical documentation and ADRs
+├── .env.example            # Environment variables template
+├── Makefile                # Shortcuts for common commands (make up, make deploy)
+└── README.md               # Project overview and documentation
+```
+
 ## 🛠 Installation
 The agent container must include:
 - **OpenClaw**: The agent's core.

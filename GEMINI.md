@@ -44,6 +44,7 @@ This document provides foundational mandates for Gemini CLI when operating withi
 - **Test Command:** `[e.g., npm test]`
 - **Pre-Commit:** Ensure `[command]` passes before suggesting a commit.
 
-## 💬 Communication Preferences
-- **Verbosity:** [e.g., "Be extremely brief," "Explain architectural trade-offs in detail"]
-- **Commit Messages:** [e.g., "Follow Conventional Commits (feat:, fix:, etc.)"]
+## 💬 Communication & Language
+- **Language:** All code, comments, documentation (including README and ADRs), and interactions must be in English.
+- **Verbosity:** Be concise and direct. Focus on technical rationale.
+- **Commit Messages:** Follow Conventional Commits (feat:, fix:, etc.) in English.
