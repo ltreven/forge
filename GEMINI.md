@@ -1,0 +1,49 @@
+# Project: edev - Gemini CLI Instructions
+
+This document provides foundational mandates for Gemini CLI when operating within this workspace. These instructions take absolute precedence over general defaults.
+
+## 🎯 Project Overview
+- **Stack:** Kubernetes, OpenClaw, Node.js, React, git, MCP (Linear integration), Telegram (Bot API).
+- **Core Goal:** Deploy and manage one or more autonomous AI developers as containers in a Kubernetes cluster. These agents act as full-stack developers, with state/memory persisted in Git for portability and interaction via Telegram.
+
+## 🛠 Engineering Standards
+
+### Coding Style & Conventions
+- **Developer Workflow:**
+    - **Ticket Ingestion:** Read Linear tickets to start work.
+    - **DoR Check:** Question the Definition of Ready (Acceptance Criteria, clear descriptions).
+    - **Tech Planning:** Produce documentation and seek approval before coding.
+    - **Execution:** Code, test, and submit PRs.
+- **Memory:** All state/memory must be stored in Git to allow restoration from zero.
+- **Naming:** camelCase for variables, PascalCase for components.
+- **Type Safety:** Strict TypeScript.
+
+### Security Strategy
+- **Gateway Bind:** Bind to `loopback` only. Never expose 0.0.0.0.
+- **Access Control:** Strong access tokens and pairing policies.
+- **Secure Connectivity:** Use SSH tunnels (port 18789) or VPN (Tailscale) for the control UI.
+- **Privilege:** Run as non-privileged user with Docker sandbox enabled.
+
+### Testing Strategy
+- **Framework:** Vitest / Jest.
+- **Requirement:** Every bug fix must include a reproduction test.
+- **Location:** `.test.ts` files alongside source.
+
+### Documentation
+- **Inline:** [e.g., JSDoc for exported functions]
+- **Updates:** Always update README.md if CLI commands or environment variables change.
+
+## 🏗 Architectural Guidelines
+- **Patterns:** [e.g., Hexagonal Architecture, Clean Architecture, or specific folder structures]
+- **State Management:** [e.g., Zustand, Redux, or React Context]
+- **Error Handling:** [e.g., Global error boundary, specific Result/Option patterns]
+
+## 🚀 Tooling & Workflow
+- **Build Command:** `[e.g., npm run build]`
+- **Lint Command:** `[e.g., npm run lint]`
+- **Test Command:** `[e.g., npm test]`
+- **Pre-Commit:** Ensure `[command]` passes before suggesting a commit.
+
+## 💬 Communication Preferences
+- **Verbosity:** [e.g., "Be extremely brief," "Explain architectural trade-offs in detail"]
+- **Commit Messages:** [e.g., "Follow Conventional Commits (feat:, fix:, etc.)"]
