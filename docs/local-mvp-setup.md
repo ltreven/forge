@@ -48,4 +48,5 @@ make logs
 - Do not commit `.env`.
 - Keep the gateway bound conservatively.
 - Use token-based local auth instead of hardcoded example passwords.
+- The container explicitly runs the OpenClaw entrypoint from `/app/openclaw.mjs` to avoid ambiguity from the mounted workspace path.
 - This is a local-first MVP, not the final production deployment model.
