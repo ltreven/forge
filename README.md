@@ -1,69 +1,64 @@
-# edev: Automated AI Developer
+# eDEV
 
-This project aims to deploy and manage one or more autonomous AI developers as containers in a Kubernetes cluster using OpenClaw.
+**eDEV** is a deployable agent platform built around OpenClaw-based autonomous agents.
 
-## 🎯 Objective
-- Learn and implement OpenClaw in production.
-- Deploy an autonomous developer within a K8s container.
+It starts as a local-first engineering laboratory and evolves toward a framework for deploying specialized agents into customer-controlled environments.
 
-## 📁 Project Structure
+## Current direction
 
-```text
-.
-├── .github/                # Pipelines (GitHub Actions Workflows)
-│   └── workflows/          # CI/CD for Docker, Terraform, and Helm
-├── infra/                  # Infrastructure as Code (IaC)
-│   ├── terraform/
-│   │   ├── aws/            # AWS Resources (EC2, VPC, EKS/K3s)
-│   │   ├── gcp/            # GCP Resources (for comparison)
-│   │   └── modules/        # Reusable modules
-├── k8s/                    # Kubernetes Orchestration
-│   ├── helm/               # Custom Helm Chart for eDev
-│   │   └── edev-agent/     # Deployment templates, PVC, ConfigMap
-│   └── overlays/           # Environment-specific differences (dev/prod)
-├── src/                    # Source Code and Scripts
-│   ├── agent/              # OpenClaw configurations and prompts
-│   ├── mcp/                # Custom MCP servers (Linear, etc.)
-│   └── telegram/           # Telegram bot webhook and handlers
-├── build/                  # Build Artifacts
-│   └── docker/
-│       ├── Dockerfile      # Base eDev image
-│       └── scripts/        # Entrypoint and bootstrap scripts
-├── tests/                  # Unit and Integration Tests
-│   ├── e2e/                # End-to-end agent workflow tests
-│   └── unit/               # Internal script tests
-├── docs/                   # Technical documentation and ADRs
-├── .env.example            # Environment variables template
-├── Makefile                # Shortcuts for common commands (make up, make deploy)
-└── README.md               # Project overview and documentation
-```
+The current implementation target is the first MVP:
+- a local Docker-based OpenClaw software engineer agent
+- clear approval-aware behavior
+- project-management integration starting with Linear
+- portable state and reproducible local setup
 
-## 🛠 Installation
-The agent container must include:
-- **OpenClaw**: The agent's core.
-- **Git**: For version control and memory persistence.
-- **Development Stack**: Node.js, React, and necessary tools.
-- **MCP (Model Context Protocol)**: Linear integration for ticket management.
+## Product model
 
-## 🔑 Granting Access
-- **Telegram**: Main interface for the developer to receive commands and send status updates.
-- **SSH**: For direct container access and management.
+eDEV is **not** intended to be a hosted SaaS.
 
-## 🛡 Security (Hardening)
-Following best practices for OpenClaw in cloud environments (AWS/K8s):
-- **Loopback Bind**: The OpenClaw gateway must be configured for `bind: "loopback"`. **Never** expose `0.0.0.0` directly.
-- **Authentication**: Use strong access tokens and pairing policies.
-- **Secure Access**: Always access the OpenClaw web interface (port 18789) via an SSH tunnel or VPN (Tailscale). **Never** open this port in the Security Group/Firewall.
-- **Least Privilege**: Run OpenClaw with a non-privileged user and enable the Docker sandbox.
+The long-term goal is to make it possible to deploy and operate agent systems for clients using:
+- local Docker workflows
+- Kubernetes deployments
+- Helm-based customer configuration
+- Terraform-based infrastructure provisioning
+- future operational automation and monitoring
 
-## 🧠 Skills and Knowledge
-The autonomous developer is prepared to:
-1. **Ticket Management**: Read Linear tickets to start work units.
-2. **Product Context**: Understand code, architecture, design principles, and customer problems.
-3. **Definition of Ready (DoR)**: Question incomplete tickets (lacking acceptance criteria or clear descriptions).
-4. **Tech Planning**: Produce technical documentation before starting any code.
-5. **Approval**: Request approval for technical planning (back and forth).
-6. **Execution**: Code, test, and submit Pull Requests.
+## Current repository focus
 
-## 💾 Memory
-- **Git Persistence**: All state and "memory" of the developer are stored in Git. This allows the agent to be rebuilt from scratch in any environment while maintaining its historical context.
+This repository currently focuses on:
+- product documentation
+- MVP definition
+- local runtime baseline
+- initial agent configuration patterns
+
+## Key documents
+
+Under `docs/`:
+- `product-vision.md`
+- `mvp-scope.md`
+- `system-overview.md`
+- `agent-persona-software-engineer.md`
+- `local-mvp-setup.md`
+
+## Current local MVP shape
+
+The local MVP uses:
+- `build/docker/Dockerfile` for the agent image
+- `docker-compose.yml` for local orchestration
+- `.env.example` for local environment variables
+- `src/agent/config/` for baseline agent identity, behavior, and memory files
+
+## Principles
+
+- Keep secrets out of Git.
+- Keep persisted artifacts in English.
+- Keep external actions approval-aware.
+- Prefer portability and reproducibility over ad hoc setup.
+
+## Next steps
+
+Planned follow-on work includes:
+- improving the runtime image
+- strengthening local configuration patterns
+- refining the software engineer agent workflow
+- preparing the path to Helm and Terraform support
