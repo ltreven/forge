@@ -1,4 +1,13 @@
 FROM ghcr.io/openclaw/openclaw:latest
 
-# We'll stick to the base image's configuration to ensure the application starts correctly.
-# The base image already has the WORKDIR and application files set up.
+# eDEV local MVP image
+#
+# This image extends the official OpenClaw image with a minimal set of
+# directories expected by the local MVP workflow.
+
+USER root
+RUN mkdir -p /home/node/.openclaw /home/node/workspace \
+    && chown -R node:node /home/node/.openclaw /home/node/workspace
+
+USER node
+WORKDIR /home/node/workspace
