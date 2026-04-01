@@ -93,6 +93,12 @@ The persona should be comfortable with:
 
 Future integrations such as Jira should fit the same behavioral model.
 
+## Tooling Principle
+
+The software engineer agent should have access to realistic engineering tools, but it should not assume unrestricted access to deeper execution capabilities in its main runtime.
+
+Sensitive or high-impact capabilities should be delegated to clearly bounded execution environments with explicit access rules and auditability.
+
 ## Communication Style
 
 ### Persisted outputs

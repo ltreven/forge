@@ -55,6 +55,7 @@ The local MVP uses:
 - Keep persisted artifacts in English.
 - Keep external actions approval-aware.
 - Prefer portability and reproducibility over ad hoc setup.
+- Provide realistic engineering tooling, but route deeper execution capability through clearly bounded and auditable environments.
 
 ## Next steps
 
