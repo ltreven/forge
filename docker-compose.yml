@@ -6,14 +6,11 @@ services:
     container_name: edev-agent
     restart: unless-stopped
     ports:
-      - "127.0.0.1:18789:18789" # Secure mapping to your Mac
+      - "127.0.0.1:18789:18789"
     volumes:
-      - ./src/agent/config:/home/node/.openclaw  # Persist config & memory
-      - ./workspace:/home/node/workspace        # The agent's work area
+      - ./src/agent/config:/home/node/.openclaw
+      - ./workspace:/home/node/workspace
     env_file: .env
     environment:
-      - OPENCLAW_WORKSPACE=/home/node/workspace
-      - NODE_ENV=production
-      - OPENCLAW_BIND_HOST=0.0.0.0
-      - HOST=0.0.0.0
-      - OPENCLAW_GATEWAY_PASSWORD=edev-password-2026
+      OPENCLAW_WORKSPACE: /home/node/workspace
+      NODE_ENV: production

@@ -14,3 +14,7 @@ logs:
 
 shell:
 	docker compose exec agent /bin/bash
+
+setup:
+	cp -n .env.example .env || true
+	@echo "Review .env before running the local MVP."
