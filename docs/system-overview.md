@@ -119,6 +119,17 @@ Security principles include:
 - no secrets committed to Git
 - customer-specific credentials managed outside the repository
 - clear separation between operator identity and agent identity
+- sensitive execution capabilities should be routed through clearly bounded sandbox environments rather than granted to the main agent runtime by default
+
+## Execution Model Principle
+
+The software engineer agent should have access to realistic engineering tooling, but deeper execution capabilities should be mediated through controlled, auditable sandbox layers.
+
+In practice, that means the architecture should distinguish between:
+- the main agent runtime used for reasoning, planning, editing, and coordination
+- separate execution environments used for heavier or more sensitive work such as builds, container operations, or broader system interaction
+
+A future implementation may realize those execution environments as separate VMs, isolated containers, or other clearly bounded workers with explicit access rules.
 
 ## Architectural Direction
 

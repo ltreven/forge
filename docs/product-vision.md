@@ -78,6 +78,9 @@ Its differentiation comes from treating agents as operational units that can be:
 5. **Infrastructure as product surface**
    - Terraform, Helm, scripts, and future operators are first-class parts of the product.
 
+6. **Capability with governance**
+   - Real engineering tools matter, but sensitive execution capability should be mediated through clearly bounded environments instead of being granted directly by default.
+
 ## Product Direction
 
 ### Near term
