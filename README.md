@@ -48,6 +48,7 @@ The local MVP uses:
 - `.env.example` for local environment variables
 - `src/agent/config/` for baseline agent identity, behavior, memory files, and runtime config
 - an explicit `openclaw gateway run --allow-unconfigured` command in Compose so startup follows the supported OpenClaw CLI flow
+- a lightweight entrypoint hardening step that tightens permissions on mounted local OpenClaw config files before launch
 
 ## Principles
 

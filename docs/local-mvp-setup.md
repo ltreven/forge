@@ -51,4 +51,5 @@ make logs
 - Use token-based local auth instead of hardcoded example passwords.
 - The container runs `openclaw gateway run --allow-unconfigured` explicitly so startup follows the supported OpenClaw CLI path instead of relying on an implicit image entrypoint.
 - The local runtime now includes a minimal `openclaw.json` so the instance has a defined agent model, workspace, and gateway configuration.
+- The image entrypoint hardens local file permissions for the mounted OpenClaw config directory before starting the runtime.
 - This is a local-first MVP, not the final production deployment model.
