@@ -14,5 +14,4 @@ services:
     environment:
       OPENCLAW_WORKSPACE: /home/node/workspace
       NODE_ENV: production
-    working_dir: /app
-    command: ["node", "/app/openclaw.mjs"]
+    command: ["openclaw", "gateway", "run", "--allow-unconfigured"]
