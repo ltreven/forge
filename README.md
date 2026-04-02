@@ -46,7 +46,7 @@ The local MVP uses:
 - `build/docker/Dockerfile` for the agent image
 - `docker-compose.yml` for local orchestration
 - `.env.example` for local environment variables
-- `src/agent/config/` for baseline agent identity, behavior, and memory files
+- `src/agent/config/` for baseline agent identity, behavior, memory files, and runtime config
 - an explicit `openclaw gateway run --allow-unconfigured` command in Compose so startup follows the supported OpenClaw CLI flow
 
 ## Principles

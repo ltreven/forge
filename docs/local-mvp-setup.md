@@ -14,6 +14,7 @@ Run a local Docker-based OpenClaw software engineer agent with:
 - `build/docker/Dockerfile`
 - `docker-compose.yml`
 - `.env.example`
+- `src/agent/config/openclaw.json`
 
 ## Setup
 
@@ -49,4 +50,5 @@ make logs
 - Keep the gateway bound conservatively.
 - Use token-based local auth instead of hardcoded example passwords.
 - The container runs `openclaw gateway run --allow-unconfigured` explicitly so startup follows the supported OpenClaw CLI path instead of relying on an implicit image entrypoint.
+- The local runtime now includes a minimal `openclaw.json` so the instance has a defined agent model, workspace, and gateway configuration.
 - This is a local-first MVP, not the final production deployment model.
