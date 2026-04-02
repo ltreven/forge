@@ -27,6 +27,7 @@ Its purpose is to:
 - Keep persisted artifacts in English.
 - Keep secrets out of Git.
 - Treat local state as portable and reproducible.
+- Runtime configuration lives in `openclaw.json` and should remain aligned with the local MVP execution model.
 
 ## Memory
 
