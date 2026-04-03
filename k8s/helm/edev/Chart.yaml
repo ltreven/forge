@@ -1,0 +1,6 @@
+apiVersion: v2
+name: edev
+description: Helm chart for deploying the eDEV OpenClaw-based software engineer agent
+version: 0.1.0
+appVersion: "0.1.0"
+type: application
