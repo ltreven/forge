@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "edev.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "edev.name" . }}
+    helm.sh/chart: {{ include "edev.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "edev.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "edev.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: edev
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: {{ toJson .Values.runtime.command }}
+          ports:
+            - containerPort: {{ .Values.runtime.gateway.port }}
+              name: gateway
+          env:
+            - name: OPENCLAW_WORKSPACE
+              value: {{ .Values.runtime.workspacePath | quote }}
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.gatewayTokenSecretName | quote }}
+                  key: {{ .Values.secrets.gatewayTokenKey | quote }}
+            {{- if eq .Values.provider.name "openai" }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.providerSecretName | quote }}
+                  key: {{ .Values.secrets.providerKeyName | quote }}
+            {{- end }}
+            {{- if .Values.telegram.enabled }}
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.telegram.secretName | quote }}
+                  key: {{ .Values.telegram.tokenKey | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: state
+              mountPath: {{ .Values.runtime.workspacePath }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "edev.fullname" . }}-state
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+      {{- end }}
