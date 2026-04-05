@@ -64,3 +64,7 @@ A later iteration should add provider-specific secret wiring for Gemini and addi
 ## Recommendation
 
 Keep the chart values expressive enough to describe the operator intent now, even if provider-specific secret injection grows in later iterations.
+
+## Runtime note from cluster testing
+
+Local Kubernetes testing showed that the runtime may require explicit Node.js heap tuning to remain stable. The chart now supports runtime environment overrides through `runtime.extraEnv`, with `NODE_OPTIONS` carried by default for the current baseline.
