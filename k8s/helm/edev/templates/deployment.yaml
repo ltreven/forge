@@ -39,8 +39,8 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.providerSecretName | quote }}
-                  key: {{ .Values.secrets.providerKeyName | quote }}
+                  name: {{ .Values.secrets.openaiSecretName | quote }}
+                  key: {{ .Values.secrets.openaiKeyName | quote }}
             {{- end }}
             {{- if .Values.telegram.enabled }}
             - name: TELEGRAM_BOT_TOKEN
@@ -52,12 +52,23 @@ spec:
           volumeMounts:
             - name: state
               mountPath: {{ .Values.runtime.workspacePath }}
+            - name: config
+              mountPath: {{ .Values.runtime.configPath }}/openclaw.json
+              subPath: openclaw.json
           resources:
 {{ toYaml .Values.resources | indent 12 }}
       volumes:
+        {{- if .Values.persistence.enabled }}
         - name: state
           persistentVolumeClaim:
             claimName: {{ include "edev.fullname" . }}-state
+        {{- else }}
+        - name: state
+          emptyDir: {}
+        {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "edev.fullname" . }}-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
