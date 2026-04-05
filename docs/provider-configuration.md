@@ -16,20 +16,21 @@ The chart currently exposes:
 provider:
   name: openai
   model: openai/gpt-5.4
+  alias: GPT
 ```
 
 ## Secret handling
 
 Secrets must stay outside Git.
 
-The chart expects provider credentials to come from Kubernetes Secrets.
+The current chart now wires OpenAI explicitly through Kubernetes Secrets.
 
 Example pattern:
 
 ```yaml
 secrets:
-  providerSecretName: edev-provider
-  providerKeyName: OPENAI_API_KEY
+  openaiSecretName: edev-openai
+  openaiKeyName: OPENAI_API_KEY
 ```
 
 ## OpenAI-style example
@@ -38,15 +39,16 @@ secrets:
 provider:
   name: openai
   model: openai/gpt-5.4
+  alias: GPT
 
 secrets:
-  providerSecretName: edev-openai
-  providerKeyName: OPENAI_API_KEY
+  openaiSecretName: edev-openai
+  openaiKeyName: OPENAI_API_KEY
 ```
 
 ## Gemini-style example
 
-The first chart version documents Gemini as a deployment concern even if the current manifest example does not yet inject Gemini-specific keys automatically.
+The current wave keeps Gemini documented as a future deployment concern, but does not yet implement Gemini-specific secret injection in the chart.
 
 Representative configuration shape:
 
@@ -54,9 +56,10 @@ Representative configuration shape:
 provider:
   name: gemini
   model: google/gemini-2.5-pro
+  alias: Gemini
 ```
 
-In future iterations, the chart should support provider-specific environment wiring for Gemini and additional providers in a more generic way.
+A later iteration should add provider-specific secret wiring for Gemini and additional providers in a more generic way.
 
 ## Recommendation
 
