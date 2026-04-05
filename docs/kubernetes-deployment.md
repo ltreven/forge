@@ -40,11 +40,13 @@ helm upgrade --install edev ./k8s/helm/edev \
 
 - a Deployment
 - a Service
-- a PersistentVolumeClaim for state
+- a PersistentVolumeClaim for state when persistence is enabled
+- a ConfigMap carrying the baseline `openclaw.json` runtime configuration
 
 ## Important notes
 
-- This is an initial chart, not a final production-ready packaging layer.
+- This wave aligns the chart more closely with the validated local runtime model by carrying a baseline runtime config into Kubernetes instead of relying only on generic image defaults.
+- This is still not a final production-ready packaging layer.
 - Secrets should be provided through Kubernetes Secrets or an equivalent secret-management workflow.
 - OpenClaw should remain configured with safe defaults and approval-aware behavior.
 - The chart is intentionally structured so it can evolve toward more profiles than just `edev` later.
