@@ -44,6 +44,7 @@ Under `docs/`:
 - `persistence-requirements.md`
 - `telegram-kubernetes.md`
 - `local-k8s-test.md`
+- `multi-provider-local-k8s-test.md`
 
 ## Current local MVP shape
 
