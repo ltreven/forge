@@ -26,6 +26,7 @@ k8s/helm/edev
 2. Prepare required secrets outside Git.
 3. Review and override `values.yaml` as needed.
 4. Install with Helm.
+5. If Telegram is required, create a Telegram bot token secret and enable Telegram wiring in Helm values.
 
 Example:
 
@@ -54,6 +55,7 @@ helm upgrade --install edev ./k8s/helm/edev \
 - a Service
 - a PersistentVolumeClaim for state when persistence is enabled
 - a ConfigMap carrying the baseline `openclaw.json` runtime configuration
+- optional Telegram token injection through a Kubernetes Secret reference
 
 ## Important notes
 
