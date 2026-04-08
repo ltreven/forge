@@ -26,6 +26,8 @@ runtime:
     - --allow-unconfigured
   hardening:
     enabled: true
+  extraEnv:
+    NODE_OPTIONS: --max-old-space-size=3072
 
 persistence:
   enabled: true
@@ -37,10 +39,10 @@ persistence:
 resources:
   requests:
     cpu: 250m
-    memory: 512Mi
+    memory: 1536Mi
   limits:
     cpu: "1"
-    memory: 1Gi
+    memory: 3Gi
 
 service:
   type: ClusterIP
