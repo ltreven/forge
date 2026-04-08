@@ -40,7 +40,7 @@ When `model.provider=openai`, the chart wires:
 
 ### Gemini
 When `model.provider=gemini`, the chart wires:
-- `GOOGLE_GENERATIVE_AI_API_KEY`
+- `GEMINI_API_KEY`
 
 ## Notes
 
