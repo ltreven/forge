@@ -49,6 +49,10 @@ spec:
                   name: {{ .Values.telegram.secretName | quote }}
                   key: {{ .Values.telegram.tokenKey | quote }}
             {{- end }}
+            {{- range $name, $value := .Values.runtime.extraEnv }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
           volumeMounts:
             - name: state
               mountPath: {{ .Values.runtime.workspacePath }}
