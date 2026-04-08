@@ -51,7 +51,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.model.credentials.secretName | quote }}
                   key: {{ .Values.model.credentials.key | quote }}
-            {{- else if eq .Values.model.provider "gemini" }}
+            {{- else if or (eq .Values.model.provider "gemini") (eq .Values.model.provider "google") }}
             - name: GEMINI_API_KEY
               valueFrom:
                 secretKeyRef:
