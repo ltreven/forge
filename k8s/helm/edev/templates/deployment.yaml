@@ -35,12 +35,18 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.gatewayTokenSecretName | quote }}
                   key: {{ .Values.secrets.gatewayTokenKey | quote }}
-            {{- if eq .Values.provider.name "openai" }}
+            {{- if eq .Values.model.provider "openai" }}
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.openaiSecretName | quote }}
-                  key: {{ .Values.secrets.openaiKeyName | quote }}
+                  name: {{ .Values.model.credentials.secretName | quote }}
+                  key: {{ .Values.model.credentials.key | quote }}
+            {{- else if eq .Values.model.provider "gemini" }}
+            - name: GOOGLE_GENERATIVE_AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.model.credentials.secretName | quote }}
+                  key: {{ .Values.model.credentials.key | quote }}
             {{- end }}
             {{- if .Values.telegram.enabled }}
             - name: TELEGRAM_BOT_TOKEN

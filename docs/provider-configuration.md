@@ -1,70 +1,57 @@
 # Provider Configuration
 
-This document explains how model provider choices should be represented in the eDEV deployment model.
+This document explains how model provider choices are represented in the current eDEV deployment model.
 
-## Principle
+## Goal
 
-Provider and model configuration must be deployment-driven rather than hardcoded.
+Keep the operator-facing configuration simple while still wiring provider-specific secrets correctly inside the deployment.
 
-That means operators should be able to adapt eDEV per customer environment by changing Helm values and referenced secrets.
+## Current schema
 
-## Current Helm values
-
-The chart currently exposes:
+The chart now exposes a generic operator-facing shape:
 
 ```yaml
-provider:
-  name: openai
-  model: openai/gpt-5.4
+model:
+  provider: openai
+  name: openai/gpt-5.4
   alias: GPT
+  credentials:
+    secretName: edev-openai
+    key: OPENAI_API_KEY
 ```
 
-## Secret handling
-
-Secrets must stay outside Git.
-
-The current chart now wires OpenAI explicitly through Kubernetes Secrets.
-
-Example pattern:
+This same shape can also be used for Gemini:
 
 ```yaml
-secrets:
-  openaiSecretName: edev-openai
-  openaiKeyName: OPENAI_API_KEY
+model:
+  provider: gemini
+  name: google/gemini-2.5-flash
+  alias: Gemini Flash
+  credentials:
+    secretName: edev-gemini
+    key: GEMINI_API_KEY
 ```
 
-## OpenAI-style example
+## Current provider wiring
 
-```yaml
-provider:
-  name: openai
-  model: openai/gpt-5.4
-  alias: GPT
+### OpenAI
+When `model.provider=openai`, the chart wires:
+- `OPENAI_API_KEY`
 
-secrets:
-  openaiSecretName: edev-openai
-  openaiKeyName: OPENAI_API_KEY
-```
+### Gemini
+When `model.provider=gemini`, the chart wires:
+- `GOOGLE_GENERATIVE_AI_API_KEY`
 
-## Gemini-style example
+## Notes
 
-The current wave keeps Gemini documented as a future deployment concern, but does not yet implement Gemini-specific secret injection in the chart.
+This is an intentionally narrow first implementation.
 
-Representative configuration shape:
+It supports:
+- OpenAI
+- Gemini
 
-```yaml
-provider:
-  name: gemini
-  model: google/gemini-2.5-pro
-  alias: Gemini
-```
-
-A later iteration should add provider-specific secret wiring for Gemini and additional providers in a more generic way.
+It does not yet try to solve the final generalized provider architecture for every future provider.
 
 ## Recommendation
 
-Keep the chart values expressive enough to describe the operator intent now, even if provider-specific secret injection grows in later iterations.
-
-## Runtime note from cluster testing
-
-Local Kubernetes testing showed that the runtime may require explicit Node.js heap tuning to remain stable. The chart now supports runtime environment overrides through `runtime.extraEnv`, with `NODE_OPTIONS` carried by default for the current baseline.
+Use this schema to deploy different agents in the same cluster with different provider choices while keeping release-level configuration readable and explicit.
