@@ -12,20 +12,26 @@ GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
 GATEWAY_BIND="${OPENCLAW_GATEWAY_BIND:-loopback}"
 TOOLS_PROFILE="${OPENCLAW_TOOLS_PROFILE:-coding}"
 SESSION_DM_SCOPE="${OPENCLAW_SESSION_DM_SCOPE:-per-channel-peer}"
+TEMPLATE_DIR="/opt/edev/templates"
+BOOTSTRAP_CONFIG_DIR="/opt/edev/config"
 
 mkdir -p "$OPENCLAW_DIR" "$WORKSPACE_DIR" "$AGENT_DIR"
 chmod 700 "$OPENCLAW_DIR" || true
+
+if [ -d "$BOOTSTRAP_CONFIG_DIR" ]; then
+  cp -Rn "$BOOTSTRAP_CONFIG_DIR"/. "$WORKSPACE_DIR"/ 2>/dev/null || true
+fi
 
 case "$MODEL_PROVIDER" in
   openai)
     AUTH_PROFILE_ID="openai:default"
     AUTH_PROVIDER="openai"
-    AUTH_ENV_KEY="OPENAI_API_KEY"
+    MODEL_API_KEY="${OPENAI_API_KEY:-}"
     ;;
   gemini|google)
     AUTH_PROFILE_ID="google:default"
     AUTH_PROVIDER="google"
-    AUTH_ENV_KEY="GEMINI_API_KEY"
+    MODEL_API_KEY="${GEMINI_API_KEY:-}"
     ;;
   *)
     echo "Unsupported MODEL_PROVIDER: $MODEL_PROVIDER" >&2
@@ -33,69 +39,51 @@ case "$MODEL_PROVIDER" in
     ;;
 esac
 
-AUTH_VALUE="$(printenv "$AUTH_ENV_KEY" 2>/dev/null || true)"
-if [ -z "$AUTH_VALUE" ]; then
-  echo "Missing provider API key env: $AUTH_ENV_KEY" >&2
+if [ -z "$MODEL_API_KEY" ]; then
+  echo "Missing provider API key for MODEL_PROVIDER=$MODEL_PROVIDER" >&2
   exit 2
 fi
 
-cat > "$OPENCLAW_DIR/openclaw.json" <<EOF
-{
-  "auth": {
-    "profiles": {
-      "$AUTH_PROFILE_ID": {
-        "provider": "$AUTH_PROVIDER",
-        "mode": "api_key"
-      }
-    }
-  },
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "$MODEL_NAME"
-      },
-      "models": {
-        "$MODEL_NAME": {
-          "alias": "$MODEL_ALIAS"
-        }
-      },
-      "workspace": "$WORKSPACE_DIR"
-    }
-  },
-  "tools": {
-    "profile": "$TOOLS_PROFILE"
-  },
-  "session": {
-    "dmScope": "$SESSION_DM_SCOPE"
-  },
-  "gateway": {
-    "mode": "local",
-    "port": $GATEWAY_PORT,
-    "bind": "$GATEWAY_BIND",
-    "auth": {
-      "mode": "token",
-      "token": "\${OPENCLAW_GATEWAY_TOKEN}"
-    }
-  }
-}
-EOF
+OPENCLAW_DIR="$OPENCLAW_DIR" \
+WORKSPACE_DIR="$WORKSPACE_DIR" \
+AGENT_DIR="$AGENT_DIR" \
+AUTH_PROFILE_ID="$AUTH_PROFILE_ID" \
+AUTH_PROVIDER="$AUTH_PROVIDER" \
+MODEL_NAME="$MODEL_NAME" \
+MODEL_ALIAS="$MODEL_ALIAS" \
+MODEL_API_KEY="$MODEL_API_KEY" \
+GATEWAY_PORT="$GATEWAY_PORT" \
+GATEWAY_BIND="$GATEWAY_BIND" \
+TOOLS_PROFILE="$TOOLS_PROFILE" \
+SESSION_DM_SCOPE="$SESSION_DM_SCOPE" \
+TEMPLATE_DIR="$TEMPLATE_DIR" \
+python3 - <<'PY'
+import os
+from pathlib import Path
 
-AUTH_PROFILE_ID="$AUTH_PROFILE_ID" AUTH_PROVIDER="$AUTH_PROVIDER" AUTH_ENV_KEY="$AUTH_ENV_KEY" AGENT_DIR="$AGENT_DIR" python3 - <<'PY'
-import json, os
-path = os.path.join(os.environ['AGENT_DIR'], 'auth-profiles.json')
-profile_id = os.environ['AUTH_PROFILE_ID']
-provider = os.environ['AUTH_PROVIDER']
-api_key = os.environ[os.environ['AUTH_ENV_KEY']]
-with open(path, 'w') as f:
-    json.dump({
-        'profiles': {
-            profile_id: {
-                'provider': provider,
-                'mode': 'api_key',
-                'apiKey': api_key,
-            }
-        }
-    }, f)
+def render(template: str, values: dict[str, str]) -> str:
+    out = template
+    for key, value in values.items():
+        out = out.replace(f'__{key}__', value)
+    return out
+
+template_dir = Path(os.environ['TEMPLATE_DIR'])
+openclaw_template = (template_dir / 'openclaw.json.template').read_text()
+auth_template = (template_dir / 'auth-profiles.json.template').read_text()
+values = {
+    'AUTH_PROFILE_ID': os.environ['AUTH_PROFILE_ID'],
+    'AUTH_PROVIDER': os.environ['AUTH_PROVIDER'],
+    'MODEL_NAME': os.environ['MODEL_NAME'],
+    'MODEL_ALIAS': os.environ['MODEL_ALIAS'],
+    'WORKSPACE_DIR': os.environ['WORKSPACE_DIR'],
+    'GATEWAY_PORT': os.environ['GATEWAY_PORT'],
+    'GATEWAY_BIND': os.environ['GATEWAY_BIND'],
+    'TOOLS_PROFILE': os.environ['TOOLS_PROFILE'],
+    'SESSION_DM_SCOPE': os.environ['SESSION_DM_SCOPE'],
+    'MODEL_API_KEY': os.environ['MODEL_API_KEY'],
+}
+Path(os.environ['OPENCLAW_DIR'], 'openclaw.json').write_text(render(openclaw_template, values))
+Path(os.environ['AGENT_DIR'], 'auth-profiles.json').write_text(render(auth_template, values))
 PY
 
 chmod 600 "$OPENCLAW_DIR/openclaw.json" "$AGENT_DIR/auth-profiles.json" || true
