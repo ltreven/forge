@@ -39,6 +39,11 @@ Under `docs/`:
 - `system-overview.md`
 - `agent-persona-software-engineer.md`
 - `local-mvp-setup.md`
+- `kubernetes-deployment.md`
+- `provider-configuration.md`
+- `persistence-requirements.md`
+- `telegram-kubernetes.md`
+- `local-k8s-test.md`
 
 ## Current local MVP shape
 
