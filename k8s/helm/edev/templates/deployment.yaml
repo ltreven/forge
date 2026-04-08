@@ -19,6 +19,29 @@ spec:
         app.kubernetes.io/name: {{ include "edev.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      initContainers:
+        - name: bootstrap-openclaw-config
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -lc
+            - |
+              set -eu
+              mkdir -p {{ .Values.runtime.configPath | quote }} {{ printf "%s/agents/main/agent" .Values.runtime.configPath | quote }}
+              cp /bootstrap/openclaw.json {{ printf "%s/openclaw.json" .Values.runtime.configPath | quote }}
+              cp /bootstrap-auth/auth-profiles.json {{ printf "%s/agents/main/agent/auth-profiles.json" .Values.runtime.configPath | quote }}
+              chmod 600 {{ printf "%s/openclaw.json" .Values.runtime.configPath | quote }} {{ printf "%s/agents/main/agent/auth-profiles.json" .Values.runtime.configPath | quote }} || true
+          volumeMounts:
+            - name: state
+              mountPath: {{ .Values.runtime.configPath | quote }}
+              subPath: .openclaw
+            - name: config
+              mountPath: /bootstrap/openclaw.json
+              subPath: openclaw.json
+            - name: auth
+              mountPath: /bootstrap-auth/auth-profiles.json
+              subPath: auth-profiles.json
       containers:
         - name: edev
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -61,10 +84,11 @@ spec:
             {{- end }}
           volumeMounts:
             - name: state
-              mountPath: {{ .Values.runtime.workspacePath }}
-            - name: config
-              mountPath: {{ .Values.runtime.configPath }}/openclaw.json
-              subPath: openclaw.json
+              mountPath: {{ .Values.runtime.workspacePath | quote }}
+              subPath: workspace
+            - name: state
+              mountPath: {{ .Values.runtime.configPath | quote }}
+              subPath: .openclaw
           resources:
 {{ toYaml .Values.resources | indent 12 }}
       volumes:
@@ -79,6 +103,9 @@ spec:
         - name: config
           configMap:
             name: {{ include "edev.fullname" . }}-config
+        - name: auth
+          secret:
+            secretName: {{ include "edev.fullname" . }}-auth
       {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
