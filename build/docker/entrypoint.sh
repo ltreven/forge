@@ -16,8 +16,6 @@ if [ -d "$BOOTSTRAP_CONFIG_DIR" ]; then
   cp -Rn "$BOOTSTRAP_CONFIG_DIR"/. "$WORKSPACE_DIR"/ 2>/dev/null || true
 fi
 
-openclaw setup --mode local --non-interactive --accept-risk --workspace "$WORKSPACE_DIR"
-
 case "$MODEL_PROVIDER" in
   openai)
     if [ -z "${OPENAI_API_KEY:-}" ]; then
@@ -25,6 +23,7 @@ case "$MODEL_PROVIDER" in
       exit 2
     fi
     openclaw onboard --non-interactive --accept-risk \
+      --workspace "$WORKSPACE_DIR" \
       --mode local \
       --auth-choice openai-api-key \
       --secret-input-mode ref \
@@ -37,6 +36,7 @@ case "$MODEL_PROVIDER" in
       exit 2
     fi
     openclaw onboard --non-interactive --accept-risk \
+      --workspace "$WORKSPACE_DIR" \
       --mode local \
       --auth-choice gemini-api-key \
       --secret-input-mode ref \
