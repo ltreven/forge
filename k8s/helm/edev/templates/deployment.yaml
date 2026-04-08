@@ -30,6 +30,18 @@ spec:
           env:
             - name: OPENCLAW_WORKSPACE
               value: {{ .Values.runtime.workspacePath | quote }}
+            - name: OPENCLAW_CONFIG_DIR
+              value: {{ .Values.runtime.configPath | quote }}
+            - name: OPENCLAW_GATEWAY_PORT
+              value: {{ .Values.runtime.gateway.port | quote }}
+            - name: OPENCLAW_GATEWAY_BIND
+              value: {{ .Values.runtime.gateway.bind | quote }}
+            - name: MODEL_PROVIDER
+              value: {{ .Values.model.provider | quote }}
+            - name: MODEL_NAME
+              value: {{ .Values.model.name | quote }}
+            - name: MODEL_ALIAS
+              value: {{ .Values.model.alias | quote }}
             - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -62,12 +74,9 @@ spec:
           volumeMounts:
             - name: state
               mountPath: {{ .Values.runtime.workspacePath }}
-            - name: config
-              mountPath: {{ .Values.runtime.configPath }}/openclaw.json
-              subPath: openclaw.json
-            - name: auth
-              mountPath: {{ .Values.runtime.configPath }}/agents/main/agent/auth-profiles.json
-              subPath: auth-profiles.json
+            - name: state
+              mountPath: {{ .Values.runtime.configPath }}
+              subPath: .openclaw
           resources:
 {{ toYaml .Values.resources | indent 12 }}
       volumes:
@@ -79,12 +88,6 @@ spec:
         - name: state
           emptyDir: {}
         {{- end }}
-        - name: config
-          configMap:
-            name: {{ include "edev.fullname" . }}-config
-        - name: auth
-          secret:
-            secretName: {{ include "edev.fullname" . }}-auth
       {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
