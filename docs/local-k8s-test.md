@@ -41,8 +41,12 @@ helm upgrade --install edev ./k8s/helm/edev \
   --set image.repository=edev \
   --set image.tag=local \
   --set image.pullPolicy=IfNotPresent \
-  --set secrets.gatewayTokenSecretName=edev-gateway \
-  --set secrets.openaiSecretName=edev-openai
+  --set model.provider=openai \
+  --set model.name=openai/gpt-5.4 \
+  --set model.alias=GPT \
+  --set model.credentials.secretName=edev-openai \
+  --set model.credentials.key=OPENAI_API_KEY \
+  --set secrets.gatewayTokenSecretName=edev-gateway
 ```
 
 5. Check pod health:
@@ -61,3 +65,5 @@ kubectl -n edev-test port-forward deployment/edev-edev 18789:18789
 ## Runtime note
 
 Local cluster testing showed that the runtime needed more realistic memory defaults and explicit Node.js heap tuning. Those settings are now carried in the chart baseline.
+
+The chart also now provisions provider auth into the agent runtime store so provider-backed models such as OpenAI and Gemini can answer through the embedded agent path.

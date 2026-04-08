@@ -74,3 +74,5 @@ kubectl -n edev-team logs deployment/alice-alice --tail=100
 ## Notes
 
 This test is intended to validate the current narrow multi-provider implementation, not the final long-term provider architecture.
+
+The chart must provision both the operator-facing model configuration and the agent auth material expected by the OpenClaw runtime. Without agent auth provisioning, provider-backed models can start but fail on first reply with provider auth errors.
