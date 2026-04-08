@@ -22,7 +22,7 @@ case "$MODEL_PROVIDER" in
       echo "Missing OPENAI_API_KEY" >&2
       exit 2
     fi
-    openclaw onboard --non-interactive --accept-risk \
+    openclaw onboard --non-interactive --accept-risk --skip-health \
       --workspace "$WORKSPACE_DIR" \
       --mode local \
       --auth-choice openai-api-key \
@@ -35,7 +35,7 @@ case "$MODEL_PROVIDER" in
       echo "Missing GEMINI_API_KEY" >&2
       exit 2
     fi
-    openclaw onboard --non-interactive --accept-risk \
+    openclaw onboard --non-interactive --accept-risk --skip-health \
       --workspace "$WORKSPACE_DIR" \
       --mode local \
       --auth-choice gemini-api-key \

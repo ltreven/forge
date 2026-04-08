@@ -23,7 +23,7 @@ spec:
         - name: edev
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: {{ toJson .Values.runtime.command }}
+          args: {{ toJson .Values.runtime.command }}
           ports:
             - containerPort: {{ .Values.runtime.gateway.port }}
               name: gateway
