@@ -38,10 +38,8 @@ spec:
               value: {{ .Values.runtime.gateway.bind | quote }}
             - name: MODEL_PROVIDER
               value: {{ .Values.model.provider | quote }}
-            - name: MODEL_NAME
+            - name: MODEL_ID
               value: {{ .Values.model.name | quote }}
-            - name: MODEL_ALIAS
-              value: {{ .Values.model.alias | quote }}
             - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
