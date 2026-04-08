@@ -50,5 +50,5 @@ After deployment:
 
 - Keep the Telegram token in a Kubernetes Secret, never in Git.
 - The chart now uses the generic `model.*` schema for provider configuration.
-- The chart also provisions agent auth material for the selected model provider so runtime model auth is available to the embedded agent path.
+- Provider-backed models also need agent auth material available at runtime; the chart mounts that auth store as a secret-backed file for the selected provider.
 - This is the first deployment-oriented Telegram baseline for Kubernetes.

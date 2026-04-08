@@ -66,4 +66,4 @@ kubectl -n edev-test port-forward deployment/edev-edev 18789:18789
 
 Local cluster testing showed that the runtime needed more realistic memory defaults and explicit Node.js heap tuning. Those settings are now carried in the chart baseline.
 
-The chart also now provisions provider auth into the agent runtime store so provider-backed models such as OpenAI and Gemini can answer through the embedded agent path.
+Provider-backed models also need agent auth material available at runtime; the chart now mounts that auth store as a secret-backed file for the selected provider.
