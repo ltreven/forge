@@ -25,7 +25,7 @@ case "$MODEL_PROVIDER" in
   gemini|google)
     AUTH_PROFILE_ID="google:default"
     AUTH_PROVIDER="google"
-    AUTH_ENV_KEY="GOOGLE_GENERATIVE_AI_API_KEY"
+    AUTH_ENV_KEY="GEMINI_API_KEY"
     ;;
   *)
     echo "Unsupported MODEL_PROVIDER: $MODEL_PROVIDER" >&2
