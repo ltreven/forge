@@ -10,20 +10,27 @@ data:
     {
       "auth": {
         "profiles": {
+          {{- if eq .Values.model.provider "openai" }}
           "openai:default": {
             "provider": "openai",
             "mode": "api_key"
           }
+          {{- else if eq .Values.model.provider "gemini" }}
+          "google:default": {
+            "provider": "google",
+            "mode": "api_key"
+          }
+          {{- end }}
         }
       },
       "agents": {
         "defaults": {
           "model": {
-            "primary": {{ .Values.provider.model | quote }}
+            "primary": {{ .Values.model.name | quote }}
           },
           "models": {
-            {{ .Values.provider.model | quote }}: {
-              "alias": "{{ .Values.provider.alias }}"
+            {{ .Values.model.name | quote }}: {
+              "alias": "{{ .Values.model.alias }}"
             }
           },
           "workspace": {{ .Values.runtime.workspacePath | quote }}
