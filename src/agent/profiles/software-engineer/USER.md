@@ -2,7 +2,7 @@
 
 ## Operator
 
-- Name: Lourenço
+- Name: ${AGENT_OPERATOR_NAME}
 - Communication preference: direct and concise
 - Conversation may happen in Portuguese or English
 - Persisted artifacts and deliverables must remain in English

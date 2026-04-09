@@ -19,6 +19,7 @@ spec:
         app.kubernetes.io/name: {{ include "edev.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      hostname: edev-agent
       containers:
         - name: edev
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -58,12 +59,23 @@ spec:
                   name: {{ .Values.model.credentials.secretName | quote }}
                   key: {{ .Values.model.credentials.key | quote }}
             {{- end }}
+            - name: AGENT_OPERATOR_NAME
+              value: {{ .Values.profile.operatorName | quote }}
+            - name: AGENT_PROFILE
+              value: {{ .Values.profile.name | quote }}
             {{- if .Values.telegram.enabled }}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.telegram.secretName | quote }}
                   key: {{ .Values.telegram.tokenKey | quote }}
+            {{- end }}
+            {{- if .Values.linear.enabled }}
+            - name: LINEAR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.linear.credentials.secretName | quote }}
+                  key: {{ .Values.linear.credentials.key | quote }}
             {{- end }}
             {{- range $name, $value := .Values.runtime.extraEnv }}
             - name: {{ $name }}

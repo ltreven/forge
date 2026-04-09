@@ -9,7 +9,7 @@ USER root
 RUN mkdir -p /home/node/.openclaw /home/node/workspace /opt/edev/config \
     && chown -R node:node /home/node/.openclaw /home/node/workspace /opt/edev
 
-COPY src/agent/config/ /opt/edev/config/
+COPY src/agent/profiles/ /opt/edev/profiles/
 COPY build/docker/entrypoint.sh /usr/local/bin/edev-entrypoint.sh
 RUN chmod 755 /usr/local/bin/edev-entrypoint.sh
 
