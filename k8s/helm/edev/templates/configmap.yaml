@@ -81,6 +81,29 @@ data:
       echo "" >> $AGENTS_FILE
       echo "Main channel: Telegram" >> $AGENTS_FILE
 
+      if [ -n "${AGENT_OPERATOR_NAME:-}" ]; then
+        echo "" >> $AGENTS_FILE
+        echo "Operator: ${AGENT_OPERATOR_NAME}" >> $AGENTS_FILE
+      fi
+
+      echo "==> Injecting profile markdown files (if provided by ConfigMap)"
+      if [ -d /profile-files ]; then
+        for f in AGENTS.md SOUL.md USER.md PROCESS.MD MEMORY.md HEARTBEAT.md; do
+          if [ -f "/profile-files/$f" ]; then
+            # Render supported placeholders from environment variables.
+            if command -v envsubst >/dev/null 2>&1; then
+              envsubst < "/profile-files/$f" > "$OPENCLAW_CONFIG_DIR/workspace/$f"
+            else
+              sed \
+                -e "s|\${AGENT_OPERATOR_NAME}|${AGENT_OPERATOR_NAME:-}|g" \
+                -e "s|\${AGENT_PROFILE}|${AGENT_PROFILE:-}|g" \
+                -e "s|\${AGENT_NAME}|${AGENT_NAME:-}|g" \
+                "/profile-files/$f" > "$OPENCLAW_CONFIG_DIR/workspace/$f"
+            fi
+          fi
+        done
+      fi
+
       touch "$OPENCLAW_CONFIG_DIR/.bootstrapped"
       echo "==> Bootstrap complete"
 
