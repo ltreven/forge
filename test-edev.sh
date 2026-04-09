@@ -29,9 +29,6 @@ echo " Profile File : $DEFAULT_PROFILE"
 echo "========================================="
 echo ""
 
-IMAGE_REPO="${IMAGE_REPOSITORY:-edev}"
-IMAGE_TAG="${IMAGE_TAG:-local}"
-
 AGENT_ID=$(openssl rand -hex 4)
 NAMESPACE="edev-test-$(date +%s)"
 RELEASE_NAME="edev-test-release-${AGENT_ID}"
@@ -44,7 +41,13 @@ LINEAR_SECRET_NAME="edev-linear-secret"
 RANDOM_GATEWAY_TOKEN=$(openssl rand -hex 16)
 
 echo "[test] Creating namespace: $NAMESPACE"
-kubectl create namespace "$NAMESPACE"
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | \
+  kubectl apply -f -
+kubectl label namespace "$NAMESPACE" "app.kubernetes.io/managed-by=Helm" --overwrite
+kubectl annotate namespace "$NAMESPACE" "meta.helm.sh/release-name=$RELEASE_NAME" --overwrite
+kubectl annotate namespace "$NAMESPACE" "meta.helm.sh/release-namespace=$NAMESPACE" --overwrite
+
+
 
 function cleanup {
   echo "========================================="
@@ -84,16 +87,9 @@ kubectl create secret generic "$GATEWAY_SECRET_NAME" \
   --namespace "$NAMESPACE" \
   --from-literal=OPENCLAW_GATEWAY_TOKEN="${RANDOM_GATEWAY_TOKEN}"
 
-# 4. Linear API Key (Common/Shared across agents)
-kubectl create secret generic "$LINEAR_SECRET_NAME" \
-  --namespace "$NAMESPACE" \
-  --from-literal=LINEAR_API_KEY="${LINEAR_API_KEY:-dummy-linear-key}"
-
 echo "[test] Installing Helm chart..."
 helm install "$RELEASE_NAME" ./k8s/helm/edev \
   --namespace "$NAMESPACE" \
-  --set image.repository="$IMAGE_REPO" \
-  --set image.tag="$IMAGE_TAG" \
   --set image.pullPolicy=IfNotPresent \
   --set profile.name="$DEFAULT_PROFILE" \
   --set profile.operatorName="$DEFAULT_OPERATOR" \
@@ -103,9 +99,7 @@ helm install "$RELEASE_NAME" ./k8s/helm/edev \
   --set secrets.gatewayTokenSecretName="$GATEWAY_SECRET_NAME" \
   --set telegram.secretName="$TELEGRAM_SECRET_NAME" \
   --set telegram.enabled=$([ -n "$TELEGRAM_BOT_TOKEN" ] && echo "true" || echo "false") \
-  --set linear.enabled=$([ -n "$LINEAR_API_KEY" ] && echo "true" || echo "false") \
-  --set linear.credentials.secretName="$LINEAR_SECRET_NAME" \
-  --set persistence.enabled=false \
+  --set persistence.enabled=true \
   --wait \
   --timeout 3m
 
@@ -118,6 +112,13 @@ if [ -z "$POD_NAME" ]; then
 fi
 
 echo "[test] Pod found: $POD_NAME"
+
+echo "========================================="
+echo " Press any key to run tests"
+echo "========================================="
+read -n 1 -s -r
+
+
 echo "[test] Checking if OpenClaw is running and responding..."
 
 # Verify openclaw binary is accessible

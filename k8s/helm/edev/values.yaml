@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/ltreven/edev
-  tag: latest
+  repository: ghcr.io/openclaw/openclaw
+  tag: 2026.4.9
   pullPolicy: IfNotPresent
 
 profile:
@@ -10,6 +10,7 @@ profile:
   operatorName: Lourenço
 
 model:
+  secretName: ""
   provider: openai
   name: openai/gpt-5.4
   alias: GPT
@@ -23,11 +24,6 @@ runtime:
   gateway:
     port: 18789
     bind: loopback
-  command:
-    - openclaw
-    - gateway
-    - run
-    - --allow-unconfigured
   hardening:
     enabled: true
   extraEnv:

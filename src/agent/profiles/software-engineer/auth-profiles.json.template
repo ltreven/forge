@@ -1,9 +1,0 @@
-{
-  "profiles": {
-    "__AUTH_PROFILE_ID__": {
-      "provider": "__AUTH_PROVIDER__",
-      "mode": "api_key",
-      "apiKey": "__MODEL_API_KEY__"
-    }
-  }
-}

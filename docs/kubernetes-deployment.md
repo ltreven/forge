@@ -46,7 +46,7 @@ helm upgrade --install edev ./k8s/helm/edev \
   --set image.tag=local \
   --set image.pullPolicy=IfNotPresent \
   --set secrets.gatewayTokenSecretName=edev-gateway \
-  --set secrets.openaiSecretName=edev-openai
+  --set model.credentials.secretName=edev-openai
 ```
 
 ## What the chart currently provisions

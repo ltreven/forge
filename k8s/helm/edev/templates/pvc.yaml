@@ -3,6 +3,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "edev.fullname" . }}-state
+  namespace: {{ .Release.Namespace }}
 spec:
   accessModes:
 {{ toYaml .Values.persistence.accessModes | indent 4 }}
