@@ -28,8 +28,12 @@ helm upgrade --install edev ./k8s/helm/edev \
   --set image.repository=edev \
   --set image.tag=local \
   --set image.pullPolicy=IfNotPresent \
+  --set model.provider=openai \
+  --set model.name=openai/gpt-5.4 \
+  --set model.alias=GPT \
+  --set model.credentials.secretName=edev-openai \
+  --set model.credentials.key=OPENAI_API_KEY \
   --set secrets.gatewayTokenSecretName=edev-gateway \
-  --set secrets.openaiSecretName=edev-openai \
   --set telegram.enabled=true \
   --set telegram.secretName=edev-telegram
 ```
@@ -45,5 +49,6 @@ After deployment:
 ## Notes
 
 - Keep the Telegram token in a Kubernetes Secret, never in Git.
-- The current chart wires Telegram token injection but does not yet model every channel-specific option that may be needed later.
+- The chart now uses the generic `model.*` schema for provider configuration.
+- Provider-backed models also need agent auth material available at runtime; the chart mounts that auth store as a secret-backed file for the selected provider.
 - This is the first deployment-oriented Telegram baseline for Kubernetes.

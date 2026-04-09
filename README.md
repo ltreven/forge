@@ -35,16 +35,13 @@ This repository currently focuses on:
 
 Under `docs/`:
 - `product-vision.md`
-- `mvp-scope.md`
 - `system-overview.md`
 - `agent-persona-software-engineer.md`
 - `local-mvp-setup.md`
 - `kubernetes-deployment.md`
 - `provider-configuration.md`
-- `persistence-requirements.md`
 - `telegram-kubernetes.md`
 - `local-k8s-test.md`
-- `multi-provider-local-k8s-test.md`
 
 ## Current local MVP shape
 
@@ -52,7 +49,7 @@ The local MVP uses:
 - `build/docker/Dockerfile` for the agent image
 - `docker-compose.yml` for local orchestration
 - `.env.example` for local environment variables
-- `src/agent/config/` for baseline agent identity, behavior, memory files, and runtime config
+- `src/agent/profiles/software-engineer/` for baseline agent identity, behavior, memory files, and runtime config
 - an explicit `openclaw gateway run --allow-unconfigured` command in Compose so startup follows the supported OpenClaw CLI flow
 - a lightweight entrypoint hardening step that tightens permissions on mounted local OpenClaw config files before launch
 

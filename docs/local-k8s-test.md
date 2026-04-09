@@ -2,12 +2,13 @@
 
 This document captures a practical local test flow for running eDEV in a Kubernetes cluster such as Docker Desktop Kubernetes.
 
-## Suggested flow
+## Prerequisites
 
 1. Build a local image:
 
 ```bash
-docker build -t edev:local -f build/docker/Dockerfile .
+make build
+# or manually: docker build -t edev:local -f build/docker/Dockerfile .
 ```
 
 2. Create a namespace:
@@ -16,24 +17,25 @@ docker build -t edev:local -f build/docker/Dockerfile .
 kubectl create namespace edev-test
 ```
 
-3. Create required secrets:
+3. Create required secrets. Replace placeholders with your own keys:
 
 ```bash
+# Agent Gateway authentication
 kubectl -n edev-test create secret generic edev-gateway \
   --from-literal=OPENCLAW_GATEWAY_TOKEN='<gateway-token>'
 
+# Model provider key (e.g. OpenAI)
 kubectl -n edev-test create secret generic edev-openai \
   --from-literal=OPENAI_API_KEY='<openai-key>'
-```
 
-Optional Telegram secret:
-
-```bash
+# Optional Telegram secret
 kubectl -n edev-test create secret generic edev-telegram \
   --from-literal=TELEGRAM_BOT_TOKEN='<telegram-token>'
 ```
 
-4. Install the chart:
+## Single-Agent Deployment
+
+Deploy a default Software Engineer agent:
 
 ```bash
 helm upgrade --install edev ./k8s/helm/edev \
@@ -41,23 +43,76 @@ helm upgrade --install edev ./k8s/helm/edev \
   --set image.repository=edev \
   --set image.tag=local \
   --set image.pullPolicy=IfNotPresent \
-  --set secrets.gatewayTokenSecretName=edev-gateway \
-  --set secrets.openaiSecretName=edev-openai
+  --set profile.name=software-engineer \
+  --set profile.operatorName='Your Name' \
+  --set model.provider=openai \
+  --set model.name=openai/gpt-5.4 \
+  --set model.alias=GPT \
+  --set model.credentials.secretName=edev-openai \
+  --set model.credentials.key=OPENAI_API_KEY \
+  --set secrets.gatewayTokenSecretName=edev-gateway
 ```
 
-5. Check pod health:
+## Multi-Provider Deployment (Example)
+
+You can run more than one eDEV instance in the same cluster using different providers (e.g., OpenAI vs Gemini) or distinct profiles.
+
+1. Ensure secrets exist for the second agent (Alice using Gemini in this case):
+```bash
+kubectl -n edev-test create secret generic alice-gateway \
+  --from-literal=OPENCLAW_GATEWAY_TOKEN='<alice-gateway-token>'
+
+kubectl -n edev-test create secret generic alice-gemini \
+  --from-literal=GEMINI_API_KEY='<alice-gemini-key>'
+```
+
+2. Deploy the second agent (Alice):
+```bash
+helm upgrade --install alice ./k8s/helm/edev \
+  --namespace edev-test \
+  --set image.repository=edev \
+  --set image.tag=local \
+  --set image.pullPolicy=IfNotPresent \
+  --set profile.name=product-manager \
+  --set profile.operatorName='Alice' \
+  --set model.provider=gemini \
+  --set model.name=google/gemini-2.5-flash \
+  --set model.alias='Gemini Flash' \
+  --set model.credentials.secretName=alice-gemini \
+  --set model.credentials.key=GEMINI_API_KEY \
+  --set secrets.gatewayTokenSecretName=alice-gateway
+```
+
+## Validation
+
+Check pod health and access logs:
 
 ```bash
 kubectl -n edev-test get pods
 kubectl -n edev-test logs deployment/edev-edev --tail=100
 ```
 
-6. Optional local access:
+*For multi-agent setups:*
+```bash
+kubectl -n edev-test logs deployment/alice-alice --tail=100
+```
+
+Optional local UI access:
 
 ```bash
 kubectl -n edev-test port-forward deployment/edev-edev 18789:18789
 ```
 
+## Automated Testing Script
+
+For an automated end-to-end integration loop of these deployment scenarios, you can also use our test script:
+```bash
+./test-edev.sh
+```
+This script dynamically creates a disposable namespace, injects secrets from `.env`, runs the Helm installation, and tests internal OpenClaw health.
+
 ## Runtime note
 
 Local cluster testing showed that the runtime needed more realistic memory defaults and explicit Node.js heap tuning. Those settings are now carried in the chart baseline.
+
+Provider-backed models also need agent auth material available at runtime; the chart now mounts that auth store as a secret-backed file for the selected provider.

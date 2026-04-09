@@ -14,7 +14,7 @@ Run a local Docker-based OpenClaw software engineer agent with:
 - `build/docker/Dockerfile`
 - `docker-compose.yml`
 - `.env.example`
-- `src/agent/config/openclaw.json`
+- `src/agent/profiles/`
 
 ## Setup
 

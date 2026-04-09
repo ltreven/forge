@@ -1,57 +1,34 @@
 # Provider Configuration
 
-This document explains how model provider choices are represented in the current eDEV deployment model.
+The eDEV image delegates provider bootstrap to the OpenClaw CLI during container startup.
 
-## Goal
+## Runtime contract
 
-Keep the operator-facing configuration simple while still wiring provider-specific secrets correctly inside the deployment.
+The Helm chart only needs to pass:
+- `MODEL_PROVIDER`
+- `MODEL_ID`
+- provider API key env (`OPENAI_API_KEY` or `GEMINI_API_KEY`)
+- `OPENCLAW_GATEWAY_TOKEN`
 
-## Current schema
+The image entrypoint then runs:
+- `openclaw setup --mode local --non-interactive --workspace ...`
+- `openclaw onboard --non-interactive --auth-choice ... --secret-input-mode ref ...`
+- `openclaw models set <provider/model>`
 
-The chart now exposes a generic operator-facing shape:
+This keeps provider auth and model configuration aligned with native OpenClaw behavior instead of hand-authoring internal state files.
 
-```yaml
-model:
-  provider: openai
-  name: openai/gpt-5.4
-  alias: GPT
-  credentials:
-    secretName: edev-openai
-    key: OPENAI_API_KEY
-```
+## Provider envs
 
-This same shape can also be used for Gemini:
+- OpenAI: `OPENAI_API_KEY`
+- Gemini: `GEMINI_API_KEY`
+
+## Helm values example
 
 ```yaml
 model:
   provider: gemini
   name: google/gemini-2.5-flash
-  alias: Gemini Flash
   credentials:
-    secretName: edev-gemini
+    secretName: alice-gemini
     key: GEMINI_API_KEY
 ```
-
-## Current provider wiring
-
-### OpenAI
-When `model.provider=openai`, the chart wires:
-- `OPENAI_API_KEY`
-
-### Gemini
-When `model.provider=gemini`, the chart wires:
-- `GOOGLE_GENERATIVE_AI_API_KEY`
-
-## Notes
-
-This is an intentionally narrow first implementation.
-
-It supports:
-- OpenAI
-- Gemini
-
-It does not yet try to solve the final generalized provider architecture for every future provider.
-
-## Recommendation
-
-Use this schema to deploy different agents in the same cluster with different provider choices while keeping release-level configuration readable and explicit.

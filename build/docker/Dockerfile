@@ -2,13 +2,14 @@ FROM ghcr.io/openclaw/openclaw:latest
 
 # eDEV local MVP image
 #
-# This image extends the official OpenClaw image with a minimal set of
-# directories expected by the local MVP workflow.
+# This image extends the official OpenClaw image with bootstrap content
+# templates while delegating runtime auth/model setup to the OpenClaw CLI.
 
 USER root
-RUN mkdir -p /home/node/.openclaw /home/node/workspace \
-    && chown -R node:node /home/node/.openclaw /home/node/workspace
+RUN mkdir -p /home/node/.openclaw /home/node/workspace /opt/edev/config \
+    && chown -R node:node /home/node/.openclaw /home/node/workspace /opt/edev
 
+COPY src/agent/profiles/ /opt/edev/profiles/
 COPY build/docker/entrypoint.sh /usr/local/bin/edev-entrypoint.sh
 RUN chmod 755 /usr/local/bin/edev-entrypoint.sh
 
