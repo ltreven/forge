@@ -140,3 +140,6 @@ vite.config.ts.timestamp-*
 
 # VS Code directory
 .vscode/
+
+.DS_Store
+**/.DS_Store

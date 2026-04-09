@@ -17,7 +17,24 @@
           "alias": "__MODEL_ALIAS__"
         }
       },
-      "workspace": "__WORKSPACE_DIR__"
+      "workspace": "__WORKSPACE_DIR__",
+      "system": "You are the eDEV Software Engineer Agent. Read SOUL.md and AGENTS.md in your workspace on startup to understand your persona and mission."
+    }
+  },
+  "mcp": {
+    "clients": {
+      "linear": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@smithery/cli@latest",
+          "run",
+          "@smithery/linear-mcp"
+        ],
+        "env": {
+          "LINEAR_API_KEY": "__LINEAR_API_KEY__"
+        }
+      }
     }
   },
   "tools": {
@@ -27,6 +44,7 @@
     "dmScope": "__SESSION_DM_SCOPE__"
   },
   "gateway": {
+    "name": "eDEV-K8s",
     "mode": "local",
     "port": __GATEWAY_PORT__,
     "bind": "__GATEWAY_BIND__",

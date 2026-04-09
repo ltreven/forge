@@ -8,10 +8,10 @@ services:
     ports:
       - "127.0.0.1:18789:18789"
     volumes:
-      - ./src/agent/config:/home/node/.openclaw
       - ./workspace:/home/node/workspace
     env_file: .env
     environment:
-      OPENCLAW_WORKSPACE: /home/node/workspace
+      AGENT_OPERATOR_NAME: ${AGENT_OPERATOR_NAME:-Operator}
+      LINEAR_API_KEY: ${LINEAR_API_KEY:-}
       NODE_ENV: production
     command: ["openclaw", "gateway", "run", "--allow-unconfigured"]
