@@ -17,7 +17,24 @@
           "alias": "GPT"
         }
       },
-      "workspace": "/home/node/workspace"
+      "workspace": "/home/node/workspace",
+      "system": "You are the eDEV Software Engineer Agent. Read SOUL.md and AGENTS.md in your workspace on startup to understand your persona and mission."
+    }
+  },
+  "mcp": {
+    "clients": {
+      "linear": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@smithery/cli@latest",
+          "run",
+          "@smithery/linear-mcp"
+        ],
+        "env": {
+          "LINEAR_API_KEY": "${LINEAR_API_KEY}"
+        }
+      }
     }
   },
   "tools": {
@@ -27,6 +44,7 @@
     "dmScope": "per-channel-peer"
   },
   "gateway": {
+    "name": "eDEV-K8s",
     "mode": "local",
     "port": 18789,
     "bind": "loopback",

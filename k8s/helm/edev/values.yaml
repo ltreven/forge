@@ -6,7 +6,8 @@ image:
   pullPolicy: IfNotPresent
 
 profile:
-  name: edev
+  name: software-engineer
+  operatorName: Lourenço
 
 model:
   provider: openai
@@ -30,7 +31,8 @@ runtime:
   hardening:
     enabled: true
   extraEnv:
-    NODE_OPTIONS: --max-old-space-size=3072
+    NODE_OPTIONS: --max-old-space-size=2048
+    OPENCLAW_GATEWAY_NAME: "eDEV K8s"
 
 persistence:
   enabled: true
@@ -42,10 +44,10 @@ persistence:
 resources:
   requests:
     cpu: 250m
-    memory: 1536Mi
+    memory: 2048Mi
   limits:
     cpu: "1"
-    memory: 3Gi
+    memory: 4Gi
 
 service:
   type: ClusterIP
@@ -55,6 +57,12 @@ telegram:
   enabled: false
   secretName: ""
   tokenKey: TELEGRAM_BOT_TOKEN
+
+linear:
+  enabled: false
+  credentials:
+    secretName: ""
+    key: LINEAR_API_KEY
 
 secrets:
   gatewayTokenSecretName: ""

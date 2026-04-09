@@ -19,17 +19,28 @@ spec:
         app.kubernetes.io/name: {{ include "edev.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      hostname: edev-agent
       containers:
         - name: edev
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: {{ toJson .Values.runtime.command }}
+          args: {{ toJson .Values.runtime.command }}
           ports:
             - containerPort: {{ .Values.runtime.gateway.port }}
               name: gateway
           env:
             - name: OPENCLAW_WORKSPACE
               value: {{ .Values.runtime.workspacePath | quote }}
+            - name: OPENCLAW_CONFIG_DIR
+              value: {{ .Values.runtime.configPath | quote }}
+            - name: OPENCLAW_GATEWAY_PORT
+              value: {{ .Values.runtime.gateway.port | quote }}
+            - name: OPENCLAW_GATEWAY_BIND
+              value: {{ .Values.runtime.gateway.bind | quote }}
+            - name: MODEL_PROVIDER
+              value: {{ .Values.model.provider | quote }}
+            - name: MODEL_ID
+              value: {{ .Values.model.name | quote }}
             - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -41,19 +52,30 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.model.credentials.secretName | quote }}
                   key: {{ .Values.model.credentials.key | quote }}
-            {{- else if eq .Values.model.provider "gemini" }}
-            - name: GOOGLE_GENERATIVE_AI_API_KEY
+            {{- else if or (eq .Values.model.provider "gemini") (eq .Values.model.provider "google") }}
+            - name: GEMINI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.model.credentials.secretName | quote }}
                   key: {{ .Values.model.credentials.key | quote }}
             {{- end }}
+            - name: AGENT_OPERATOR_NAME
+              value: {{ .Values.profile.operatorName | quote }}
+            - name: AGENT_PROFILE
+              value: {{ .Values.profile.name | quote }}
             {{- if .Values.telegram.enabled }}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.telegram.secretName | quote }}
                   key: {{ .Values.telegram.tokenKey | quote }}
+            {{- end }}
+            {{- if .Values.linear.enabled }}
+            - name: LINEAR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.linear.credentials.secretName | quote }}
+                  key: {{ .Values.linear.credentials.key | quote }}
             {{- end }}
             {{- range $name, $value := .Values.runtime.extraEnv }}
             - name: {{ $name }}
@@ -62,9 +84,9 @@ spec:
           volumeMounts:
             - name: state
               mountPath: {{ .Values.runtime.workspacePath }}
-            - name: config
-              mountPath: {{ .Values.runtime.configPath }}/openclaw.json
-              subPath: openclaw.json
+            - name: state
+              mountPath: {{ .Values.runtime.configPath }}
+              subPath: .openclaw
           resources:
 {{ toYaml .Values.resources | indent 12 }}
       volumes:
@@ -76,9 +98,6 @@ spec:
         - name: state
           emptyDir: {}
         {{- end }}
-        - name: config
-          configMap:
-            name: {{ include "edev.fullname" . }}-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}
