@@ -1,10 +1,10 @@
 # Telegram on Kubernetes
 
-This document explains how to connect a deployed eDEV instance to Telegram in a Kubernetes environment.
+This document explains how to connect a deployed Forge instance to Telegram in a Kubernetes environment.
 
 ## Goal
 
-Allow an operator to deploy eDEV into Kubernetes and connect it to a Telegram bot safely using Kubernetes Secrets and Helm values.
+Allow an operator to deploy Forge into Kubernetes and connect it to a Telegram bot safely using Kubernetes Secrets and Helm values.
 
 ## Required inputs
 
@@ -16,26 +16,26 @@ At minimum, the deployment needs:
 ## Secret creation example
 
 ```bash
-kubectl -n edev-test create secret generic edev-telegram \
+kubectl -n forge-test create secret generic forge-telegram \
   --from-literal=TELEGRAM_BOT_TOKEN='<your-telegram-bot-token>'
 ```
 
 ## Helm example
 
 ```bash
-helm upgrade --install edev ./k8s/helm/edev \
-  --namespace edev-test \
-  --set image.repository=edev \
+helm upgrade --install forge ./k8s/helm/forge \
+  --namespace forge-test \
+  --set image.repository=forge \
   --set image.tag=local \
   --set image.pullPolicy=IfNotPresent \
   --set model.provider=openai \
   --set model.name=openai/gpt-5.4 \
   --set model.alias=GPT \
-  --set model.credentials.secretName=edev-openai \
+  --set model.credentials.secretName=forge-openai \
   --set model.credentials.key=OPENAI_API_KEY \
-  --set secrets.gatewayTokenSecretName=edev-gateway \
+  --set secrets.gatewayTokenSecretName=forge-gateway \
   --set telegram.enabled=true \
-  --set telegram.secretName=edev-telegram
+  --set telegram.secretName=forge-telegram
 ```
 
 ## Validation

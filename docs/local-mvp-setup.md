@@ -1,6 +1,6 @@
 # Local MVP Setup
 
-This document explains the first local MVP setup for eDEV.
+This document explains the first local MVP setup for Forge.
 
 ## Goal
 

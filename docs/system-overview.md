@@ -1,8 +1,8 @@
-# eDEV System Overview
+# Forge System Overview
 
 ## System Summary
 
-eDEV is a framework for packaging and operating OpenClaw-based agents across multiple environments.
+Forge is a framework for packaging and operating OpenClaw-based agents across multiple environments.
 
 The architecture is intentionally staged:
 - start with a local Docker-based agent
@@ -81,7 +81,7 @@ In the longer term, the system may include Kubernetes operators or similar contr
 ## Initial Workflow
 
 ### MVP workflow
-1. Build the eDEV container image.
+1. Build the Forge container image.
 2. Inject local configuration and secrets outside Git.
 3. Run the OpenClaw-based software engineer agent locally.
 4. Provide project context through supported integrations, starting with Linear.

@@ -1,8 +1,8 @@
-{{- define "edev.name" -}}
+{{- define "forge.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "edev.fullname" -}}
+{{- define "forge.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -15,6 +15,6 @@
 {{- end }}
 {{- end }}
 
-{{- define "edev.chart" -}}
+{{- define "forge.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}

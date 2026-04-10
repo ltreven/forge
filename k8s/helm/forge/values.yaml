@@ -29,7 +29,7 @@ runtime:
     enabled: true
   extraEnv:
     NODE_OPTIONS: --max-old-space-size=2048
-    OPENCLAW_GATEWAY_NAME: "eDEV K8s"
+    OPENCLAW_GATEWAY_NAME: "Forge K8s"
 
 persistence:
   enabled: true

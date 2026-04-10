@@ -1,6 +1,6 @@
 # Provider Configuration
 
-The eDEV image delegates provider bootstrap to the OpenClaw CLI during container startup.
+The Forge image delegates provider bootstrap to the OpenClaw CLI during container startup.
 
 ## Runtime contract
 

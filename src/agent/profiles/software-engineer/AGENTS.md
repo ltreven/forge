@@ -1,6 +1,6 @@
-# AGENTS.md - eDEV Agent Workspace
+# AGENTS.md - Forge Agent Workspace
 
-This workspace defines the operational environment of the eDEV software engineer agent.
+This workspace defines the operational environment of the Forge software engineer agent.
 
 ## Startup Routine
 

@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "edev.fullname" . }}-state
+  name: {{ include "forge.fullname" . }}-state
   namespace: {{ .Release.Namespace }}
 spec:
   accessModes:

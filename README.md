@@ -1,6 +1,6 @@
-# eDEV
+# Forge
 
-**eDEV** is a deployable agent platform built around OpenClaw-based autonomous agents.
+**Forge** is a deployable agent platform built around OpenClaw-based autonomous agents.
 
 It starts as a local-first engineering laboratory and evolves toward a framework for deploying specialized agents into customer-controlled environments.
 
@@ -14,7 +14,7 @@ The current implementation target is the first MVP:
 
 ## Product model
 
-eDEV is **not** intended to be a hosted SaaS.
+Forge is **not** intended to be a hosted SaaS.
 
 The long-term goal is to make it possible to deploy and operate agent systems for clients using:
 - local Docker workflows

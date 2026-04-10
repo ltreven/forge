@@ -1,18 +1,18 @@
-# eDEV Product Vision
+# Forge Product Vision
 
 ## Overview
 
-**eDEV** is a deployment framework for running specialized OpenClaw-based autonomous agents in repeatable, controllable environments.
+**Forge** is a deployment framework for running specialized OpenClaw-based autonomous agents in repeatable, controllable environments.
 
 The long-term vision is to let a consultant or operator deploy agent teams into customer environments using standardized infrastructure, configuration, and operational workflows.
 
-In the near term, eDEV is a personal laboratory for designing, validating, and hardening that model.
+In the near term, Forge is a personal laboratory for designing, validating, and hardening that model.
 
 ## Core Idea
 
 The product is not a hosted SaaS.
 
-Instead, eDEV is a **deployable agent platform** that can be installed into environments controlled by the operator or by the customer. The system should make it easy to provision infrastructure, deploy OpenClaw-based agents, configure customer-specific integrations, and operate those agents safely.
+Instead, Forge is a **deployable agent platform** that can be installed into environments controlled by the operator or by the customer. The system should make it easy to provision infrastructure, deploy OpenClaw-based agents, configure customer-specific integrations, and operate those agents safely.
 
 ## Who It Is For
 
@@ -39,7 +39,7 @@ There is a gap between a useful local AI agent and a deployable, client-ready ag
 
 ## Value Proposition
 
-eDEV provides a structured path from local experimentation to production-grade agent deployment.
+Forge provides a structured path from local experimentation to production-grade agent deployment.
 
 It aims to offer:
 - repeatable deployment patterns
@@ -51,7 +51,7 @@ It aims to offer:
 
 ## Strategic Positioning
 
-eDEV should be understood as an **agent deployment and operations framework**, not just a single AI developer container.
+Forge should be understood as an **agent deployment and operations framework**, not just a single AI developer container.
 
 Its differentiation comes from treating agents as operational units that can be:
 - provisioned
@@ -101,9 +101,9 @@ Its differentiation comes from treating agents as operational units that can be:
 - add Kubernetes operators for monitoring, health management, and team performance insights
 - support multiple ticketing backends such as Linear and Jira
 
-## What eDEV Is Not
+## What Forge Is Not
 
-At least for now, eDEV is not:
+At least for now, Forge is not:
 - a generic chatbot product
 - a hosted multi-tenant SaaS
 - a replacement for human engineering leadership
