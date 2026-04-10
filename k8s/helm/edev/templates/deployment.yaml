@@ -42,31 +42,31 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.model.credentials.secretName | quote }}
-                  key: {{ .Values.model.credentials.key | quote }}
+                  name: ""
+                  key: {{ .Values.model.key }}
             {{- else if or (eq .Values.model.provider "gemini") (eq .Values.model.provider "google") }}
             - name: GEMINI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.model.credentials.secretName | quote }}
-                  key: {{ .Values.model.credentials.key | quote }}
+                  name: ""
+                  key: {{ .Values.model.key }}
             {{- end }}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.telegram.secretName | quote }}
+                  name: ""
                   key: {{ .Values.telegram.tokenKey | quote }}
             - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.gatewayTokenSecretName | quote }}
-                  key: {{ .Values.secrets.gatewayTokenKey | quote }}
+                  name:""
+                  key: {{ .Values.runtime.gateway.token | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
             - name: AGENT_OPERATOR_NAME
               value: {{ .Values.profile.operatorName | quote }}
             - name: AGENT_PROFILE
-              value: {{ .Values.profile.name | quote }}
+              value: {{ .Values.profile.type | quote }}
             - name: AGENT_NAME
               value: {{ .Values.profile.agentName | quote }}
           volumeMounts:
@@ -114,31 +114,31 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.model.credentials.secretName | quote }}
-                  key: {{ .Values.model.credentials.key | quote }}
+                  name: ""
+                  key: {{ .Values.model.key }}
             {{- else if or (eq .Values.model.provider "gemini") (eq .Values.model.provider "google") }}
             - name: GEMINI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.model.credentials.secretName | quote }}
-                  key: {{ .Values.model.credentials.key | quote }}
+                  name: ""
+                  key: {{ .Values.model.key }}
             {{- end }}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.telegram.secretName | quote }}
+                  name: ""
                   key: {{ .Values.telegram.tokenKey | quote }}
             - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.gatewayTokenSecretName | quote }}
-                  key: {{ .Values.secrets.gatewayTokenKey | quote }}
+                  name:""
+                  key: {{ .Values.runtime.gateway.token | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
             - name: AGENT_OPERATOR_NAME
               value: {{ .Values.profile.operatorName | quote }}
             - name: AGENT_PROFILE
-              value: {{ .Values.profile.name | quote }}
+              value: {{ .Values.profile.type | quote }}
             - name: AGENT_NAME
               value: {{ .Values.profile.agentName | quote }}
           resources:
