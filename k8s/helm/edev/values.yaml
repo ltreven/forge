@@ -6,26 +6,15 @@ image:
   pullPolicy: IfNotPresent
 
 profile:
-  name: software-engineer
-  # Inject via Helm values/CI env (e.g. --set profile.operatorName="$ENGINEER_AGENT_OPERATOR_NAME")
-  operatorName: ""
-  # Inject via Helm values/CI env (e.g. --set profile.agentName="$ENGINEER_AGENT_NAME")
   agentName: ""
-  # Optional pre-created ConfigMap name containing AGENTS.md, SOUL.md, USER.md, PROCESS.MD, MEMORY.md
-  # Example:
-  # kubectl create configmap openclaw-profiles-se \
-  #   --from-file=src/agent/profiles/software-engineer/ \
-  #   --namespace openclaw
+  type: ""
+  operatorName: ""
   configMapName: ""
 
 model:
-  secretName: ""
-  provider: openai
-  name: openai/gpt-5.4
-  alias: GPT
-  credentials:
-    secretName: ""
-    key: OPENAI_API_KEY
+  provider: ""
+  name: ""
+  key: ""
 
 runtime:
   workspacePath: /home/node/workspace
@@ -33,6 +22,7 @@ runtime:
   gateway:
     port: 18789
     bind: loopback
+    token: ""
   hardening:
     enabled: true
   extraEnv:
@@ -60,18 +50,12 @@ service:
 
 telegram:
   enabled: false
-  secretName: ""
-  tokenKey: TELEGRAM_BOT_TOKEN
+  tokenKey: ""
 
 linear:
   enabled: false
   credentials:
-    secretName: ""
-    key: LINEAR_API_KEY
-
-secrets:
-  gatewayTokenSecretName: ""
-  gatewayTokenKey: OPENCLAW_GATEWAY_TOKEN
+    key: ""
 
 stateMirror:
   enabled: false
