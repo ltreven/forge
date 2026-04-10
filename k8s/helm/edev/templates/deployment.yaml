@@ -69,6 +69,10 @@ spec:
               value: {{ .Values.profile.type | quote }}
             - name: AGENT_NAME
               value: {{ .Values.profile.agentName | quote }}
+            - name: LINEAR_ENABLED
+              value: {{ .Values.linear.enabled | quote }}
+            - name: LINEAR_API_KEY
+              value: {{ .Values.linear.credentials.key | quote }}
           volumeMounts:
             - name: openclaw-home
               mountPath: /home/node/.openclaw
@@ -141,6 +145,10 @@ spec:
               value: {{ .Values.profile.type | quote }}
             - name: AGENT_NAME
               value: {{ .Values.profile.agentName | quote }}
+            - name: LINEAR_ENABLED
+              value: {{ .Values.linear.enabled | quote }}
+            - name: LINEAR_API_KEY
+              value: {{ .Values.linear.credentials.key | quote }}
           resources:
             requests:
               memory: 512Mi
