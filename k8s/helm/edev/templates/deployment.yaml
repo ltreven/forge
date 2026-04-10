@@ -59,7 +59,7 @@ spec:
             - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name:""
+                  name: ""
                   key: {{ .Values.runtime.gateway.token | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
@@ -131,7 +131,7 @@ spec:
             - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name:""
+                  name: ""
                   key: {{ .Values.runtime.gateway.token | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
