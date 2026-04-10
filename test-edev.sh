@@ -43,6 +43,21 @@ kubectl create configmap "software-engineer-cm" \
   --namespace "$NAMESPACE" \
   --from-file="src/agent/profiles/software-engineer/"
 
+kubectl create secret generic "engineer-model" \
+  --namespace "$NAMESPACE" \
+  --from-literal=API_KEY="${ENGINEER_MODEL_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic "engineer-gateway" \
+  --namespace "$NAMESPACE" \
+  --from-literal=OPENCLAW_GATEWAY_TOKEN="${ENGINEER_OPENCLAW_GATEWAY_TOKEN}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic "engineer-telegram" \
+  --namespace "$NAMESPACE" \
+  --from-literal=TELEGRAM_BOT_TOKEN="${ENGINEER_TELEGRAM_BOT_TOKEN}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
 
 echo "[test] Installing Helm chart for software engineer..."
 
@@ -52,13 +67,16 @@ helm install "$RELEASE_NAME" ./k8s/helm/edev \
   --set profile.agentName="${ENGINEER_AGENT_NAME}" \
   --set profile.type="${ENGINEER_AGENT_PROFILE}" \
   --set profile.operatorName="${ENGINEER_AGENT_OPERATOR_NAME}" \
-  --set runtime.gateway.token="${ENGINEER_OPENCLAW_GATEWAY_TOKEN}" \
   --set profile.configMapName="software-engineer-cm" \
   --set model.provider="${ENGINEER_MODEL_PROVIDER}" \
   --set model.name="${ENGINEER_MODEL_NAME}" \
-  --set model.key="${ENGINEER_MODEL_KEY}" \
+  --set model.secretName="engineer-model" \
+  --set model.key="API_KEY" \
   --set telegram.enabled=true \
-  --set telegram.tokenKey="${ENGINEER_TELEGRAM_BOT_TOKEN}" \
+  --set telegram.secretName="engineer-telegram" \
+  --set telegram.tokenKey="TELEGRAM_BOT_TOKEN" \
+  --set runtime.gateway.secretName="engineer-gateway" \
+  --set runtime.gateway.tokenKey="OPENCLAW_GATEWAY_TOKEN" \
   --set persistence.enabled=true \
   --wait \
   --timeout 3m

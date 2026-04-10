@@ -14,6 +14,7 @@ profile:
 model:
   provider: ""
   name: ""
+  secretName: ""
   key: ""
 
 runtime:
@@ -22,7 +23,8 @@ runtime:
   gateway:
     port: 18789
     bind: loopback
-    token: ""
+    secretName: ""
+    tokenKey: OPENCLAW_GATEWAY_TOKEN
   hardening:
     enabled: true
   extraEnv:
@@ -50,7 +52,8 @@ service:
 
 telegram:
   enabled: false
-  tokenKey: ""
+  secretName: ""
+  tokenKey: TELEGRAM_BOT_TOKEN
 
 linear:
   enabled: false
