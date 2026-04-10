@@ -79,7 +79,7 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
   echo '{' > "$CONFIG_FILE"
   echo '  "gateway": {' >> "$CONFIG_FILE"
   echo '    "mode": "local",' >> "$CONFIG_FILE"
-  echo '    "bind": "0.0.0.0",' >> "$CONFIG_FILE"
+  echo '    "bind": "lan",' >> "$CONFIG_FILE"
   echo '    "port": 18789,' >> "$CONFIG_FILE"
   echo '    "auth": { "mode": "token" },' >> "$CONFIG_FILE"
   echo '    "controlUi": { "enabled": false }' >> "$CONFIG_FILE"
@@ -87,26 +87,62 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
   echo '  "agents": {' >> "$CONFIG_FILE"
   echo '    "defaults": {' >> "$CONFIG_FILE"
   echo '      "workspace": "~/.openclaw/workspace",' >> "$CONFIG_FILE"
+  echo '      "subagents": { "allowAgents": ["*"] },' >> "$CONFIG_FILE"
   echo '      "model": {' >> "$CONFIG_FILE"
   echo "        \"primary\": \"$PRIMARY_MODEL\"," >> "$CONFIG_FILE"
   echo "        \"fallbacks\": [\"$FALLBACK_MODEL\"]" >> "$CONFIG_FILE"
   echo '      }' >> "$CONFIG_FILE"
   echo '    }' >> "$CONFIG_FILE"
-  echo -n '  }' >> "$CONFIG_FILE"
+  echo '  }' >> "$CONFIG_FILE"
+  echo '}' >> "$CONFIG_FILE"
 
   if [ "$ENABLE_LINEAR_MCP" = "true" ]; then
-    echo ',' >> "$CONFIG_FILE"
-    echo '  "mcpServers": {' >> "$CONFIG_FILE"
-    echo '    "linear": {' >> "$CONFIG_FILE"
-    echo '      "command": "npx",' >> "$CONFIG_FILE"
-    echo '      "args": ["-y", "@modelcontextprotocol/server-linear"]' >> "$CONFIG_FILE"
-    echo '    }' >> "$CONFIG_FILE"
-    echo '  }' >> "$CONFIG_FILE"
-  else
-    echo >> "$CONFIG_FILE"
+    echo "==> Pre-installing @sylphx/linear-mcp into persistent volume"
+    MCP_PKG_DIR="$OPENCLAW_CONFIG_DIR/mcp-packages"
+    mkdir -p "$MCP_PKG_DIR"
+    # Install the package into the persistent volume so the main container doesn't need network access
+    npm install --prefix "$MCP_PKG_DIR" --save "@sylphx/linear-mcp" \
+      --cache /tmp/.npm \
+      --prefer-offline 2>&1 || \
+    npm install --prefix "$MCP_PKG_DIR" --save "@sylphx/linear-mcp" \
+      --cache /tmp/.npm 2>&1
+
+    # Resolve the binary path
+    LINEAR_MCP_BIN="$MCP_PKG_DIR/node_modules/.bin/linear-mcp"
+
+    echo "==> Configuring linear MCP server via OpenClaw CLI (pre-installed binary)"
+    JSON_ARG="{\"command\":\"node\",\"args\":[\"$MCP_PKG_DIR/node_modules/@sylphx/linear-mcp/dist/index.js\"],\"env\":{\"LINEAR_API_KEY\":\"${LINEAR_API_KEY}\"}}"
+    openclaw mcp set linear "$JSON_ARG"
+
+    echo "==> Creating linear SKILL.md for the agent context"
+    mkdir -p "$OPENCLAW_CONFIG_DIR/workspace/skills/linear"
+    cat << 'EOF' > "$OPENCLAW_CONFIG_DIR/workspace/skills/linear/SKILL.md"
+---
+name: linear
+description: Manage Linear issues, projects, and teams natively via MCP.
+metadata: { "openclaw": { "emoji": "🔗" } }
+---
+
+# Linear Integration
+
+You have direct access to Linear through native MCP tools. 
+Use these tools to query and manage work items.
+
+## Available Native Tools:
+- `linear_issue_search`: Search issues by text or filter.
+- `linear_issue_get`: Retrieve full details of a specific issue.
+- `linear_issue_create`: Create new issues.
+- `linear_issue_update`: Update issue state, assignee, or text.
+- `linear_team_list`: Find teams and their IDs.
+- `linear_project_list`: Find projects and their IDs.
+
+## Important Note
+You DO NOT need external scripts like `curl` or `mcporter`. Call the native tools directly through your tool calling interface.
+EOF
   fi
 
-  echo '}' >> "$CONFIG_FILE"
+  echo "==> Creating symlink for openclaw.json so the agent can inspect it"
+  ln -sf "$CONFIG_FILE" "$OPENCLAW_CONFIG_DIR/workspace/openclaw.json"
 
   echo "==> Injecting profile markdown files (if provided by ConfigMap)"
   if [ -d /profile-files ]; then

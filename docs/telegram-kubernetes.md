@@ -23,7 +23,7 @@ kubectl -n forge-test create secret generic forge-telegram \
 ## Helm example
 
 ```bash
-helm upgrade --install forge ./k8s/helm/forge \
+helm upgrade --install forge ./src/k8s/helm/forge \
   --namespace forge-test \
   --set image.repository=forge \
   --set image.tag=local \

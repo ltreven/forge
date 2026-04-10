@@ -10,8 +10,11 @@ echo "============================================"
 
 # 1. Load env vars
 echo "[test] Loading .env file..."
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
+
 # Export vars from .env, ignoring comments and empty lines
-export $(grep -v '^#' .env | xargs)
+export $(grep -v '^#' "$REPO_ROOT/.env" | xargs)
 
 echo ""
 echo "=================================================================================="
@@ -48,7 +51,7 @@ RELEASE_NAME="engineer"
 PREFIX="software-engineer"
 kubectl create configmap "software-engineer-cm" \
   --namespace "$NAMESPACE" \
-  --from-file="src/agent/profiles/software-engineer/"
+  --from-file="$REPO_ROOT/src/agent/profiles/software-engineer/"
 
 kubectl create secret generic "engineer-model" \
   --namespace "$NAMESPACE" \
@@ -68,7 +71,7 @@ kubectl create secret generic "engineer-telegram" \
 
 echo "[test] Installing Helm chart for software engineer..."
 
-helm install "$RELEASE_NAME" ./k8s/helm/forge \
+helm install "$RELEASE_NAME" "$REPO_ROOT/src/k8s/helm/forge" \
   --namespace "$NAMESPACE" \
   --set image.pullPolicy=IfNotPresent \
   --set profile.agentName="${ENGINEER_AGENT_NAME}" \
@@ -85,6 +88,8 @@ helm install "$RELEASE_NAME" ./k8s/helm/forge \
   --set runtime.gateway.secretName="engineer-gateway" \
   --set runtime.gateway.tokenKey="OPENCLAW_GATEWAY_TOKEN" \
   --set persistence.enabled=true \
+  --set linear.enabled="${ENGINEER_LINEAR_ENABLED:-false}" \
+  --set linear.credentials.key="${ENGINEER_LINEAR_API_KEY:-}" \
   --wait \
   --timeout 3m
 
@@ -112,7 +117,7 @@ RELEASE_NAME="pm"
 PREFIX="product-manager"
 kubectl create configmap "product-manager-cm" \
   --namespace "$NAMESPACE" \
-  --from-file="src/agent/profiles/product-manager/"
+  --from-file="$REPO_ROOT/src/agent/profiles/product-manager/"
 
 kubectl create secret generic "pm-model" \
   --namespace "$NAMESPACE" \
@@ -132,7 +137,7 @@ kubectl create secret generic "pm-telegram" \
 
 echo "[test] Installing Helm chart for product manager..."
 
-helm install "$RELEASE_NAME" ./k8s/helm/forge \
+helm install "$RELEASE_NAME" "$REPO_ROOT/src/k8s/helm/forge" \
   --namespace "$NAMESPACE" \
   --set image.pullPolicy=IfNotPresent \
   --set profile.agentName="${PM_AGENT_NAME}" \
@@ -149,6 +154,8 @@ helm install "$RELEASE_NAME" ./k8s/helm/forge \
   --set runtime.gateway.secretName="pm-gateway" \
   --set runtime.gateway.tokenKey="OPENCLAW_GATEWAY_TOKEN" \
   --set persistence.enabled=true \
+  --set linear.enabled="${PM_LINEAR_ENABLED:-false}" \
+  --set linear.credentials.key="${PM_LINEAR_API_KEY:-}" \
   --wait \
   --timeout 3m
 

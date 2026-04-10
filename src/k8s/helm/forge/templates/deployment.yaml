@@ -85,6 +85,8 @@ spec:
             {{- end }}
             - name: tmp-volume
               mountPath: /tmp
+            - name: npm-cache
+              mountPath: /home/node/.npm
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
@@ -114,6 +116,12 @@ spec:
               value: /home/node/.openclaw
             - name: NODE_ENV
               value: production
+            {{- if .Values.runtime.extraEnv }}
+            {{- range $key, $value := .Values.runtime.extraEnv }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
             {{- if eq .Values.model.provider "openai" }}
             - name: OPENAI_API_KEY
               valueFrom:
@@ -161,6 +169,8 @@ spec:
               mountPath: /home/node/.openclaw
             - name: tmp-volume
               mountPath: /tmp
+            - name: npm-cache
+              mountPath: /home/node/.npm
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
@@ -185,4 +195,6 @@ spec:
             name: {{ .Values.profile.configMapName | quote }}
         {{- end }}
         - name: tmp-volume
+          emptyDir: {}
+        - name: npm-cache
           emptyDir: {}

@@ -82,6 +82,7 @@ You must request approval before:
 
 ## Linear Integration Guardrails
 
+- **TOOL TRIGGER**: Whenever the operator requests anything related to a "ticket", "issue", "work item", or anything that sounds like a ticket of a project management tool like atlassian Jira/Linear, **you MUST use the Linear MCP integration tool** to retrieve, query, or update information.
 - Access Linear only via approved tools/MCP operations (never direct/manual API calls).
 - When starting a ticket, mark it as **IN PROGRESS**.
 - If requirements are unclear, comment in the ticket and pause execution.
