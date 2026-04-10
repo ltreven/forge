@@ -63,11 +63,22 @@ spec:
                   key: {{ .Values.secrets.gatewayTokenKey | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
+            - name: AGENT_OPERATOR_NAME
+              value: {{ .Values.profile.operatorName | quote }}
+            - name: AGENT_PROFILE
+              value: {{ .Values.profile.name | quote }}
+            - name: AGENT_NAME
+              value: {{ .Values.profile.agentName | quote }}
           volumeMounts:
             - name: openclaw-home
               mountPath: /home/node/.openclaw
             - name: bootstrap
               mountPath: /bootstrap
+            {{- if .Values.profile.configMapName }}
+            - name: profile-files
+              mountPath: /profile-files
+              readOnly: true
+            {{- end }}
             - name: tmp-volume
               mountPath: /tmp
           securityContext:
@@ -124,6 +135,12 @@ spec:
                   key: {{ .Values.secrets.gatewayTokenKey | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
+            - name: AGENT_OPERATOR_NAME
+              value: {{ .Values.profile.operatorName | quote }}
+            - name: AGENT_PROFILE
+              value: {{ .Values.profile.name | quote }}
+            - name: AGENT_NAME
+              value: {{ .Values.profile.agentName | quote }}
           resources:
             requests:
               memory: 512Mi
@@ -154,5 +171,10 @@ spec:
           configMap:
             name: {{ include "edev.fullname" . }}-bootstrap
             defaultMode: 0755
+        {{- if .Values.profile.configMapName }}
+        - name: profile-files
+          configMap:
+            name: {{ .Values.profile.configMapName | quote }}
+        {{- end }}
         - name: tmp-volume
           emptyDir: {}

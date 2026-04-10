@@ -7,7 +7,16 @@ image:
 
 profile:
   name: software-engineer
-  operatorName: Lourenço
+  # Inject via Helm values/CI env (e.g. --set profile.operatorName="$ENGINEER_AGENT_OPERATOR_NAME")
+  operatorName: ""
+  # Inject via Helm values/CI env (e.g. --set profile.agentName="$ENGINEER_AGENT_NAME")
+  agentName: ""
+  # Optional pre-created ConfigMap name containing AGENTS.md, SOUL.md, USER.md, PROCESS.MD, MEMORY.md
+  # Example:
+  # kubectl create configmap openclaw-profiles-se \
+  #   --from-file=src/agent/profiles/software-engineer/ \
+  #   --namespace openclaw
+  configMapName: ""
 
 model:
   secretName: ""
