@@ -42,25 +42,25 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: ""
-                  key: {{ .Values.model.key }}
+                  name: {{ .Values.model.secretName | quote }}
+                  key: {{ .Values.model.key | quote }}
             {{- else if or (eq .Values.model.provider "gemini") (eq .Values.model.provider "google") }}
             - name: GEMINI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: ""
-                  key: {{ .Values.model.key }}
+                  name: {{ .Values.model.secretName | quote }}
+                  key: {{ .Values.model.key | quote }}
             {{- end }}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: ""
+                  name: {{ .Values.telegram.secretName | quote }}
                   key: {{ .Values.telegram.tokenKey | quote }}
             - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: ""
-                  key: {{ .Values.runtime.gateway.token | quote }}
+                  name: {{ .Values.runtime.gateway.secretName | quote }}
+                  key: {{ .Values.runtime.gateway.tokenKey | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
             - name: AGENT_OPERATOR_NAME
@@ -114,25 +114,25 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: ""
-                  key: {{ .Values.model.key }}
+                  name: {{ .Values.model.secretName | quote }}
+                  key: {{ .Values.model.key | quote }}
             {{- else if or (eq .Values.model.provider "gemini") (eq .Values.model.provider "google") }}
             - name: GEMINI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: ""
-                  key: {{ .Values.model.key }}
+                  name: {{ .Values.model.secretName | quote }}
+                  key: {{ .Values.model.key | quote }}
             {{- end }}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: ""
+                  name: {{ .Values.telegram.secretName | quote }}
                   key: {{ .Values.telegram.tokenKey | quote }}
             - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: ""
-                  key: {{ .Values.runtime.gateway.token | quote }}
+                  name: {{ .Values.runtime.gateway.secretName | quote }}
+                  key: {{ .Values.runtime.gateway.tokenKey | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
             - name: AGENT_OPERATOR_NAME
