@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "edev.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/name: {{ include "edev.name" . }}
     helm.sh/chart: {{ include "edev.chart" . }}
@@ -19,33 +20,24 @@ spec:
         app.kubernetes.io/name: {{ include "edev.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
-      hostname: edev-agent
-      containers:
-        - name: edev
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      initContainers:
+        - name: bootstrap-edev
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: {{ toJson .Values.runtime.command }}
-          ports:
-            - containerPort: {{ .Values.runtime.gateway.port }}
-              name: gateway
+          command:
+            - sh
+            - /bootstrap/bootstrap.sh
           env:
-            - name: OPENCLAW_WORKSPACE
-              value: {{ .Values.runtime.workspacePath | quote }}
+            - name: HOME
+              value: /home/node
             - name: OPENCLAW_CONFIG_DIR
-              value: {{ .Values.runtime.configPath | quote }}
-            - name: OPENCLAW_GATEWAY_PORT
-              value: {{ .Values.runtime.gateway.port | quote }}
-            - name: OPENCLAW_GATEWAY_BIND
-              value: {{ .Values.runtime.gateway.bind | quote }}
-            - name: MODEL_PROVIDER
-              value: {{ .Values.model.provider | quote }}
-            - name: MODEL_ID
-              value: {{ .Values.model.name | quote }}
-            - name: OPENCLAW_GATEWAY_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.gatewayTokenSecretName | quote }}
-                  key: {{ .Values.secrets.gatewayTokenKey | quote }}
+              value: /home/node/.openclaw
             {{- if eq .Values.model.provider "openai" }}
             - name: OPENAI_API_KEY
               valueFrom:
@@ -59,54 +51,130 @@ spec:
                   name: {{ .Values.model.credentials.secretName | quote }}
                   key: {{ .Values.model.credentials.key | quote }}
             {{- end }}
-            - name: AGENT_OPERATOR_NAME
-              value: {{ .Values.profile.operatorName | quote }}
-            - name: AGENT_PROFILE
-              value: {{ .Values.profile.name | quote }}
-            {{- if .Values.telegram.enabled }}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.telegram.secretName | quote }}
                   key: {{ .Values.telegram.tokenKey | quote }}
-            {{- end }}
-            {{- if .Values.linear.enabled }}
-            - name: LINEAR_API_KEY
+            - name: OPENCLAW_GATEWAY_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.linear.credentials.secretName | quote }}
-                  key: {{ .Values.linear.credentials.key | quote }}
-            {{- end }}
-            {{- range $name, $value := .Values.runtime.extraEnv }}
-            - name: {{ $name }}
-              value: {{ $value | quote }}
-            {{- end }}
+                  name: {{ .Values.secrets.gatewayTokenSecretName | quote }}
+                  key: {{ .Values.secrets.gatewayTokenKey | quote }}
+            - name: ACTIVE_PROVIDER
+              value: {{ .Values.model.provider | quote }}
+            - name: AGENT_OPERATOR_NAME
+              value: {{ .Values.profile.operatorName | quote }}
+            - name: AGENT_PROFILE
+              value: {{ .Values.profile.name | quote }}
+            - name: AGENT_NAME
+              value: {{ .Values.profile.agentName | quote }}
           volumeMounts:
-            - name: state
-              mountPath: {{ .Values.runtime.workspacePath }}
-            - name: state
-              mountPath: {{ .Values.runtime.configPath }}
-              subPath: .openclaw
+            - name: openclaw-home
+              mountPath: /home/node/.openclaw
+            - name: bootstrap
+              mountPath: /bootstrap
+            {{- if .Values.profile.configMapName }}
+            - name: profile-files
+              mountPath: /profile-files
+              readOnly: true
+            {{- end }}
+            - name: tmp-volume
+              mountPath: /tmp
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+
+      containers:
+        - name: edev
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - node
+            - /app/dist/index.js
+            - gateway
+            - run
+          ports:
+            - name: gateway
+              containerPort: {{ .Values.runtime.gateway.port }}
+          env:
+            - name: HOME
+              value: /home/node
+            - name: OPENCLAW_CONFIG_DIR
+              value: /home/node/.openclaw
+            - name: NODE_ENV
+              value: production
+            {{- if eq .Values.model.provider "openai" }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.model.credentials.secretName | quote }}
+                  key: {{ .Values.model.credentials.key | quote }}
+            {{- else if or (eq .Values.model.provider "gemini") (eq .Values.model.provider "google") }}
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.model.credentials.secretName | quote }}
+                  key: {{ .Values.model.credentials.key | quote }}
+            {{- end }}
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.telegram.secretName | quote }}
+                  key: {{ .Values.telegram.tokenKey | quote }}
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.gatewayTokenSecretName | quote }}
+                  key: {{ .Values.secrets.gatewayTokenKey | quote }}
+            - name: ACTIVE_PROVIDER
+              value: {{ .Values.model.provider | quote }}
+            - name: AGENT_OPERATOR_NAME
+              value: {{ .Values.profile.operatorName | quote }}
+            - name: AGENT_PROFILE
+              value: {{ .Values.profile.name | quote }}
+            - name: AGENT_NAME
+              value: {{ .Values.profile.agentName | quote }}
           resources:
-{{ toYaml .Values.resources | indent 12 }}
+            requests:
+              memory: 512Mi
+              cpu: 250m
+            limits:
+              memory: 2Gi
+              cpu: "1"
+          volumeMounts:
+            - name: openclaw-home
+              mountPath: /home/node/.openclaw
+            - name: tmp-volume
+              mountPath: /tmp
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
       volumes:
-        {{- if .Values.persistence.enabled }}
-        - name: state
+        - name: openclaw-home
           persistentVolumeClaim:
             claimName: {{ include "edev.fullname" . }}-state
-        {{- else }}
-        - name: state
-          emptyDir: {}
+        - name: bootstrap
+          configMap:
+            name: {{ include "edev.fullname" . }}-bootstrap
+            defaultMode: 0755
+        {{- if .Values.profile.configMapName }}
+        - name: profile-files
+          configMap:
+            name: {{ .Values.profile.configMapName | quote }}
         {{- end }}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-{{ toYaml . | indent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-{{ toYaml . | indent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-{{ toYaml . | indent 8 }}
-      {{- end }}
+        - name: tmp-volume
+          emptyDir: {}
