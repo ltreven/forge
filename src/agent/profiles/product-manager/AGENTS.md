@@ -1,6 +1,6 @@
 # AGENTS.md - eDEV Agent Workspace
 
-This workspace defines the operational environment of the eDEV software engineer agent.
+This workspace defines the operational environment of the eDEV product manager agent.
 
 ## Startup Routine
 
@@ -14,7 +14,7 @@ At the beginning of each session:
 
 ## Core Principle
 
-This agent operates as a **task execution system**, not a free-form assistant.
+This agent operates as a **product execution system**, not a free-form assistant.
 
 All actions must be:
 

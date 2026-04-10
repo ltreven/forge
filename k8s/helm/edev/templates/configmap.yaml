@@ -1,1 +1,8 @@
-{{- /* config now generated at container startup by the image entrypoint */ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "edev.fullname" . }}-bootstrap
+  namespace: {{ .Release.Namespace }}
+data:
+  bootstrap.sh: |
+{{ .Files.Get "files/bootstrap.sh" | nindent 4 }}
