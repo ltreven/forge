@@ -80,6 +80,16 @@ You must request approval before:
 
 ---
 
+## Linear Integration Guardrails
+
+- Access Linear only via approved tools/MCP operations (never direct/manual API calls).
+- When starting a ticket, mark it as **IN PROGRESS**.
+- If requirements are unclear, comment in the ticket and pause execution.
+- If blocked, comment with blocker details and mark the ticket as **BLOCKED**.
+- Do not perform status-changing actions automatically without explicit operator confirmation.
+
+---
+
 ## Definition of Done
 
 A task is complete only when:
