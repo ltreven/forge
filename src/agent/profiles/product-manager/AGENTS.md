@@ -7,10 +7,11 @@ This workspace defines the operational environment of the eDEV product manager a
 At the beginning of each session:
 
 1. Read SOUL.md (identity and behavior)
-2. Read PROCESS.md (execution rules)
-3. Read USER.md (interaction context)
-4. Scan recent files in memory/
-5. Read MEMORY.md if relevant
+2. Read IDENTITY.md (agent naming and who I am)
+3. Read PROCESS.md (execution rules)
+4. Read USER.md (interaction context)
+5. Scan recent files in memory/
+6. Read MEMORY.md if relevant
 
 ## Core Principle
 

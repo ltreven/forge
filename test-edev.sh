@@ -19,6 +19,7 @@ echo "   Agent Identity & Settings             "
 echo " "
 echo " ENGINEER: ${ENGINEER_AGENT_NAME} / ${ENGINEER_AGENT_PROFILE} / ${ENGINEER_AGENT_OPERATOR_NAME}"
 echo " PM : ${PM_AGENT_NAME} / ${PM_AGENT_PROFILE} / ${PM_AGENT_OPERATOR_NAME}"
+echo " ENGINEER LINEAR: enabled=${ENGINEER_LINEAR_ENABLED:-false}"
 echo "=================================================================================="
 echo ""
 
@@ -75,6 +76,8 @@ helm install "$RELEASE_NAME" ./k8s/helm/edev \
   --set telegram.enabled=true \
   --set telegram.secretName="engineer-telegram" \
   --set telegram.tokenKey="TELEGRAM_BOT_TOKEN" \
+  --set linear.enabled="${ENGINEER_LINEAR_ENABLED:-false}" \
+  --set linear.credentials.key="${ENGINEER_LINEAR_API_KEY:-}" \
   --set runtime.gateway.secretName="engineer-gateway" \
   --set runtime.gateway.tokenKey="OPENCLAW_GATEWAY_TOKEN" \
   --set persistence.enabled=true \

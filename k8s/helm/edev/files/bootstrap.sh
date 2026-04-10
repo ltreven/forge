@@ -51,6 +51,14 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
     --channel telegram \
     --token "$TELEGRAM_BOT_TOKEN"
 
+  ENABLE_LINEAR_MCP=false
+  if [ "${LINEAR_ENABLED:-false}" = "true" ] && [ -n "${LINEAR_API_KEY:-}" ]; then
+    ENABLE_LINEAR_MCP=true
+    echo "==> Linear MCP will be enabled"
+  elif [ "${LINEAR_ENABLED:-false}" = "true" ]; then
+    echo "==> LINEAR_ENABLED=true but LINEAR_API_KEY is empty; Linear MCP will not be configured"
+  fi
+
   echo "==> Writing config manually"
 
   PROVIDER="${ACTIVE_PROVIDER:-gemini}"
@@ -84,12 +92,25 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
   echo "        \"fallbacks\": [\"$FALLBACK_MODEL\"]" >> "$CONFIG_FILE"
   echo '      }' >> "$CONFIG_FILE"
   echo '    }' >> "$CONFIG_FILE"
-  echo '  }' >> "$CONFIG_FILE"
+  echo -n '  }' >> "$CONFIG_FILE"
+
+  if [ "$ENABLE_LINEAR_MCP" = "true" ]; then
+    echo ',' >> "$CONFIG_FILE"
+    echo '  "mcpServers": {' >> "$CONFIG_FILE"
+    echo '    "linear": {' >> "$CONFIG_FILE"
+    echo '      "command": "npx",' >> "$CONFIG_FILE"
+    echo '      "args": ["-y", "@modelcontextprotocol/server-linear"]' >> "$CONFIG_FILE"
+    echo '    }' >> "$CONFIG_FILE"
+    echo '  }' >> "$CONFIG_FILE"
+  else
+    echo >> "$CONFIG_FILE"
+  fi
+
   echo '}' >> "$CONFIG_FILE"
 
   echo "==> Injecting profile markdown files (if provided by ConfigMap)"
   if [ -d /profile-files ]; then
-    for f in AGENTS.md SOUL.md USER.md PROCESS.MD MEMORY.md HEARTBEAT.md; do
+    for f in AGENTS.md IDENTITY.md SOUL.md USER.md PROCESS.MD MEMORY.md HEARTBEAT.md; do
       if [ -f "/profile-files/$f" ]; then
         render_profile_file "/profile-files/$f" "$OPENCLAW_CONFIG_DIR/workspace/$f"
       fi
