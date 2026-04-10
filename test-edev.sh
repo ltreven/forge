@@ -23,6 +23,8 @@ echo "==========================================================================
 echo ""
 
 NAMESPACE="edev-test"
+RELEASE_NAME="engineer"
+PREFIX="software-engineer"
 echo "[test] Creating namespace: $NAMESPACE"
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | \
   kubectl apply -f -
@@ -44,7 +46,7 @@ kubectl create configmap "software-engineer-cm" \
 
 echo "[test] Installing Helm chart for software engineer..."
 
-helm install "engineer" ./k8s/helm/edev \
+helm install "$RELEASE_NAME" ./k8s/helm/edev \
   --namespace "$NAMESPACE" \
   --set image.pullPolicy=IfNotPresent \
   --set profile.agentName="${ENGINEER_AGENT_NAME}" \
@@ -61,16 +63,16 @@ helm install "engineer" ./k8s/helm/edev \
   --wait \
   --timeout 3m
 
-local pod_name
-pod_name=$(kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/instance=$release_name" -o jsonpath='{.items[0].metadata.name}')
+pod_name=""
+pod_name=$(kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/instance=$RELEASE_NAME" -o jsonpath='{.items[0].metadata.name}')
 
 if [ -z "$pod_name" ]; then
-  echo "[error] Could not find pod for release: $release_name"
+  echo "[error] Could not find pod for release: $RELEASE_NAME"
   exit 1
 fi
-echo "[test] Pod found for ${prefix}: $pod_name"
+echo "[test] Pod found for ${PREFIX}: $pod_name"
 
-echo "[test] Checking OpenClaw binary for ${prefix}..."
+echo "[test] Checking OpenClaw binary for ${PREFIX}..."
 kubectl exec -n "$NAMESPACE" "$pod_name" -- openclaw --help > /dev/null
 
 echo "[test] All checks passed successfully!"
