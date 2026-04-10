@@ -1,10 +1,10 @@
 # Kubernetes Deployment
 
-This document explains the first Kubernetes deployment model for eDEV.
+This document explains the first Kubernetes deployment model for Forge.
 
 ## Goal
 
-Package eDEV so it can be deployed into a generic Kubernetes cluster using Helm.
+Package Forge so it can be deployed into a generic Kubernetes cluster using Helm.
 
 This deployment model is intended to be:
 - portable
@@ -17,7 +17,7 @@ This deployment model is intended to be:
 The repository includes an initial Helm chart under:
 
 ```text
-k8s/helm/edev
+k8s/helm/forge
 ```
 
 ## Basic deployment flow
@@ -31,22 +31,22 @@ k8s/helm/edev
 Example:
 
 ```bash
-helm upgrade --install edev ./k8s/helm/edev \
-  --namespace edev \
+helm upgrade --install forge ./k8s/helm/forge \
+  --namespace forge \
   --create-namespace \
-  -f ./k8s/helm/edev/values.yaml
+  -f ./k8s/helm/forge/values.yaml
 ```
 
 Example local-cluster style override for a locally built image and explicit secrets:
 
 ```bash
-helm upgrade --install edev ./k8s/helm/edev \
-  --namespace edev-test \
-  --set image.repository=edev \
+helm upgrade --install forge ./k8s/helm/forge \
+  --namespace forge-test \
+  --set image.repository=forge \
   --set image.tag=local \
   --set image.pullPolicy=IfNotPresent \
-  --set secrets.gatewayTokenSecretName=edev-gateway \
-  --set model.credentials.secretName=edev-openai
+  --set secrets.gatewayTokenSecretName=forge-gateway \
+  --set model.credentials.secretName=forge-openai
 ```
 
 ## What the chart currently provisions
@@ -60,8 +60,8 @@ helm upgrade --install edev ./k8s/helm/edev \
 ## Important notes
 
 - This wave aligns the chart more closely with the validated local runtime model by carrying a baseline runtime config into Kubernetes instead of relying only on generic image defaults.
-- Runtime tuning matters: local cluster testing showed that the eDEV/OpenClaw runtime was not stable with the earlier lower memory defaults. The chart now carries more realistic default memory settings and supports explicit runtime environment overrides such as `NODE_OPTIONS`.
+- Runtime tuning matters: local cluster testing showed that the Forge/OpenClaw runtime was not stable with the earlier lower memory defaults. The chart now carries more realistic default memory settings and supports explicit runtime environment overrides such as `NODE_OPTIONS`.
 - This is still not a final production-ready packaging layer.
 - Secrets should be provided through Kubernetes Secrets or an equivalent secret-management workflow.
 - OpenClaw should remain configured with safe defaults and approval-aware behavior.
-- The chart is intentionally structured so it can evolve toward more profiles than just `edev` later.
+- The chart is intentionally structured so it can evolve toward more profiles than just `forge` later.

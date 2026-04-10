@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# test-edev.sh - Test the eDEV deployment in a fresh k8s namespace
+# test-forge.sh - Test the Forge deployment in a fresh k8s namespace
 
 set -e
 
 echo "============================================"
-echo " starting eDEV Kubernetes integration test "
+echo " starting Forge Kubernetes integration test "
 echo "============================================"
 
 # 1. Load env vars
@@ -22,7 +22,7 @@ echo " PM : ${PM_AGENT_NAME} / ${PM_AGENT_PROFILE} / ${PM_AGENT_OPERATOR_NAME}"
 echo "=================================================================================="
 echo ""
 
-NAMESPACE="edev-test"
+NAMESPACE="forge-test"
 echo "[test] Creating namespace: $NAMESPACE"
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | \
   kubectl apply -f -
@@ -68,7 +68,7 @@ kubectl create secret generic "engineer-telegram" \
 
 echo "[test] Installing Helm chart for software engineer..."
 
-helm install "$RELEASE_NAME" ./k8s/helm/edev \
+helm install "$RELEASE_NAME" ./k8s/helm/forge \
   --namespace "$NAMESPACE" \
   --set image.pullPolicy=IfNotPresent \
   --set profile.agentName="${ENGINEER_AGENT_NAME}" \
@@ -132,7 +132,7 @@ kubectl create secret generic "pm-telegram" \
 
 echo "[test] Installing Helm chart for product manager..."
 
-helm install "$RELEASE_NAME" ./k8s/helm/edev \
+helm install "$RELEASE_NAME" ./k8s/helm/forge \
   --namespace "$NAMESPACE" \
   --set image.pullPolicy=IfNotPresent \
   --set profile.agentName="${PM_AGENT_NAME}" \

@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "edev.fullname" . }}
+  name: {{ include "forge.fullname" . }}
   labels:
-    app.kubernetes.io/name: {{ include "edev.name" . }}
+    app.kubernetes.io/name: {{ include "forge.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   type: {{ .Values.service.type }}
   selector:
-    app.kubernetes.io/name: {{ include "edev.name" . }}
+    app.kubernetes.io/name: {{ include "forge.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
     - name: gateway

@@ -1,4 +1,4 @@
-# Project: edev - Gemini CLI Instructions
+# Project: forge - Gemini CLI Instructions
 
 This document provides foundational mandates for Gemini CLI when operating within this workspace. These instructions take absolute precedence over general defaults.
 
