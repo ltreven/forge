@@ -16,8 +16,7 @@ This deployment model is intended to be:
 
 The repository includes an initial Helm chart under:
 
-```text
-k8s/helm/forge
+src/k8s/helm/forge
 ```
 
 ## Basic deployment flow
@@ -31,16 +30,16 @@ k8s/helm/forge
 Example:
 
 ```bash
-helm upgrade --install forge ./k8s/helm/forge \
+helm upgrade --install forge ./src/k8s/helm/forge \
   --namespace forge \
   --create-namespace \
-  -f ./k8s/helm/forge/values.yaml
+  -f ./src/k8s/helm/forge/values.yaml
 ```
 
 Example local-cluster style override for a locally built image and explicit secrets:
 
 ```bash
-helm upgrade --install forge ./k8s/helm/forge \
+helm upgrade --install forge ./src/k8s/helm/forge \
   --namespace forge-test \
   --set image.repository=forge \
   --set image.tag=local \

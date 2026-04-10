@@ -38,7 +38,7 @@ kubectl -n forge-test create secret generic forge-telegram \
 Deploy a default Software Engineer agent:
 
 ```bash
-helm upgrade --install forge ./k8s/helm/forge \
+helm upgrade --install forge ./src/k8s/helm/forge \
   --namespace forge-test \
   --set image.repository=forge \
   --set image.tag=local \
@@ -68,7 +68,7 @@ kubectl -n forge-test create secret generic alice-gemini \
 
 2. Deploy the second agent (Alice):
 ```bash
-helm upgrade --install alice ./k8s/helm/forge \
+helm upgrade --install alice ./src/k8s/helm/forge \
   --namespace forge-test \
   --set image.repository=forge \
   --set image.tag=local \
@@ -106,8 +106,7 @@ kubectl -n forge-test port-forward deployment/forge-forge 18789:18789
 ## Automated Testing Script
 
 For an automated end-to-end integration loop of these deployment scenarios, you can also use our test script:
-```bash
-./test-forge.sh
+./src/test/test-forge.sh
 ```
 This script dynamically creates a disposable namespace, injects secrets from `.env`, runs the Helm installation, and tests internal OpenClaw health.
 
