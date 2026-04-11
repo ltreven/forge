@@ -62,6 +62,69 @@ The local MVP uses:
 - Prefer portability and reproducibility over ad hoc setup.
 - Provide realistic engineering tooling, but route deeper execution capability through clearly bounded and auditable environments.
 
+## Backend API (apps/api)
+
+The Forge REST API is a Node.js/Express service exposing CRUD endpoints for **Teams** and **Agents**.
+
+### Prerequisites
+
+- Node.js ≥ 20
+- pnpm ≥ 9
+- Docker (for local PostgreSQL)
+
+### Quick start
+
+```bash
+# 1. Start PostgreSQL
+make docker-db          # postgres://forge:forge@localhost:5432/forge
+
+# 2. Install dependencies
+make api-install
+
+# 3. Configure environment
+cp apps/api/.env.example apps/api/.env  # edit DATABASE_URL if needed
+
+# 4. Run migrations
+make db-migrate
+
+# 5. Start dev server (http://127.0.0.1:4000)
+make api
+
+# 6. (Optional) Seed demo data
+make db-seed
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `DATABASE_URL` | `postgres://forge:forge@localhost:5432/forge` | PostgreSQL connection string |
+| `PORT` | `4000` | HTTP port (loopback-bound only) |
+
+### API Endpoints
+
+All responses use the envelope `{ data, error, meta }`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `POST` | `/teams` | Create team (auto-creates a `project_manager` agent) |
+| `GET` | `/teams` | List all teams |
+| `GET` | `/teams/:id` | Get team by ID |
+| `PUT` | `/teams/:id` | Update team |
+| `DELETE` | `/teams/:id` | Delete team |
+| `POST` | `/agents` | Create agent |
+| `GET` | `/agents?teamId=` | List agents (optional team filter) |
+| `GET` | `/agents/:id` | Get agent by ID |
+| `PUT` | `/agents/:id` | Update agent |
+| `DELETE` | `/agents/:id` | Delete agent |
+
+### Agent types
+
+`software_engineer` · `product_manager` · `project_manager` · `software_architect`
+
+---
+
 ## Next steps
 
 Planned follow-on work includes:
