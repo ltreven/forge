@@ -9,7 +9,7 @@ It starts as a local-first engineering laboratory and evolves toward a framework
 The current implementation target is the first MVP:
 - a local Docker-based OpenClaw software engineer agent
 - clear approval-aware behavior
-- project-management integration starting with Linear
+- project-management integration starting with Linear and expanding to GitHub
 - portable state and reproducible local setup
 
 ## Product model
@@ -42,6 +42,7 @@ Under `docs/`:
 - `provider-configuration.md`
 - `telegram-kubernetes.md`
 - `local-k8s-test.md`
+- `github-integration.md`
 
 ## Current local MVP shape
 
