@@ -61,16 +61,24 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
 
   echo "==> Writing config manually"
 
+  # Normalize 'google' -> 'gemini' so both spellings work
   PROVIDER="${ACTIVE_PROVIDER:-gemini}"
+  if [ "$PROVIDER" = "google" ]; then
+    PROVIDER="gemini"
+  fi
+
+  MODEL_NAME="${ACTIVE_MODEL_NAME:-}"
 
   if [ "$PROVIDER" = "openai" ]; then
-    PRIMARY_MODEL="openai/gpt-4.1"
+    _primary_name="${MODEL_NAME:-gpt-4.1}"
+    PRIMARY_MODEL="openai/${_primary_name}"
     FALLBACK_MODEL="openai/gpt-4.1-mini"
   elif [ "$PROVIDER" = "gemini" ]; then
-    PRIMARY_MODEL="google/gemini-3.1-pro-preview"
-    FALLBACK_MODEL="google/gemini-3-flash-preview"
+    _primary_name="${MODEL_NAME:-gemini-2.5-flash}"
+    PRIMARY_MODEL="google/${_primary_name}"
+    FALLBACK_MODEL="google/gemini-2.0-flash"
   else
-    echo "Unknown provider: $PROVIDER"
+    echo "Unknown provider: $PROVIDER (accepted: openai, gemini, google)"
     exit 1
   fi
 
