@@ -69,4 +69,6 @@ Planned follow-on work includes:
 - refining the software engineer agent workflow
 - preparing the path to Helm and Terraform support
 
-Alice
+## Contributors
+
+- Alice
