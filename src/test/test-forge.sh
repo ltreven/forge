@@ -68,6 +68,13 @@ kubectl create secret generic "engineer-telegram" \
   --from-literal=TELEGRAM_BOT_TOKEN="${ENGINEER_TELEGRAM_BOT_TOKEN}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+if [ "${ENGINEER_GITHUB_ENABLED:-false}" = "true" ] && [ -n "${ENGINEER_GITHUB_PAT:-}" ]; then
+  kubectl create secret generic "engineer-github" \
+    --namespace "$NAMESPACE" \
+    --from-literal=GITHUB_PERSONAL_ACCESS_TOKEN="${ENGINEER_GITHUB_PAT}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+fi
+
 
 echo "[test] Installing Helm chart for software engineer..."
 
@@ -90,6 +97,10 @@ helm install "$RELEASE_NAME" "$REPO_ROOT/src/k8s/helm/forge" \
   --set persistence.enabled=true \
   --set linear.enabled="${ENGINEER_LINEAR_ENABLED:-false}" \
   --set linear.credentials.key="${ENGINEER_LINEAR_API_KEY:-}" \
+  --set github.enabled="${ENGINEER_GITHUB_ENABLED:-false}" \
+  --set github.authMode="${ENGINEER_GITHUB_AUTH_MODE:-pat}" \
+  --set github.secretName="engineer-github" \
+  --set github.credentials.tokenKey="GITHUB_PERSONAL_ACCESS_TOKEN" \
   --wait \
   --timeout 3m
 
@@ -134,6 +145,13 @@ kubectl create secret generic "pm-telegram" \
   --from-literal=TELEGRAM_BOT_TOKEN="${PM_TELEGRAM_BOT_TOKEN}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+if [ "${PM_GITHUB_ENABLED:-false}" = "true" ] && [ -n "${PM_GITHUB_PAT:-}" ]; then
+  kubectl create secret generic "pm-github" \
+    --namespace "$NAMESPACE" \
+    --from-literal=GITHUB_PERSONAL_ACCESS_TOKEN="${PM_GITHUB_PAT}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+fi
+
 
 echo "[test] Installing Helm chart for product manager..."
 
@@ -156,6 +174,10 @@ helm install "$RELEASE_NAME" "$REPO_ROOT/src/k8s/helm/forge" \
   --set persistence.enabled=true \
   --set linear.enabled="${PM_LINEAR_ENABLED:-false}" \
   --set linear.credentials.key="${PM_LINEAR_API_KEY:-}" \
+  --set github.enabled="${PM_GITHUB_ENABLED:-false}" \
+  --set github.authMode="${PM_GITHUB_AUTH_MODE:-pat}" \
+  --set github.secretName="pm-github" \
+  --set github.credentials.tokenKey="GITHUB_PERSONAL_ACCESS_TOKEN" \
   --wait \
   --timeout 3m
 
