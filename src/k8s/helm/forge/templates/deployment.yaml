@@ -63,6 +63,8 @@ spec:
                   key: {{ .Values.runtime.gateway.tokenKey | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
+            - name: ACTIVE_MODEL_NAME
+              value: {{ .Values.model.name | quote }}
             - name: AGENT_OPERATOR_NAME
               value: {{ .Values.profile.operatorName | quote }}
             - name: AGENT_PROFILE
@@ -147,6 +149,8 @@ spec:
                   key: {{ .Values.runtime.gateway.tokenKey | quote }}
             - name: ACTIVE_PROVIDER
               value: {{ .Values.model.provider | quote }}
+            - name: ACTIVE_MODEL_NAME
+              value: {{ .Values.model.name | quote }}
             - name: AGENT_OPERATOR_NAME
               value: {{ .Values.profile.operatorName | quote }}
             - name: AGENT_PROFILE
