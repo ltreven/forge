@@ -60,6 +60,22 @@ linear:
   credentials:
     key: ""
 
+
+github:
+  enabled: false
+  authMode: pat
+  mcpUrl: "https://api.githubcopilot.com/mcp/"
+  secretName: ""
+  credentials:
+    tokenKey: GITHUB_PERSONAL_ACCESS_TOKEN
+  app:
+    secretName: ""
+    idKey: GITHUB_APP_ID
+    installationIdKey: GITHUB_INSTALLATION_ID
+    privateKeyKey: GITHUB_APP_PRIVATE_KEY
+    command: node
+    scriptPath: /opt/mcp/github-app-server.js
+
 stateMirror:
   enabled: false
   repositoryUrl: ""
