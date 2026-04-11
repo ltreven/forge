@@ -59,6 +59,28 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
     echo "==> LINEAR_ENABLED=true but LINEAR_API_KEY is empty; Linear MCP will not be configured"
   fi
 
+  ENABLE_GITHUB_MCP=false
+  GITHUB_AUTH_MODE="${GITHUB_AUTH_MODE:-pat}"
+  if [ "${GITHUB_ENABLED:-false}" = "true" ]; then
+    if [ "$GITHUB_AUTH_MODE" = "pat" ]; then
+      if [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
+        ENABLE_GITHUB_MCP=true
+        echo "==> GitHub MCP will be enabled (remote PAT mode)"
+      else
+        echo "==> GITHUB_ENABLED=true but GITHUB_PERSONAL_ACCESS_TOKEN is empty; GitHub MCP will not be configured"
+      fi
+    elif [ "$GITHUB_AUTH_MODE" = "app" ]; then
+      if [ -n "${GITHUB_APP_ID:-}" ] && [ -n "${GITHUB_INSTALLATION_ID:-}" ] && [ -n "${GITHUB_APP_PRIVATE_KEY:-}" ]; then
+        ENABLE_GITHUB_MCP=true
+        echo "==> GitHub MCP will be enabled (GitHub App mode)"
+      else
+        echo "==> GITHUB_ENABLED=true and GITHUB_AUTH_MODE=app, but one or more app vars are missing"
+      fi
+    else
+      echo "==> Unknown GITHUB_AUTH_MODE='$GITHUB_AUTH_MODE'; expected 'pat' or 'app'"
+    fi
+  fi
+
   echo "==> Writing config manually"
 
   PROVIDER="${ACTIVE_PROVIDER:-gemini}"
@@ -107,16 +129,16 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
     npm install --prefix "$MCP_PKG_DIR" --save "@sylphx/linear-mcp" \
       --cache /tmp/.npm 2>&1
 
-    # Resolve the binary path
-    LINEAR_MCP_BIN="$MCP_PKG_DIR/node_modules/.bin/linear-mcp"
+    # Resolve the binary path for readability and easier future swaps.
+    LINEAR_MCP_BIN="$MCP_PKG_DIR/node_modules/@sylphx/linear-mcp/dist/index.js"
 
     echo "==> Configuring linear MCP server via OpenClaw CLI (pre-installed binary)"
-    JSON_ARG="{\"command\":\"node\",\"args\":[\"$MCP_PKG_DIR/node_modules/@sylphx/linear-mcp/dist/index.js\"],\"env\":{\"LINEAR_API_KEY\":\"${LINEAR_API_KEY}\"}}"
+    JSON_ARG="{\"command\":\"node\",\"args\":[\"$LINEAR_MCP_BIN\"],\"env\":{\"LINEAR_API_KEY\":\"${LINEAR_API_KEY}\"}}"
     openclaw mcp set linear "$JSON_ARG"
 
     echo "==> Creating linear SKILL.md for the agent context"
     mkdir -p "$OPENCLAW_CONFIG_DIR/workspace/skills/linear"
-    cat << 'EOF' > "$OPENCLAW_CONFIG_DIR/workspace/skills/linear/SKILL.md"
+    cat << 'SKILL_EOF' > "$OPENCLAW_CONFIG_DIR/workspace/skills/linear/SKILL.md"
 ---
 name: linear
 description: Manage Linear issues, projects, and teams natively via MCP.
@@ -138,7 +160,48 @@ Use these tools to query and manage work items.
 
 ## Important Note
 You DO NOT need external scripts like `curl` or `mcporter`. Call the native tools directly through your tool calling interface.
-EOF
+SKILL_EOF
+  fi
+
+  if [ "$ENABLE_GITHUB_MCP" = "true" ]; then
+    if [ "$GITHUB_AUTH_MODE" = "pat" ]; then
+      echo "==> Configuring GitHub MCP server via OpenClaw CLI (remote PAT mode)"
+      GITHUB_MCP_URL="${GITHUB_MCP_URL:-https://api.githubcopilot.com/mcp/}"
+      JSON_ARG="{\"type\":\"http\",\"url\":\"${GITHUB_MCP_URL}\",\"headers\":{\"Authorization\":\"Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}\"}}"
+    elif [ "$GITHUB_AUTH_MODE" = "app" ]; then
+      echo "==> Configuring GitHub MCP server via OpenClaw CLI (GitHub App mode)"
+      GITHUB_APP_COMMAND="${GITHUB_APP_COMMAND:-node}"
+      GITHUB_APP_SCRIPT_PATH="${GITHUB_APP_SCRIPT_PATH:-/opt/mcp/github-app-server.js}"
+      JSON_ARG="{\"command\":\"${GITHUB_APP_COMMAND}\",\"args\":[\"${GITHUB_APP_SCRIPT_PATH}\"],\"env\":{\"GITHUB_APP_ID\":\"${GITHUB_APP_ID}\",\"GITHUB_INSTALLATION_ID\":\"${GITHUB_INSTALLATION_ID}\",\"GITHUB_APP_PRIVATE_KEY\":\"${GITHUB_APP_PRIVATE_KEY}\"}}"
+    else
+      echo "==> Unknown GITHUB_AUTH_MODE='$GITHUB_AUTH_MODE'; skipping GitHub MCP configuration"
+      JSON_ARG=""
+    fi
+    if [ -z "$JSON_ARG" ]; then
+      echo "==> GitHub MCP JSON was not generated; skipping openclaw mcp set github"
+    else
+      openclaw mcp set github "$JSON_ARG"
+    fi
+
+    echo "==> Creating github SKILL.md for the agent context"
+    mkdir -p "$OPENCLAW_CONFIG_DIR/workspace/skills/github"
+    cat << 'SKILL_EOF' > "$OPENCLAW_CONFIG_DIR/workspace/skills/github/SKILL.md"
+---
+name: github
+description: Manage repositories, pull requests, and issues in GitHub via MCP.
+metadata: { "openclaw": { "emoji": "🐙" } }
+---
+
+# GitHub Integration
+
+You have direct access to GitHub through native MCP tools.
+Use these tools first for repository discovery, issue triage, and pull-request workflows.
+
+## Usage Rules
+- Prefer GitHub MCP tools over shell scripts for repository, issue, and PR operations.
+- Keep operations scoped to the minimum repository and permission set required.
+- For destructive actions, confirm intent before invoking write tools.
+SKILL_EOF
   fi
 
   echo "==> Creating symlink for openclaw.json so the agent can inspect it"
