@@ -9,12 +9,27 @@ export const agentTypeSchema = z.enum([
   "software_architect",
 ]);
 
+// ── Agent metadata ────────────────────────────────────────────────────────────
+
+export const agentMetadataSchema = z
+  .object({
+    avatarColor: z.string().optional(),
+    telegramBotToken: z.string().optional(),
+    telegramPairingCode: z.string().optional(),
+    telegramStatus: z
+      .enum(["not_configured", "registering", "registered", "complete"])
+      .optional(),
+  })
+  .passthrough();
+
 // ── Create / Update ───────────────────────────────────────────────────────────
 
 export const createAgentSchema = z.object({
   teamId: z.string().uuid("teamId must be a valid UUID"),
   name: z.string().min(1, "name is required"),
   type: agentTypeSchema,
+  icon: z.string().optional(),
+  metadata: agentMetadataSchema.optional(),
 });
 
 export const updateAgentSchema = createAgentSchema.omit({ teamId: true }).partial();
@@ -23,3 +38,4 @@ export const updateAgentSchema = createAgentSchema.omit({ teamId: true }).partia
 
 export type CreateAgentInput = z.infer<typeof createAgentSchema>;
 export type UpdateAgentInput = z.infer<typeof updateAgentSchema>;
+export type AgentMetadata = z.infer<typeof agentMetadataSchema>;
