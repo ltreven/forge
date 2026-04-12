@@ -3,7 +3,9 @@ import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { LanguageProvider } from "@/lib/i18n";
+import { AuthProvider } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
+import { Toaster } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -50,11 +52,15 @@ export default function RootLayout({
       <body className="font-sans">
         <ThemeProvider>
           <LanguageProvider>
-            <Navbar />
-            <main className="pt-16">{children}</main>
+            <AuthProvider>
+              <Navbar />
+              <main className="pt-16">{children}</main>
+              <Toaster richColors position="top-right" />
+            </AuthProvider>
           </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>
   );
 }
+
