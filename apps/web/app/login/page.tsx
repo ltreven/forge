@@ -60,7 +60,7 @@ export default function LoginPage() {
         return;
       }
 
-      login(data.data.token, data.data.user);
+      login(data.data.token, data.data.user, data.data.teamId ?? null);
       toast.success("Welcome back!");
       router.replace("/setup");
     } catch {

@@ -7,6 +7,8 @@ export const signupSchema = z.object({
   email: z.string().email("invalid email"),
   password: z.string().min(8, "password must be at least 8 characters"),
   workspaceName: z.string().min(1, "workspace name is required"),
+  teamName: z.string().optional(),      // falls back to workspaceName if omitted
+  mission: z.string().optional(),       // falls back to a generated default
   waysOfWorking: z.string().optional(),
   agents: z
     .array(

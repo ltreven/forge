@@ -212,7 +212,7 @@ export const zh: Dictionary = {
           description: "设计系统、审查架构决策、执行技术标准。",
         },
         pm: {
-          title: "项目经理",
+          title: "产品经理",
           description: "管理待办事项、撰写工单、定义验收标准、跟踪进度。",
         },
       },
@@ -279,6 +279,7 @@ export const zh: Dictionary = {
       webhookSecretHint: "仅当智能体需要响应 GitHub 事件（如 PR 评论）时才需要填写。",
     },
     createTeam: "创建团队并部署",
+    saveChanges: "保存修改",
     creating: "正在创建团队…",
     successTitle: "团队已创建！",
     successSubtitle: "您的智能体小队正在配置中，上线后您将收到通知。",

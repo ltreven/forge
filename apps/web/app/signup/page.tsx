@@ -179,6 +179,7 @@ export default function SignupPage() {
           email,
           password,
           workspaceName,
+          teamName: workspaceName,   // team named after the workspace initially
           agents: buildAgents(),
         }),
       });
@@ -190,7 +191,8 @@ export default function SignupPage() {
         return;
       }
 
-      login(data.data.token, data.data.user);
+      // Store token + user + teamId so /setup can pre-populate from the DB
+      login(data.data.token, data.data.user, data.data.teamId ?? null);
       toast.success("Account created! Redirecting to team setup…");
       router.replace("/setup");
     } catch {

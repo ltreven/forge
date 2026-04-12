@@ -1,8 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, CheckCircle2, ChevronDown, ChevronUp, GitBranch, Plus, Trash2 } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  GitBranch,
+  Loader2,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,9 +27,7 @@ const PM_PROVIDERS: { key: PmProvider; label: string; icon: string }[] = [
   { key: "trello", label: "Trello", icon: "🟦" },
 ];
 
-// Agent type options — "project_manager" intentionally excluded from the dropdown
-// because every team always has exactly one Forge Project Manager (shown as a fixed row).
-// The "product_manager" IS a user-selectable role, like engineer and architect.
+// project_manager excluded from dropdown — it's always the fixed Forge PM row.
 const AGENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "software_engineer", label: "Software Engineer" },
   { value: "software_architect", label: "Software Architect" },
@@ -47,30 +54,107 @@ const emptyRepo = (): GitHubRepo => ({
 
 export default function SetupPage() {
   const { t } = useTranslation();
-  const { token } = useAuth();
+  const { token, teamId } = useAuth();
   const router = useRouter();
 
+  const [isLoadingTeam, setIsLoadingTeam] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  // If a team already exists (from signup wizard), we PUT instead of POST
+  const [existingTeamId, setExistingTeamId] = useState<string | null>(teamId);
 
   // ── Section 1: Team Details ────────────────────────────────────────────────
   const [teamName, setTeamName] = useState("");
   const [mission, setMission] = useState("");
-
-  // Fixed Forge Project Manager (internal coordination agent)
   const [forgePmName, setForgePmName] = useState("Forge PM");
-
-  // Additional agents (project_manager excluded — enforced via dropdown)
-  const [teamAgents, setTeamAgents] = useState<{ name: string; type: string }[]>([]);
+  const [teamAgents, setTeamAgents] = useState<{ id?: string; name: string; type: string }[]>([]);
 
   // ── Section 2: PM Integration ──────────────────────────────────────────────
   const [pmProvider, setPmProvider] = useState<PmProvider | null>(null);
   const [pmApiKey, setPmApiKey] = useState("");
 
-  // ── Section 3: GitHub — one config card per repository ────────────────────
+  // ── Section 3: GitHub ──────────────────────────────────────────────────────
   const [repos, setRepos] = useState<GitHubRepo[]>([emptyRepo()]);
 
-  // Agents helpers
+  // ── Load existing team data on mount ──────────────────────────────────────
+  useEffect(() => {
+    const loadTeam = async () => {
+      const id = teamId;
+      if (!id) {
+        setIsLoadingTeam(false);
+        return;
+      }
+      try {
+        const authHeaders = {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+
+        // Parallel fetch: team data + agents + integrations
+        const [teamRes, agentsRes, integrationsRes] = await Promise.all([
+          fetch(`${API_BASE}/teams/${id}`, { headers: authHeaders }),
+          fetch(`${API_BASE}/agents?teamId=${id}`, { headers: authHeaders }),
+          fetch(`${API_BASE}/teams/${id}/integrations`, { headers: authHeaders }),
+        ]);
+
+        if (teamRes.ok) {
+          const teamData = await teamRes.json();
+          const team = teamData.data;
+          setTeamName(team.name ?? "");
+          setMission(team.mission ?? "");
+          setExistingTeamId(team.id);
+        }
+
+        if (agentsRes.ok) {
+          const agentsData = await agentsRes.json();
+          const allAgents: { id: string; name: string; type: string }[] = agentsData.data ?? [];
+          const pm = allAgents.find((a) => a.type === "project_manager");
+          const others = allAgents.filter((a) => a.type !== "project_manager");
+          if (pm) setForgePmName(pm.name);
+          setTeamAgents(others);
+        }
+
+        if (integrationsRes.ok) {
+          const intData = await integrationsRes.json();
+          const integrations: { provider: string; apiKey: string; metadata?: Record<string, string> }[] =
+            intData.data ?? [];
+
+          // Restore PM integration
+          const pm = integrations.find((i) =>
+            ["linear", "jira", "trello"].includes(i.provider)
+          );
+          if (pm) {
+            setPmProvider(pm.provider as PmProvider);
+            setPmApiKey(pm.apiKey ?? "");
+          }
+
+          // Restore GitHub integrations
+          const githubs = integrations.filter((i) => i.provider === "github");
+          if (githubs.length > 0) {
+            setRepos(
+              githubs.map((g) => ({
+                repoUrl: g.metadata?.repoUrl ?? "",
+                appId: g.metadata?.appId ?? "",
+                privateKey: g.apiKey ?? "",
+                installationId: g.metadata?.installationId ?? "",
+                webhookSecret: g.metadata?.webhookSecret ?? "",
+                expanded: false,
+              }))
+            );
+          }
+        }
+      } catch {
+        // Non-fatal — user can still fill the form manually
+      } finally {
+        setIsLoadingTeam(false);
+      }
+    };
+
+    loadTeam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Agents helpers ─────────────────────────────────────────────────────────
   const addAgent = () =>
     setTeamAgents((prev) => [...prev, { name: "", type: "software_engineer" }]);
   const removeAgent = (i: number) =>
@@ -80,7 +164,7 @@ export default function SetupPage() {
       prev.map((a, idx) => (idx === i ? { ...a, [field]: value } : a))
     );
 
-  // Repo helpers
+  // ── Repo helpers ───────────────────────────────────────────────────────────
   const addRepo = () => setRepos((prev) => [...prev, emptyRepo()]);
   const removeRepo = (i: number) =>
     setRepos((prev) => prev.filter((_, idx) => idx !== i));
@@ -97,7 +181,7 @@ export default function SetupPage() {
       prev.map((r, idx) => (idx === i ? { ...r, expanded: !r.expanded } : r))
     );
 
-  // Progress
+  // ── Progress ───────────────────────────────────────────────────────────────
   const section1Complete = teamName.trim().length > 0 && mission.trim().length > 0;
   const section2Complete = pmProvider !== null && pmApiKey.trim().length > 0;
   const section3Complete =
@@ -118,9 +202,10 @@ export default function SetupPage() {
 
   const canSubmit = section1Complete;
 
+  // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!canSubmit) {
-      toast.error("Please complete at least team details before creating.");
+      toast.error("Please complete at least team details before saving.");
       return;
     }
 
@@ -131,25 +216,35 @@ export default function SetupPage() {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
 
-      // Build full agents list: fixed Forge PM (project_manager) first, then user-selected extras
       const allAgents = [
         { name: forgePmName || "Forge PM", type: "project_manager" },
         ...teamAgents.filter((a) => a.name.trim()),
       ];
 
-      const teamRes = await fetch(`${API_BASE}/teams`, {
-        method: "POST",
-        headers: authHeaders,
-        body: JSON.stringify({ name: teamName, mission, agents: allAgents }),
-      });
+      let teamId = existingTeamId;
 
-      const teamData = await teamRes.json();
-      if (!teamRes.ok) {
-        toast.error(teamData.error ?? "Failed to create team.");
-        return;
+      if (teamId) {
+        // Team already exists — update it
+        await fetch(`${API_BASE}/teams/${teamId}`, {
+          method: "PUT",
+          headers: authHeaders,
+          body: JSON.stringify({ name: teamName, mission }),
+        });
+      } else {
+        // Create a brand new team
+        const teamRes = await fetch(`${API_BASE}/teams`, {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify({ name: teamName, mission, agents: allAgents }),
+        });
+        const teamData = await teamRes.json();
+        if (!teamRes.ok) {
+          toast.error(teamData.error ?? "Failed to create team.");
+          return;
+        }
+        teamId = teamData.data.team.id as string;
+        setExistingTeamId(teamId);
       }
-
-      const teamId = teamData.data.team.id as string;
 
       // Save PM integration
       if (pmProvider && pmApiKey.trim()) {
@@ -168,7 +263,7 @@ export default function SetupPage() {
           headers: authHeaders,
           body: JSON.stringify({
             provider: "github",
-            apiKey: repo.privateKey, // private key is the auth secret
+            apiKey: repo.privateKey,
             metadata: {
               repoUrl: repo.repoUrl,
               appId: repo.appId,
@@ -188,6 +283,19 @@ export default function SetupPage() {
     }
   };
 
+  // ── Loading state ──────────────────────────────────────────────────────────
+  if (isLoadingTeam) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="size-8 animate-spin text-primary" />
+          <p className="text-sm">Loading your team data…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Success state ──────────────────────────────────────────────────────────
   if (isSuccess) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
@@ -210,12 +318,22 @@ export default function SetupPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-2">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           {t.setup.title}
         </h1>
         <p className="mt-2 text-muted-foreground">{t.setup.subtitle}</p>
       </div>
+
+      {/* Existing team banner */}
+      {existingTeamId && (
+        <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 flex items-center gap-2 text-sm text-primary">
+          <Check className="size-4 shrink-0" />
+          <span>
+            Data pre-loaded from your onboarding session. Review and update as needed.
+          </span>
+        </div>
+      )}
 
       {/* Progress */}
       <div className="mb-8 flex items-center gap-3">
@@ -303,8 +421,7 @@ export default function SetupPage() {
             <div>
               <p className="mb-3 text-sm font-medium">{t.setup.section1.agentsTitle}</p>
               <div className="flex flex-col gap-2">
-
-                {/* Fixed Forge PM row (project_manager — internal, always one) */}
+                {/* Fixed Forge PM row (project_manager) */}
                 <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2.5">
                   <span className="text-lg select-none">🤖</span>
                   <Input
@@ -481,7 +598,6 @@ export default function SetupPage() {
                     type="button"
                     onClick={() => toggleRepo(i)}
                     className="text-muted-foreground hover:text-foreground"
-                    aria-label="Toggle"
                   >
                     {repo.expanded ? (
                       <ChevronUp className="size-4" />
@@ -504,12 +620,8 @@ export default function SetupPage() {
                 {/* Expandable fields */}
                 {repo.expanded && (
                   <div className="flex flex-col gap-3 border-t border-border px-4 pb-4 pt-3">
-                    {/* Row 1: Repo URL */}
                     <div className="flex flex-col gap-1.5">
-                      <label
-                        htmlFor={`repo-url-${i}`}
-                        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                      >
+                      <label htmlFor={`repo-url-${i}`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {t.setup.section3.repoUrlLabel}
                       </label>
                       <Input
@@ -520,13 +632,9 @@ export default function SetupPage() {
                       />
                     </div>
 
-                    {/* Row 2: App ID + Installation ID */}
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="flex flex-col gap-1.5">
-                        <label
-                          htmlFor={`repo-appid-${i}`}
-                          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                        >
+                        <label htmlFor={`repo-appid-${i}`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {t.setup.section3.appIdLabel}
                         </label>
                         <Input
@@ -535,37 +643,24 @@ export default function SetupPage() {
                           onChange={(e) => updateRepo(i, "appId", e.target.value)}
                           placeholder={t.setup.section3.appIdPlaceholder}
                         />
-                        <p className="text-xs text-muted-foreground">
-                          {t.setup.section3.appIdHint}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{t.setup.section3.appIdHint}</p>
                       </div>
                       <div className="flex flex-col gap-1.5">
-                        <label
-                          htmlFor={`repo-installation-${i}`}
-                          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                        >
+                        <label htmlFor={`repo-installation-${i}`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {t.setup.section3.installationIdLabel}
                         </label>
                         <Input
                           id={`repo-installation-${i}`}
                           value={repo.installationId}
-                          onChange={(e) =>
-                            updateRepo(i, "installationId", e.target.value)
-                          }
+                          onChange={(e) => updateRepo(i, "installationId", e.target.value)}
                           placeholder={t.setup.section3.installationIdPlaceholder}
                         />
-                        <p className="text-xs text-muted-foreground">
-                          {t.setup.section3.installationIdHint}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{t.setup.section3.installationIdHint}</p>
                       </div>
                     </div>
 
-                    {/* Row 3: Private Key */}
                     <div className="flex flex-col gap-1.5">
-                      <label
-                        htmlFor={`repo-privkey-${i}`}
-                        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                      >
+                      <label htmlFor={`repo-privkey-${i}`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {t.setup.section3.privateKeyLabel}
                       </label>
                       <textarea
@@ -576,17 +671,11 @@ export default function SetupPage() {
                         rows={4}
                         className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        {t.setup.section3.privateKeyHint}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{t.setup.section3.privateKeyHint}</p>
                     </div>
 
-                    {/* Row 4: Webhook Secret (optional) */}
                     <div className="flex flex-col gap-1.5">
-                      <label
-                        htmlFor={`repo-webhook-${i}`}
-                        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                      >
+                      <label htmlFor={`repo-webhook-${i}`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {t.setup.section3.webhookSecretLabel}
                         <span className="ml-1 font-normal normal-case text-muted-foreground/70">
                           ({t.setup.section3.optional})
@@ -595,15 +684,11 @@ export default function SetupPage() {
                       <Input
                         id={`repo-webhook-${i}`}
                         value={repo.webhookSecret}
-                        onChange={(e) =>
-                          updateRepo(i, "webhookSecret", e.target.value)
-                        }
+                        onChange={(e) => updateRepo(i, "webhookSecret", e.target.value)}
                         placeholder={t.setup.section3.webhookSecretPlaceholder}
                         type="password"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        {t.setup.section3.webhookSecretHint}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{t.setup.section3.webhookSecretHint}</p>
                     </div>
                   </div>
                 )}
@@ -632,7 +717,11 @@ export default function SetupPage() {
           onClick={handleSubmit}
           className="w-full font-semibold shadow-md"
         >
-          {isSubmitting ? t.setup.creating : t.setup.createTeam}
+          {isSubmitting
+            ? t.setup.creating
+            : existingTeamId
+            ? t.setup.saveChanges
+            : t.setup.createTeam}
         </Button>
       </div>
     </div>
