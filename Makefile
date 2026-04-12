@@ -1,4 +1,4 @@
-.PHONY: help web web-install web-kill web-build k8s-test clean
+.PHONY: help web web-install web-kill web-build api api-install db-migrate db-seed docker-db k8s-test clean
 
 # Default target
 help:
@@ -11,6 +11,14 @@ help:
 	@echo "  make web-install    Install web dependencies"
 	@echo "  make web-build      Build web for production"
 	@echo "  make web-kill       Kill any running web dev server"
+	@echo ""
+	@echo "  API (apps/api)"
+	@echo "  ─────────────────────────────────────"
+	@echo "  make api            Start API dev server (localhost:4000)"
+	@echo "  make api-install    Install API dependencies"
+	@echo "  make db-migrate     Run Drizzle migrations"
+	@echo "  make db-seed        Seed the database with demo data"
+	@echo "  make docker-db      Start local PostgreSQL via Docker"
 	@echo ""
 	@echo "  Kubernetes / Helm"
 	@echo "  ─────────────────────────────────────"
@@ -37,6 +45,28 @@ web-kill:
 	@rm -rf apps/web/.next/dev/lock 2>/dev/null || true
 	@echo "✓ Web dev server stopped"
 
+# ── API ────────────────────────────────────────────────────────────────────────
+
+api:
+	cd apps/api && pnpm dev
+
+api-install:
+	cd apps/api && pnpm install
+
+db-migrate:
+	cd apps/api && pnpm db:migrate
+
+db-seed:
+	cd apps/api && pnpm db:seed
+
+docker-db:
+	@docker run --rm --name forge-postgres \
+		-e POSTGRES_USER=forge \
+		-e POSTGRES_PASSWORD=forge \
+		-e POSTGRES_DB=forge \
+		-p 5432:5432 \
+		postgres:16-alpine
+
 # ── Kubernetes / Helm ──────────────────────────────────────────────────────────
 
 k8s-test:
@@ -45,5 +75,5 @@ k8s-test:
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
 clean: web-kill
-	rm -rf apps/web/.next
+	rm -rf apps/web/.next apps/api/dist
 	@echo "✓ Clean done"
