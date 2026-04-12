@@ -2,16 +2,34 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Cpu, Minus, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Cpu, Eye, EyeOff, Minus, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useTranslation } from "@/lib/i18n";
+import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const TOTAL_STEPS = 3;
 
 type RoleKey = "engineer" | "architect" | "pm";
+
+const AGENT_TYPE_MAP: Record<RoleKey, string> = {
+  engineer: "software_engineer",
+  architect: "software_architect",
+  pm: "product_manager",
+};
+
+const ROLE_EMOJIS: Record<RoleKey, string> = {
+  engineer: "🛠️",
+  architect: "🏛️",
+  pm: "📋",
+};
+
+const DEFAULT_WAYS_OF_WORKING =
+  "We follow trunk-based development with short-lived feature branches. All PRs require one human review. Tests are mandatory for every change. We document decisions in ADRs and keep the main branch always deployable.";
 
 function GoogleIcon() {
   return (
@@ -35,15 +53,7 @@ function MicrosoftIcon() {
   );
 }
 
-function QuantityControl({
-  value,
-  onChange,
-  id,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  id: string;
-}) {
+function QuantityControl({ value, onChange, id }: { value: number; onChange: (v: number) => void; id: string }) {
   return (
     <div className="flex items-center gap-1">
       <button
@@ -56,20 +66,16 @@ function QuantityControl({
       >
         <Minus className="size-3.5" />
       </button>
-      <span
-        className={cn(
-          "w-8 text-center text-sm font-bold tabular-nums transition-colors",
-          value > 0 ? "text-primary" : "text-muted-foreground"
-        )}
-      >
+      <span className={cn("w-6 text-center text-sm font-semibold tabular-nums", value > 0 ? "text-primary" : "text-muted-foreground")}>
         {value}
       </span>
       <button
         type="button"
         id={`${id}-increase`}
         aria-label="Increase"
-        onClick={() => onChange(Math.min(10, value + 1))}
-        className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        disabled={value >= 5}
+        onClick={() => onChange(Math.min(5, value + 1))}
+        className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
       >
         <Plus className="size-3.5" />
       </button>
@@ -79,15 +85,37 @@ function QuantityControl({
 
 export default function SignupPage() {
   const { t } = useTranslation();
+  const { login } = useAuth();
+  const router = useRouter();
+
   const [step, setStep] = useState(1);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Step 1 state
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Step 2 state
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [waysOfWorking, setWaysOfWorking] = useState(
+    t.signup.step2.waysOfWorkingDefault ?? DEFAULT_WAYS_OF_WORKING
+  );
+
+  // Step 3 state
   const [quantities, setQuantities] = useState<Record<RoleKey, number>>({
     engineer: 1,
     architect: 0,
     pm: 0,
   });
+  const [agentNames, setAgentNames] = useState<Record<RoleKey, string[]>>({
+    engineer: ["Alice"],
+    architect: [],
+    pm: [],
+  });
 
-  const totalAgents = Object.values(quantities).reduce((a, b) => a + b, 0);
-  const canLaunch = totalAgents > 0;
+  const roles: RoleKey[] = ["engineer", "architect", "pm"];
 
   const stepLabels = [
     t.signup.steps.account,
@@ -95,21 +123,77 @@ export default function SignupPage() {
     t.signup.steps.team,
   ];
 
-  const roles: { key: RoleKey; emoji: string }[] = [
-    { key: "engineer", emoji: "⚙️" },
-    { key: "architect", emoji: "🏗️" },
-    { key: "pm", emoji: "📋" },
-  ];
+  const totalAgents = Object.values(quantities).reduce((a, b) => a + b, 0);
+
+  // Sync agent name arrays when quantities change
+  const updateQuantity = (role: RoleKey, qty: number) => {
+    setQuantities((prev) => ({ ...prev, [role]: qty }));
+    setAgentNames((prev) => {
+      const current = prev[role];
+      if (qty > current.length) {
+        return {
+          ...prev,
+          [role]: [...current, ...Array(qty - current.length).fill("")],
+        };
+      }
+      return { ...prev, [role]: current.slice(0, qty) };
+    });
+  };
+
+  const buildAgents = () => {
+    const result: { name: string; type: string }[] = [];
+    roles.forEach((role) => {
+      for (let i = 0; i < quantities[role]; i++) {
+        result.push({
+          name: agentNames[role][i] || `${t.signup.step3.roles[role].title} ${i + 1}`,
+          type: AGENT_TYPE_MAP[role],
+        });
+      }
+    });
+    return result;
+  };
+
+  const handleSubmit = async () => {
+    setIsLoading(true);
+    try {
+      const payload = {
+        name,
+        email,
+        password,
+        workspaceName,
+        waysOfWorking,
+        agents: buildAgents(),
+      };
+
+      const res = await fetch(`${API_BASE}/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error ?? "Signup failed. Please try again.");
+        return;
+      }
+
+      login(data.data.token, data.data.user);
+      toast.success("Account created! Redirecting to team setup…");
+      router.replace("/setup");
+    } catch {
+      toast.error("Network error. Please check your connection.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/20 px-4 py-16">
+    <div className="flex min-h-[calc(100vh-4rem)] items-start justify-center bg-muted/20 px-4 py-12">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <Link
-            href="/"
-            className="flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md"
-          >
+          <Link href="/" className="flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
             <Cpu className="size-6" />
           </Link>
           <div>
@@ -118,8 +202,8 @@ export default function SignupPage() {
           </div>
         </div>
 
-        {/* Step indicators */}
-        <div className="mb-8 flex items-center justify-center">
+        {/* Stepper */}
+        <div className="mb-6 flex items-center justify-center gap-0">
           {stepLabels.map((label, i) => {
             const idx = i + 1;
             const isDone = step > idx;
@@ -130,8 +214,10 @@ export default function SignupPage() {
                   <div
                     className={cn(
                       "flex size-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-all",
-                      isDone ? "border-primary bg-primary text-primary-foreground"
-                        : isCurrent ? "border-primary bg-background text-primary"
+                      isDone
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : isCurrent
+                        ? "border-primary bg-background text-primary"
                         : "border-border bg-background text-muted-foreground"
                     )}
                   >
@@ -156,27 +242,76 @@ export default function SignupPage() {
           {step === 1 && (
             <div className="flex flex-col gap-4" id="signup-step-1">
               <h2 className="font-semibold text-foreground">{t.signup.step1.title}</h2>
+
+              {/* SSO buttons */}
               <div className="flex flex-col gap-3">
-                <Button id="signup-google" variant="outline" className="w-full gap-2 font-medium">
+                <Button
+                  id="signup-google"
+                  variant="outline"
+                  className="w-full gap-2 font-medium"
+                  onClick={() => toast.info(t.signup.ssoComingSoon)}
+                  type="button"
+                >
                   <GoogleIcon />{t.login.google}
                 </Button>
-                <Button id="signup-microsoft" variant="outline" className="w-full gap-2 font-medium">
+                <Button
+                  id="signup-microsoft"
+                  variant="outline"
+                  className="w-full gap-2 font-medium"
+                  onClick={() => toast.info(t.signup.ssoComingSoon)}
+                  type="button"
+                >
                   <MicrosoftIcon />{t.login.microsoft}
                 </Button>
               </div>
+
               <div className="flex items-center gap-3">
                 <Separator className="flex-1" />
                 <span className="text-xs text-muted-foreground">{t.signup.step1.orSignUpWith}</span>
                 <Separator className="flex-1" />
               </div>
-              <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); setStep(2); }}>
+
+              <form
+                className="flex flex-col gap-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!name.trim() || !email.trim() || password.length < 8) {
+                    toast.error("Please fill in all fields. Password must be at least 8 characters.");
+                    return;
+                  }
+                  setStep(2);
+                }}
+              >
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="signup-name" className="text-sm font-medium">{t.signup.step1.nameLabel}</label>
-                  <Input id="signup-name" placeholder={t.signup.step1.namePlaceholder} />
+                  <Input id="signup-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t.signup.step1.namePlaceholder} required />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="signup-email" className="text-sm font-medium">{t.signup.step1.emailLabel}</label>
-                  <Input id="signup-email" type="email" placeholder={t.signup.step1.emailPlaceholder} />
+                  <Input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t.signup.step1.emailPlaceholder} required />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="signup-password" className="text-sm font-medium">{t.signup.step1.passwordLabel}</label>
+                  <div className="relative">
+                    <Input
+                      id="signup-password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={t.signup.step1.passwordPlaceholder}
+                      className="pr-10"
+                      required
+                      minLength={8}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                      aria-label="Toggle password visibility"
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
                 </div>
                 <Button id="signup-step1-next" type="submit" className="w-full font-semibold mt-1">
                   {t.signup.step1.next}
@@ -189,14 +324,31 @@ export default function SignupPage() {
           {step === 2 && (
             <div className="flex flex-col gap-4" id="signup-step-2">
               <h2 className="font-semibold text-foreground">{t.signup.step2.title}</h2>
-              <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); setStep(3); }}>
+              <form
+                className="flex flex-col gap-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!workspaceName.trim()) {
+                    toast.error("Workspace name is required.");
+                    return;
+                  }
+                  setStep(3);
+                }}
+              >
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="signup-workspace" className="text-sm font-medium">{t.signup.step2.workspaceLabel}</label>
-                  <Input id="signup-workspace" placeholder={t.signup.step2.workspacePlaceholder} />
+                  <Input id="signup-workspace" value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} placeholder={t.signup.step2.workspacePlaceholder} required />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-cluster" className="text-sm font-medium">{t.signup.step2.clusterLabel}</label>
-                  <Input id="signup-cluster" placeholder={t.signup.step2.clusterPlaceholder} />
+                  <label htmlFor="signup-wow" className="text-sm font-medium">{t.signup.step2.waysOfWorkingLabel}</label>
+                  <textarea
+                    id="signup-wow"
+                    value={waysOfWorking}
+                    onChange={(e) => setWaysOfWorking(e.target.value)}
+                    placeholder={t.signup.step2.waysOfWorkingPlaceholder}
+                    rows={5}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+                  />
                 </div>
                 <div className="flex gap-2 mt-1">
                   <Button id="signup-step2-back" type="button" variant="outline" className="flex-1" onClick={() => setStep(1)}>
@@ -219,35 +371,54 @@ export default function SignupPage() {
               </div>
 
               <div className="flex flex-col gap-3">
-                {roles.map(({ key, emoji }) => {
-                  const role = t.signup.step3.roles[key];
-                  const qty = quantities[key];
+                {roles.map((role) => {
+                  const roleData = t.signup.step3.roles[role];
+                  const qty = quantities[role];
                   const isSelected = qty > 0;
                   return (
-                    <div
-                      key={key}
-                      id={`signup-role-${key}`}
-                      className={cn(
-                        "flex items-center gap-4 rounded-xl border p-4 transition-all",
-                        isSelected
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "border-border bg-background hover:border-primary/40"
-                      )}
-                    >
-                      <span className="text-2xl select-none">{emoji}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className={cn("text-sm font-semibold", isSelected ? "text-foreground" : "text-muted-foreground")}>
-                          {role.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                          {role.description}
-                        </p>
+                    <div key={role} className="flex flex-col gap-2">
+                      <div
+                        id={`signup-role-${role}`}
+                        className={cn(
+                          "flex items-center gap-4 rounded-xl border p-4 transition-all",
+                          isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border bg-background hover:border-primary/40"
+                        )}
+                      >
+                        <span className="text-2xl select-none">{ROLE_EMOJIS[role]}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("text-sm font-semibold", isSelected ? "text-foreground" : "text-muted-foreground")}>
+                            {roleData.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{roleData.description}</p>
+                        </div>
+                        <QuantityControl
+                          id={`role-${role}`}
+                          value={qty}
+                          onChange={(v) => updateQuantity(role, v)}
+                        />
                       </div>
-                      <QuantityControl
-                        id={`role-${key}`}
-                        value={qty}
-                        onChange={(v) => setQuantities((prev) => ({ ...prev, [key]: v }))}
-                      />
+
+                      {/* Agent name inputs */}
+                      {qty > 0 && (
+                        <div className="flex flex-col gap-2 pl-4">
+                          {Array.from({ length: qty }).map((_, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground w-4">{i + 1}.</span>
+                              <Input
+                                id={`agent-name-${role}-${i}`}
+                                value={agentNames[role][i] ?? ""}
+                                onChange={(e) => {
+                                  const newNames = [...agentNames[role]];
+                                  newNames[i] = e.target.value;
+                                  setAgentNames((prev) => ({ ...prev, [role]: newNames }));
+                                }}
+                                placeholder={`${roleData.title} name`}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -264,23 +435,17 @@ export default function SignupPage() {
               )}
 
               <div className="flex gap-2 mt-1">
-                <Button
-                  id="signup-step3-back"
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setStep(2)}
-                >
+                <Button id="signup-step3-back" type="button" variant="outline" className="flex-1" onClick={() => setStep(2)}>
                   {t.signup.step3.back}
                 </Button>
                 <Button
                   id="signup-launch"
                   type="button"
                   className="flex-1 font-semibold"
-                  disabled={!canLaunch}
-                  onClick={() => {}}
+                  disabled={totalAgents === 0 || isLoading}
+                  onClick={handleSubmit}
                 >
-                  {t.signup.step3.launch}
+                  {isLoading ? t.signup.creatingAccount : t.signup.step3.launch}
                 </Button>
               </div>
             </div>

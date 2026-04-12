@@ -14,20 +14,26 @@ teamsRouter.post("/", async (req: Request, res: Response, next: NextFunction) =>
   try {
     const input = createTeamSchema.parse(req.body);
 
-    // Use a transaction so team + PM agent are created atomically.
+    // Use a transaction so team + agents are created atomically.
     const result = await db.transaction(async (tx) => {
-      const [team] = await tx.insert(teams).values(input).returning();
-
-      const [pmAgent] = await tx
-        .insert(agents)
+      const [team] = await tx
+        .insert(teams)
         .values({
-          teamId: team.id,
-          name: "Forge PM",
-          type: "project_manager",
+          name: input.name,
+          mission: input.mission,
+          waysOfWorking: input.waysOfWorking,
         })
         .returning();
 
-      return { team, pmAgent };
+      // Create agents provided by the caller, or fall back to a default PM.
+      const agentInputs =
+        input.agents && input.agents.length > 0
+          ? input.agents.map((a) => ({ teamId: team.id, name: a.name, type: a.type, icon: a.icon }))
+          : [{ teamId: team.id, name: "Forge PM", type: "project_manager" as const }];
+
+      const createdAgents = await tx.insert(agents).values(agentInputs).returning();
+
+      return { team, agents: createdAgents };
     });
 
     res.status(201).json(success(result));

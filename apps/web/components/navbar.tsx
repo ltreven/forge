@@ -1,22 +1,42 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Menu, X, Cpu } from "lucide-react";
+import { Menu, X, Cpu, LogOut, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { useTranslation } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export function Navbar() {
   const { t } = useTranslation();
+  const { user, logout } = useAuth();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const navLinks = [
     { label: t.nav.about, href: "#about" },
     { label: t.nav.contactSales, href: "#contact" },
     { label: t.nav.pricing, href: "#pricing" },
   ];
+
+  const handleLogout = () => {
+    logout();
+    setDropdownOpen(false);
+    router.replace("/");
+  };
+
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .slice(0, 2)
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+    : "?";
 
   return (
     <header
@@ -36,7 +56,7 @@ export function Navbar() {
           <span className="text-lg tracking-tight">FORGE</span>
         </Link>
 
-        {/* Desktop Nav Links (left side of bar) */}
+        {/* Desktop Nav Links */}
         <nav className="hidden items-center gap-1 md:flex">
           {navLinks.map((link) => (
             <Link
@@ -53,16 +73,74 @@ export function Navbar() {
         {/* Desktop Right Actions */}
         <div className="hidden items-center gap-1 md:flex">
           <LangSwitcher />
-          <Link href="/login" id="nav-login">
-            <Button variant="ghost" size="sm" className="font-medium">
-              {t.nav.login}
-            </Button>
-          </Link>
-          <Link href="/signup" id="nav-get-started">
-            <Button size="sm" className="font-semibold shadow-sm">
-              {t.nav.getStarted}
-            </Button>
-          </Link>
+          {user ? (
+            // ── Authenticated: user avatar dropdown ──
+            <div className="relative ml-2">
+              <button
+                id="nav-user-menu"
+                onClick={() => setDropdownOpen((v) => !v)}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent",
+                  dropdownOpen && "bg-accent"
+                )}
+              >
+                <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                  {initials}
+                </span>
+                <span className="hidden sm:block max-w-[120px] truncate">{user.name}</span>
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 text-muted-foreground transition-transform",
+                    dropdownOpen && "rotate-180"
+                  )}
+                />
+              </button>
+
+              {dropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setDropdownOpen(false)} />
+                  <div className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-border bg-card shadow-lg">
+                    <div className="border-b border-border px-4 py-3">
+                      <p className="text-sm font-semibold truncate">{user.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    </div>
+                    <div className="p-1">
+                      <Link
+                        href="/setup"
+                        id="nav-go-setup"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
+                      >
+                        {t.nav.setup}
+                      </Link>
+                      <button
+                        id="nav-logout"
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
+                      >
+                        <LogOut className="size-4" />
+                        {t.nav.logout}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            // ── Unauthenticated: login / signup ──
+            <>
+              <Link href="/login" id="nav-login">
+                <Button variant="ghost" size="sm" className="font-medium">
+                  {t.nav.login}
+                </Button>
+              </Link>
+              <Link href="/signup" id="nav-get-started">
+                <Button size="sm" className="font-semibold shadow-sm">
+                  {t.nav.getStarted}
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile toggle */}
@@ -80,7 +158,7 @@ export function Navbar() {
       <div
         className={cn(
           "overflow-hidden border-t border-border/40 bg-background transition-all duration-300 md:hidden",
-          mobileOpen ? "max-h-80" : "max-h-0"
+          mobileOpen ? "max-h-96" : "max-h-0"
         )}
       >
         <nav className="flex flex-col gap-1 px-4 py-3">
@@ -96,16 +174,31 @@ export function Navbar() {
           ))}
           <div className="mt-2 flex items-center gap-2 border-t border-border/40 pt-3">
             <LangSwitcher />
-            <Link href="/login" className="flex-1">
-              <Button variant="ghost" size="sm" className="w-full">
-                {t.nav.login}
-              </Button>
-            </Link>
-            <Link href="/signup" className="flex-1">
-              <Button size="sm" className="w-full font-semibold">
-                {t.nav.getStarted}
-              </Button>
-            </Link>
+            {user ? (
+              <button
+                className="flex flex-1 items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  handleLogout();
+                  setMobileOpen(false);
+                }}
+              >
+                <LogOut className="size-4" />
+                {t.nav.logout}
+              </button>
+            ) : (
+              <>
+                <Link href="/login" className="flex-1">
+                  <Button variant="ghost" size="sm" className="w-full">
+                    {t.nav.login}
+                  </Button>
+                </Link>
+                <Link href="/signup" className="flex-1">
+                  <Button size="sm" className="w-full font-semibold">
+                    {t.nav.getStarted}
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </nav>
       </div>
