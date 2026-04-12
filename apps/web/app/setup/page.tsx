@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTranslation } from "@/lib/i18n";
 import { useAuth, API_BASE } from "@/lib/auth";
+import { apiErrorMessage } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 
 type PmProvider = "linear" | "jira" | "trello";
@@ -239,7 +240,7 @@ export default function SetupPage() {
         });
         const teamData = await teamRes.json();
         if (!teamRes.ok) {
-          toast.error(teamData.error ?? "Failed to create team.");
+          toast.error(apiErrorMessage(teamData.error, "Failed to create team."));
           return;
         }
         teamId = teamData.data.team.id as string;

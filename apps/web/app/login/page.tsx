@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useTranslation } from "@/lib/i18n";
 import { useAuth, API_BASE } from "@/lib/auth";
+import { apiErrorMessage } from "@/lib/api-error";
 
 function GoogleIcon() {
   return (
@@ -56,7 +57,7 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error ?? "Invalid email or password.");
+        toast.error(apiErrorMessage(data.error, "Invalid email or password."));
         return;
       }
 
