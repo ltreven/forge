@@ -1,0 +1,60 @@
+import type { Metadata } from "next";
+import { Inter, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { ThemeProvider } from "@/components/theme-provider";
+import { LanguageProvider } from "@/lib/i18n";
+import { Navbar } from "@/components/navbar";
+import { cn } from "@/lib/utils";
+
+export const metadata: Metadata = {
+  title: "Forge — AI Engineering Agent Platform",
+  description:
+    "Deploy, configure, and operate autonomous AI engineering agent teams at scale. Forge is the production-ready framework for deploying OpenClaw-based agents into any infrastructure.",
+  keywords: [
+    "AI agents",
+    "autonomous software engineers",
+    "Kubernetes agents",
+    "AI developer platform",
+    "Forge",
+  ],
+  openGraph: {
+    title: "Forge — AI Engineering Agent Platform",
+    description:
+      "Deploy autonomous AI engineering teams at scale inside your own infrastructure.",
+    type: "website",
+  },
+};
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+
+const fontMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+});
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={cn(
+        "antialiased",
+        inter.variable,
+        fontMono.variable
+      )}
+    >
+      <body className="font-sans">
+        <ThemeProvider>
+          <LanguageProvider>
+            <Navbar />
+            <main className="pt-16">{children}</main>
+          </LanguageProvider>
+        </ThemeProvider>
+      </body>
+    </html>
+  );
+}
