@@ -14,17 +14,20 @@ import { cn } from "@/lib/utils";
 
 const TOTAL_STEPS = 3;
 
-// The PM role is always created implicitly by the API — it is NOT listed here.
-type RoleKey = "engineer" | "architect";
+// The PROJECT MANAGER is always created as a fixed agent (Forge's internal PM).
+// The PRODUCT MANAGER is a freely selectable role, just like engineer/architect.
+type RoleKey = "engineer" | "architect" | "pm";
 
 const AGENT_TYPE_MAP: Record<RoleKey, string> = {
   engineer: "software_engineer",
   architect: "software_architect",
+  pm: "product_manager",
 };
 
 const ROLE_EMOJIS: Record<RoleKey, string> = {
   engineer: "🛠️",
   architect: "🏛️",
+  pm: "📋",
 };
 
 function GoogleIcon() {
@@ -109,20 +112,22 @@ export default function SignupPage() {
   // Step 2 state — workspace name only (WoW kept in DB but not shown)
   const [workspaceName, setWorkspaceName] = useState("");
 
-  // Step 3 state — engineer + architect only; PM is always created by API
+  // Step 3 state — engineer, architect, and product_manager are freely selectable
   const [quantities, setQuantities] = useState<Record<RoleKey, number>>({
     engineer: 1,
     architect: 0,
+    pm: 0,
   });
   const [agentNames, setAgentNames] = useState<Record<RoleKey, string[]>>({
     engineer: ["Alice"],
     architect: [],
+    pm: [],
   });
 
-  // The PM agent name (always present, always sent to API)
-  const [pmName, setPmName] = useState("Forge PM");
+  // Fixed Forge Project Manager — always present, user can only rename
+  const [forgePmName, setForgePmName] = useState("Forge PM");
 
-  const roles: RoleKey[] = ["engineer", "architect"];
+  const roles: RoleKey[] = ["engineer", "architect", "pm"];
 
   const stepLabels = [
     t.signup.steps.account,
@@ -131,7 +136,7 @@ export default function SignupPage() {
   ];
 
   const totalAgents =
-    Object.values(quantities).reduce((a, b) => a + b, 0) + 1; // +1 for fixed PM
+    Object.values(quantities).reduce((a, b) => a + b, 0) + 1; // +1 for fixed Project Manager
 
   const updateQuantity = (role: RoleKey, qty: number) => {
     setQuantities((prev) => ({ ...prev, [role]: qty }));
@@ -149,9 +154,9 @@ export default function SignupPage() {
 
   const buildAgents = () => {
     const result: { name: string; type: string }[] = [];
-    // Fixed PM — always first
-    result.push({ name: pmName || "Forge PM", type: "product_manager" });
-    // Optional roles
+    // Fixed Forge Project Manager — always first, always project_manager type
+    result.push({ name: forgePmName || "Forge PM", type: "project_manager" });
+    // Freely selected roles (engineer, architect, product_manager)
     roles.forEach((role) => {
       for (let i = 0; i < quantities[role]; i++) {
         result.push({
@@ -431,16 +436,16 @@ export default function SignupPage() {
                 </p>
               </div>
 
-              {/* Fixed PM agent */}
+              {/* Fixed Forge Project Manager */}
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
                 <div className="mb-3 flex items-center gap-2">
-                  <span className="text-xl">📋</span>
+                  <span className="text-xl">🤖</span>
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {t.signup.step3.roles.pm.title}
+                      {t.signup.step3.forgePmTitle}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {t.signup.step3.pmFixedHint}
+                      {t.signup.step3.forgePmHint}
                     </p>
                   </div>
                   <span className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-xs font-semibold text-primary">
@@ -449,8 +454,8 @@ export default function SignupPage() {
                 </div>
                 <Input
                   id="signup-pm-name"
-                  value={pmName}
-                  onChange={(e) => setPmName(e.target.value)}
+                  value={forgePmName}
+                  onChange={(e) => setForgePmName(e.target.value)}
                   placeholder="Forge PM"
                   className="h-8 text-sm"
                 />
