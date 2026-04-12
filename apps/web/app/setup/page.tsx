@@ -18,11 +18,13 @@ const PM_PROVIDERS: { key: PmProvider; label: string; icon: string }[] = [
   { key: "trello", label: "Trello", icon: "🟦" },
 ];
 
-// Agent type options — "product_manager" intentionally excluded from the dropdown
-// because every team always has exactly one PM (shown as a fixed row).
+// Agent type options — "project_manager" intentionally excluded from the dropdown
+// because every team always has exactly one Forge Project Manager (shown as a fixed row).
+// The "product_manager" IS a user-selectable role, like engineer and architect.
 const AGENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "software_engineer", label: "Software Engineer" },
   { value: "software_architect", label: "Software Architect" },
+  { value: "product_manager", label: "Product Manager" },
 ];
 
 interface GitHubRepo {
@@ -55,10 +57,10 @@ export default function SetupPage() {
   const [teamName, setTeamName] = useState("");
   const [mission, setMission] = useState("");
 
-  // Fixed PM agent (always present, user can only rename)
-  const [pmName, setPmName] = useState("Forge PM");
+  // Fixed Forge Project Manager (internal coordination agent)
+  const [forgePmName, setForgePmName] = useState("Forge PM");
 
-  // Additional agents (no PM allowed here)
+  // Additional agents (project_manager excluded — enforced via dropdown)
   const [teamAgents, setTeamAgents] = useState<{ name: string; type: string }[]>([]);
 
   // ── Section 2: PM Integration ──────────────────────────────────────────────
@@ -129,9 +131,9 @@ export default function SetupPage() {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
 
-      // Build full agents list: fixed PM first, then extras
+      // Build full agents list: fixed Forge PM (project_manager) first, then user-selected extras
       const allAgents = [
-        { name: pmName || "Forge PM", type: "product_manager" },
+        { name: forgePmName || "Forge PM", type: "project_manager" },
         ...teamAgents.filter((a) => a.name.trim()),
       ];
 
@@ -302,13 +304,13 @@ export default function SetupPage() {
               <p className="mb-3 text-sm font-medium">{t.setup.section1.agentsTitle}</p>
               <div className="flex flex-col gap-2">
 
-                {/* Fixed PM row */}
+                {/* Fixed Forge PM row (project_manager — internal, always one) */}
                 <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2.5">
-                  <span className="text-lg select-none">📋</span>
+                  <span className="text-lg select-none">🤖</span>
                   <Input
                     id="setup-pm-name"
-                    value={pmName}
-                    onChange={(e) => setPmName(e.target.value)}
+                    value={forgePmName}
+                    onChange={(e) => setForgePmName(e.target.value)}
                     className="flex-1 h-8 text-sm border-primary/30 bg-transparent focus-visible:ring-primary/40"
                     placeholder="Forge PM"
                   />
