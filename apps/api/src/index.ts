@@ -5,6 +5,7 @@ import { teamsRouter } from "./routes/teams";
 import { agentsRouter } from "./routes/agents";
 import { authRouter } from "./routes/auth";
 import { integrationsRouter } from "./routes/integrations";
+import { conversationsRouter } from "./routes/conversations";
 import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
@@ -32,6 +33,7 @@ app.get("/health", (_req, res) => {
 app.use("/auth", authRouter);
 app.use("/teams", teamsRouter);
 app.use("/agents", agentsRouter);
+app.use("/conversations", conversationsRouter);
 
 // Nested: /teams/:id/integrations
 app.use("/teams/:id/integrations", integrationsRouter);
