@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, CheckCircle2, GitBranch, Plus, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronUp, GitBranch, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,12 +18,30 @@ const PM_PROVIDERS: { key: PmProvider; label: string; icon: string }[] = [
   { key: "trello", label: "Trello", icon: "🟦" },
 ];
 
-const ROLE_LABELS: Record<string, string> = {
-  software_engineer: "Software Engineer",
-  software_architect: "Software Architect",
-  product_manager: "Product Manager",
-  project_manager: "Project Manager",
-};
+// Agent type options — "product_manager" intentionally excluded from the dropdown
+// because every team always has exactly one PM (shown as a fixed row).
+const AGENT_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "software_engineer", label: "Software Engineer" },
+  { value: "software_architect", label: "Software Architect" },
+];
+
+interface GitHubRepo {
+  repoUrl: string;
+  appId: string;
+  privateKey: string;
+  installationId: string;
+  webhookSecret: string;
+  expanded: boolean;
+}
+
+const emptyRepo = (): GitHubRepo => ({
+  repoUrl: "",
+  appId: "",
+  privateKey: "",
+  installationId: "",
+  webhookSecret: "",
+  expanded: true,
+});
 
 export default function SetupPage() {
   const { t } = useTranslation();
@@ -36,37 +54,59 @@ export default function SetupPage() {
   // ── Section 1: Team Details ────────────────────────────────────────────────
   const [teamName, setTeamName] = useState("");
   const [mission, setMission] = useState("");
-  const [waysOfWorking, setWaysOfWorking] = useState(
-    "We follow trunk-based development with short-lived feature branches. All PRs require one human review. Tests are mandatory for every change. We document decisions in ADRs and keep the main branch always deployable."
-  );
-  const [teamAgents, setTeamAgents] = useState([
-    { name: "Alice", type: "software_engineer" },
-  ]);
+
+  // Fixed PM agent (always present, user can only rename)
+  const [pmName, setPmName] = useState("Forge PM");
+
+  // Additional agents (no PM allowed here)
+  const [teamAgents, setTeamAgents] = useState<{ name: string; type: string }[]>([]);
 
   // ── Section 2: PM Integration ──────────────────────────────────────────────
   const [pmProvider, setPmProvider] = useState<PmProvider | null>(null);
   const [pmApiKey, setPmApiKey] = useState("");
 
-  // ── Section 3: GitHub ──────────────────────────────────────────────────────
-  const [githubPat, setGithubPat] = useState("");
-  const [repos, setRepos] = useState([""]);
+  // ── Section 3: GitHub — one config card per repository ────────────────────
+  const [repos, setRepos] = useState<GitHubRepo[]>([emptyRepo()]);
 
-  const addAgent = () => setTeamAgents((prev) => [...prev, { name: "", type: "software_engineer" }]);
-  const removeAgent = (i: number) => setTeamAgents((prev) => prev.filter((_, idx) => idx !== i));
-  const updateAgent = (i: number, field: "name" | "type", value: string) => {
+  // Agents helpers
+  const addAgent = () =>
+    setTeamAgents((prev) => [...prev, { name: "", type: "software_engineer" }]);
+  const removeAgent = (i: number) =>
+    setTeamAgents((prev) => prev.filter((_, idx) => idx !== i));
+  const updateAgent = (i: number, field: "name" | "type", value: string) =>
     setTeamAgents((prev) =>
       prev.map((a, idx) => (idx === i ? { ...a, [field]: value } : a))
     );
-  };
 
-  const addRepo = () => setRepos((prev) => [...prev, ""]);
-  const removeRepo = (i: number) => setRepos((prev) => prev.filter((_, idx) => idx !== i));
-  const updateRepo = (i: number, value: string) => setRepos((prev) => prev.map((r, idx) => (idx === i ? value : r)));
+  // Repo helpers
+  const addRepo = () => setRepos((prev) => [...prev, emptyRepo()]);
+  const removeRepo = (i: number) =>
+    setRepos((prev) => prev.filter((_, idx) => idx !== i));
+  const updateRepo = <K extends keyof GitHubRepo>(
+    i: number,
+    field: K,
+    value: GitHubRepo[K]
+  ) =>
+    setRepos((prev) =>
+      prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r))
+    );
+  const toggleRepo = (i: number) =>
+    setRepos((prev) =>
+      prev.map((r, idx) => (idx === i ? { ...r, expanded: !r.expanded } : r))
+    );
 
-  // Progress indicator
+  // Progress
   const section1Complete = teamName.trim().length > 0 && mission.trim().length > 0;
   const section2Complete = pmProvider !== null && pmApiKey.trim().length > 0;
-  const section3Complete = githubPat.trim().length > 0 && repos.some((r) => r.trim().length > 0);
+  const section3Complete =
+    repos.length > 0 &&
+    repos.every(
+      (r) =>
+        r.repoUrl.trim() &&
+        r.appId.trim() &&
+        r.privateKey.trim() &&
+        r.installationId.trim()
+    );
 
   const steps = [
     { label: t.setup.section1.title, complete: section1Complete },
@@ -89,16 +129,16 @@ export default function SetupPage() {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
 
-      // Create team
+      // Build full agents list: fixed PM first, then extras
+      const allAgents = [
+        { name: pmName || "Forge PM", type: "product_manager" },
+        ...teamAgents.filter((a) => a.name.trim()),
+      ];
+
       const teamRes = await fetch(`${API_BASE}/teams`, {
         method: "POST",
         headers: authHeaders,
-        body: JSON.stringify({
-          name: teamName,
-          mission,
-          waysOfWorking,
-          agents: teamAgents.filter((a) => a.name.trim()),
-        }),
+        body: JSON.stringify({ name: teamName, mission, agents: allAgents }),
       });
 
       const teamData = await teamRes.json();
@@ -118,16 +158,21 @@ export default function SetupPage() {
         });
       }
 
-      // Save GitHub integration
-      if (githubPat.trim()) {
-        const validRepos = repos.filter((r) => r.trim());
+      // Save GitHub integrations — one per repo
+      const validRepos = repos.filter((r) => r.repoUrl.trim() && r.appId.trim());
+      for (const repo of validRepos) {
         await fetch(`${API_BASE}/teams/${teamId}/integrations`, {
           method: "POST",
           headers: authHeaders,
           body: JSON.stringify({
             provider: "github",
-            apiKey: githubPat,
-            metadata: { repos: validRepos },
+            apiKey: repo.privateKey, // private key is the auth secret
+            metadata: {
+              repoUrl: repo.repoUrl,
+              appId: repo.appId,
+              installationId: repo.installationId,
+              webhookSecret: repo.webhookSecret,
+            },
           }),
         });
       }
@@ -164,7 +209,9 @@ export default function SetupPage() {
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">{t.setup.title}</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          {t.setup.title}
+        </h1>
         <p className="mt-2 text-muted-foreground">{t.setup.subtitle}</p>
       </div>
 
@@ -182,11 +229,21 @@ export default function SetupPage() {
             >
               {s.complete ? <Check className="size-3.5" /> : i + 1}
             </div>
-            <span className={cn("text-sm font-medium hidden sm:block", s.complete ? "text-foreground" : "text-muted-foreground")}>
+            <span
+              className={cn(
+                "text-sm font-medium hidden sm:block",
+                s.complete ? "text-foreground" : "text-muted-foreground"
+              )}
+            >
               {s.label}
             </span>
             {i < steps.length - 1 && (
-              <div className={cn("hidden sm:block h-px w-8 ml-1", s.complete ? "bg-primary" : "bg-border")} />
+              <div
+                className={cn(
+                  "hidden sm:block h-px w-8 ml-1",
+                  s.complete ? "bg-primary" : "bg-border"
+                )}
+              />
             )}
           </div>
         ))}
@@ -194,20 +251,32 @@ export default function SetupPage() {
 
       <div className="flex flex-col gap-6">
         {/* ── Section 1: Team Details ── */}
-        <section id="setup-section-team" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <section
+          id="setup-section-team"
+          className="rounded-2xl border border-border bg-card p-6 shadow-sm"
+        >
           <div className="mb-5 flex items-center gap-3">
-            <div className={cn("flex size-8 items-center justify-center rounded-lg text-sm font-bold",
-              section1Complete ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-            )}>
+            <div
+              className={cn(
+                "flex size-8 items-center justify-center rounded-lg text-sm font-bold",
+                section1Complete
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
               {section1Complete ? <Check className="size-4" /> : "1"}
             </div>
-            <h2 className="text-lg font-semibold text-foreground">{t.setup.section1.title}</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              {t.setup.section1.title}
+            </h2>
           </div>
 
           <div className="flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="setup-team-name" className="text-sm font-medium">{t.setup.section1.teamNameLabel}</label>
+                <label htmlFor="setup-team-name" className="text-sm font-medium">
+                  {t.setup.section1.teamNameLabel}
+                </label>
                 <Input
                   id="setup-team-name"
                   value={teamName}
@@ -216,7 +285,9 @@ export default function SetupPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="setup-mission" className="text-sm font-medium">{t.setup.section1.missionLabel}</label>
+                <label htmlFor="setup-mission" className="text-sm font-medium">
+                  {t.setup.section1.missionLabel}
+                </label>
                 <Input
                   id="setup-mission"
                   value={mission}
@@ -226,21 +297,27 @@ export default function SetupPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="setup-wow" className="text-sm font-medium">{t.setup.section1.waysOfWorkingLabel}</label>
-              <textarea
-                id="setup-wow"
-                value={waysOfWorking}
-                onChange={(e) => setWaysOfWorking(e.target.value)}
-                rows={4}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
-              />
-            </div>
-
             {/* Agents */}
             <div>
               <p className="mb-3 text-sm font-medium">{t.setup.section1.agentsTitle}</p>
               <div className="flex flex-col gap-2">
+
+                {/* Fixed PM row */}
+                <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2.5">
+                  <span className="text-lg select-none">📋</span>
+                  <Input
+                    id="setup-pm-name"
+                    value={pmName}
+                    onChange={(e) => setPmName(e.target.value)}
+                    className="flex-1 h-8 text-sm border-primary/30 bg-transparent focus-visible:ring-primary/40"
+                    placeholder="Forge PM"
+                  />
+                  <span className="shrink-0 rounded-full bg-primary/20 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                    {t.setup.section1.pmFixedBadge}
+                  </span>
+                </div>
+
+                {/* Additional agents */}
                 {teamAgents.map((agent, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <Input
@@ -256,23 +333,24 @@ export default function SetupPage() {
                       onChange={(e) => updateAgent(i, "type", e.target.value)}
                       className="h-10 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      {Object.entries(ROLE_LABELS).map(([val, label]) => (
-                        <option key={val} value={val}>{label}</option>
+                      {AGENT_TYPE_OPTIONS.map(({ value, label }) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
                       ))}
                     </select>
-                    {teamAgents.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeAgent(i)}
-                        className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                        aria-label={t.setup.section1.removeAgent}
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeAgent(i)}
+                      className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      aria-label={t.setup.section1.removeAgent}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
                   </div>
                 ))}
               </div>
+
               <Button
                 id="setup-add-agent"
                 type="button"
@@ -289,21 +367,30 @@ export default function SetupPage() {
         </section>
 
         {/* ── Section 2: PM Integration ── */}
-        <section id="setup-section-pm" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <section
+          id="setup-section-pm"
+          className="rounded-2xl border border-border bg-card p-6 shadow-sm"
+        >
           <div className="mb-5 flex items-center gap-3">
-            <div className={cn("flex size-8 items-center justify-center rounded-lg text-sm font-bold",
-              section2Complete ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-            )}>
+            <div
+              className={cn(
+                "flex size-8 items-center justify-center rounded-lg text-sm font-bold",
+                section2Complete
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
               {section2Complete ? <Check className="size-4" /> : "2"}
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-foreground">{t.setup.section2.title}</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                {t.setup.section2.title}
+              </h2>
               <p className="text-sm text-muted-foreground">{t.setup.section2.subtitle}</p>
             </div>
           </div>
 
           <div className="flex flex-col gap-4">
-            {/* Provider picker */}
             <div>
               <p className="mb-2 text-sm font-medium">{t.setup.section2.providerLabel}</p>
               <div className="flex gap-3">
@@ -329,7 +416,9 @@ export default function SetupPage() {
 
             {pmProvider && (
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="setup-pm-apikey" className="text-sm font-medium">{t.setup.section2.apiKeyLabel}</label>
+                <label htmlFor="setup-pm-apikey" className="text-sm font-medium">
+                  {t.setup.section2.apiKeyLabel}
+                </label>
                 <Input
                   id="setup-pm-apikey"
                   value={pmApiKey}
@@ -348,11 +437,19 @@ export default function SetupPage() {
         </section>
 
         {/* ── Section 3: GitHub Integration ── */}
-        <section id="setup-section-github" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <section
+          id="setup-section-github"
+          className="rounded-2xl border border-border bg-card p-6 shadow-sm"
+        >
           <div className="mb-5 flex items-center gap-3">
-            <div className={cn("flex size-8 items-center justify-center rounded-lg text-sm font-bold",
-              section3Complete ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-            )}>
+            <div
+              className={cn(
+                "flex size-8 items-center justify-center rounded-lg text-sm font-bold",
+                section3Complete
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
               {section3Complete ? <Check className="size-4" /> : "3"}
             </div>
             <div>
@@ -364,49 +461,164 @@ export default function SetupPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="setup-github-pat" className="text-sm font-medium">{t.setup.section3.patLabel}</label>
-              <Input id="setup-github-pat" value={githubPat} onChange={(e) => setGithubPat(e.target.value)} placeholder={t.setup.section3.patPlaceholder} type="password" />
-            </div>
-
-            <div>
-              <p className="mb-2 text-sm font-medium">{t.setup.section3.reposLabel}</p>
-              <div className="flex flex-col gap-2">
-                {repos.map((repo, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input
-                      id={`setup-repo-${i}`}
-                      value={repo}
-                      onChange={(e) => updateRepo(i, e.target.value)}
-                      placeholder={t.setup.section3.repoPlaceholder}
-                      className="flex-1"
-                    />
-                    {repos.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeRepo(i)}
-                        className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                        aria-label={t.setup.section3.removeRepo}
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <Button
-                id="setup-add-repo"
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-3 gap-1.5"
-                onClick={addRepo}
+          <div className="flex flex-col gap-3">
+            {repos.map((repo, i) => (
+              <div
+                key={i}
+                id={`setup-repo-card-${i}`}
+                className="rounded-xl border border-border bg-background"
               >
-                <Plus className="size-3.5" />
-                {t.setup.section3.addRepo}
-              </Button>
-            </div>
+                {/* Card header */}
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <span className="flex-1 truncate text-sm font-medium text-foreground">
+                    {repo.repoUrl.trim()
+                      ? repo.repoUrl
+                      : `${t.setup.section3.repoCardDefault} ${i + 1}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => toggleRepo(i)}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Toggle"
+                  >
+                    {repo.expanded ? (
+                      <ChevronUp className="size-4" />
+                    ) : (
+                      <ChevronDown className="size-4" />
+                    )}
+                  </button>
+                  {repos.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRepo(i)}
+                      className="text-muted-foreground transition-colors hover:text-destructive"
+                      aria-label={t.setup.section3.removeRepo}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Expandable fields */}
+                {repo.expanded && (
+                  <div className="flex flex-col gap-3 border-t border-border px-4 pb-4 pt-3">
+                    {/* Row 1: Repo URL */}
+                    <div className="flex flex-col gap-1.5">
+                      <label
+                        htmlFor={`repo-url-${i}`}
+                        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      >
+                        {t.setup.section3.repoUrlLabel}
+                      </label>
+                      <Input
+                        id={`repo-url-${i}`}
+                        value={repo.repoUrl}
+                        onChange={(e) => updateRepo(i, "repoUrl", e.target.value)}
+                        placeholder={t.setup.section3.repoPlaceholder}
+                      />
+                    </div>
+
+                    {/* Row 2: App ID + Installation ID */}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1.5">
+                        <label
+                          htmlFor={`repo-appid-${i}`}
+                          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                        >
+                          {t.setup.section3.appIdLabel}
+                        </label>
+                        <Input
+                          id={`repo-appid-${i}`}
+                          value={repo.appId}
+                          onChange={(e) => updateRepo(i, "appId", e.target.value)}
+                          placeholder={t.setup.section3.appIdPlaceholder}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t.setup.section3.appIdHint}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label
+                          htmlFor={`repo-installation-${i}`}
+                          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                        >
+                          {t.setup.section3.installationIdLabel}
+                        </label>
+                        <Input
+                          id={`repo-installation-${i}`}
+                          value={repo.installationId}
+                          onChange={(e) =>
+                            updateRepo(i, "installationId", e.target.value)
+                          }
+                          placeholder={t.setup.section3.installationIdPlaceholder}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t.setup.section3.installationIdHint}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Row 3: Private Key */}
+                    <div className="flex flex-col gap-1.5">
+                      <label
+                        htmlFor={`repo-privkey-${i}`}
+                        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      >
+                        {t.setup.section3.privateKeyLabel}
+                      </label>
+                      <textarea
+                        id={`repo-privkey-${i}`}
+                        value={repo.privateKey}
+                        onChange={(e) => updateRepo(i, "privateKey", e.target.value)}
+                        placeholder={t.setup.section3.privateKeyPlaceholder}
+                        rows={4}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {t.setup.section3.privateKeyHint}
+                      </p>
+                    </div>
+
+                    {/* Row 4: Webhook Secret (optional) */}
+                    <div className="flex flex-col gap-1.5">
+                      <label
+                        htmlFor={`repo-webhook-${i}`}
+                        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      >
+                        {t.setup.section3.webhookSecretLabel}
+                        <span className="ml-1 font-normal normal-case text-muted-foreground/70">
+                          ({t.setup.section3.optional})
+                        </span>
+                      </label>
+                      <Input
+                        id={`repo-webhook-${i}`}
+                        value={repo.webhookSecret}
+                        onChange={(e) =>
+                          updateRepo(i, "webhookSecret", e.target.value)
+                        }
+                        placeholder={t.setup.section3.webhookSecretPlaceholder}
+                        type="password"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {t.setup.section3.webhookSecretHint}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            <Button
+              id="setup-add-repo"
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 self-start"
+              onClick={addRepo}
+            >
+              <Plus className="size-3.5" />
+              {t.setup.section3.addRepo}
+            </Button>
           </div>
         </section>
 

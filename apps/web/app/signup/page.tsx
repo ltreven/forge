@@ -14,22 +14,18 @@ import { cn } from "@/lib/utils";
 
 const TOTAL_STEPS = 3;
 
-type RoleKey = "engineer" | "architect" | "pm";
+// The PM role is always created implicitly by the API — it is NOT listed here.
+type RoleKey = "engineer" | "architect";
 
 const AGENT_TYPE_MAP: Record<RoleKey, string> = {
   engineer: "software_engineer",
   architect: "software_architect",
-  pm: "product_manager",
 };
 
 const ROLE_EMOJIS: Record<RoleKey, string> = {
   engineer: "🛠️",
   architect: "🏛️",
-  pm: "📋",
 };
-
-const DEFAULT_WAYS_OF_WORKING =
-  "We follow trunk-based development with short-lived feature branches. All PRs require one human review. Tests are mandatory for every change. We document decisions in ADRs and keep the main branch always deployable.";
 
 function GoogleIcon() {
   return (
@@ -53,7 +49,15 @@ function MicrosoftIcon() {
   );
 }
 
-function QuantityControl({ value, onChange, id }: { value: number; onChange: (v: number) => void; id: string }) {
+function QuantityControl({
+  value,
+  onChange,
+  id,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  id: string;
+}) {
   return (
     <div className="flex items-center gap-1">
       <button
@@ -66,7 +70,12 @@ function QuantityControl({ value, onChange, id }: { value: number; onChange: (v:
       >
         <Minus className="size-3.5" />
       </button>
-      <span className={cn("w-6 text-center text-sm font-semibold tabular-nums", value > 0 ? "text-primary" : "text-muted-foreground")}>
+      <span
+        className={cn(
+          "w-6 text-center text-sm font-semibold tabular-nums",
+          value > 0 ? "text-primary" : "text-muted-foreground"
+        )}
+      >
         {value}
       </span>
       <button
@@ -97,25 +106,23 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Step 2 state
+  // Step 2 state — workspace name only (WoW kept in DB but not shown)
   const [workspaceName, setWorkspaceName] = useState("");
-  const [waysOfWorking, setWaysOfWorking] = useState(
-    t.signup.step2.waysOfWorkingDefault ?? DEFAULT_WAYS_OF_WORKING
-  );
 
-  // Step 3 state
+  // Step 3 state — engineer + architect only; PM is always created by API
   const [quantities, setQuantities] = useState<Record<RoleKey, number>>({
     engineer: 1,
     architect: 0,
-    pm: 0,
   });
   const [agentNames, setAgentNames] = useState<Record<RoleKey, string[]>>({
     engineer: ["Alice"],
     architect: [],
-    pm: [],
   });
 
-  const roles: RoleKey[] = ["engineer", "architect", "pm"];
+  // The PM agent name (always present, always sent to API)
+  const [pmName, setPmName] = useState("Forge PM");
+
+  const roles: RoleKey[] = ["engineer", "architect"];
 
   const stepLabels = [
     t.signup.steps.account,
@@ -123,9 +130,9 @@ export default function SignupPage() {
     t.signup.steps.team,
   ];
 
-  const totalAgents = Object.values(quantities).reduce((a, b) => a + b, 0);
+  const totalAgents =
+    Object.values(quantities).reduce((a, b) => a + b, 0) + 1; // +1 for fixed PM
 
-  // Sync agent name arrays when quantities change
   const updateQuantity = (role: RoleKey, qty: number) => {
     setQuantities((prev) => ({ ...prev, [role]: qty }));
     setAgentNames((prev) => {
@@ -142,6 +149,9 @@ export default function SignupPage() {
 
   const buildAgents = () => {
     const result: { name: string; type: string }[] = [];
+    // Fixed PM — always first
+    result.push({ name: pmName || "Forge PM", type: "product_manager" });
+    // Optional roles
     roles.forEach((role) => {
       for (let i = 0; i < quantities[role]; i++) {
         result.push({
@@ -156,19 +166,16 @@ export default function SignupPage() {
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
-      const payload = {
-        name,
-        email,
-        password,
-        workspaceName,
-        waysOfWorking,
-        agents: buildAgents(),
-      };
-
       const res = await fetch(`${API_BASE}/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          workspaceName,
+          agents: buildAgents(),
+        }),
       });
 
       const data = await res.json();
@@ -193,7 +200,10 @@ export default function SignupPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <Link href="/" className="flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md">
+          <Link
+            href="/"
+            className="flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md"
+          >
             <Cpu className="size-6" />
           </Link>
           <div>
@@ -223,12 +233,22 @@ export default function SignupPage() {
                   >
                     {isDone ? <Check className="size-4" /> : idx}
                   </div>
-                  <span className={cn("text-xs font-medium", isCurrent ? "text-foreground" : "text-muted-foreground")}>
+                  <span
+                    className={cn(
+                      "text-xs font-medium",
+                      isCurrent ? "text-foreground" : "text-muted-foreground"
+                    )}
+                  >
                     {label}
                   </span>
                 </div>
                 {i < TOTAL_STEPS - 1 && (
-                  <div className={cn("mx-2 mb-5 h-px w-12 transition-colors", step > idx ? "bg-primary" : "bg-border")} />
+                  <div
+                    className={cn(
+                      "mx-2 mb-5 h-px w-12 transition-colors",
+                      step > idx ? "bg-primary" : "bg-border"
+                    )}
+                  />
                 )}
               </div>
             );
@@ -243,7 +263,6 @@ export default function SignupPage() {
             <div className="flex flex-col gap-4" id="signup-step-1">
               <h2 className="font-semibold text-foreground">{t.signup.step1.title}</h2>
 
-              {/* SSO buttons */}
               <div className="flex flex-col gap-3">
                 <Button
                   id="signup-google"
@@ -252,7 +271,8 @@ export default function SignupPage() {
                   onClick={() => toast.info(t.signup.ssoComingSoon)}
                   type="button"
                 >
-                  <GoogleIcon />{t.login.google}
+                  <GoogleIcon />
+                  {t.login.google}
                 </Button>
                 <Button
                   id="signup-microsoft"
@@ -261,13 +281,16 @@ export default function SignupPage() {
                   onClick={() => toast.info(t.signup.ssoComingSoon)}
                   type="button"
                 >
-                  <MicrosoftIcon />{t.login.microsoft}
+                  <MicrosoftIcon />
+                  {t.login.microsoft}
                 </Button>
               </div>
 
               <div className="flex items-center gap-3">
                 <Separator className="flex-1" />
-                <span className="text-xs text-muted-foreground">{t.signup.step1.orSignUpWith}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t.signup.step1.orSignUpWith}
+                </span>
                 <Separator className="flex-1" />
               </div>
 
@@ -276,22 +299,43 @@ export default function SignupPage() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (!name.trim() || !email.trim() || password.length < 8) {
-                    toast.error("Please fill in all fields. Password must be at least 8 characters.");
+                    toast.error(
+                      "Please fill in all fields. Password must be at least 8 characters."
+                    );
                     return;
                   }
                   setStep(2);
                 }}
               >
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-name" className="text-sm font-medium">{t.signup.step1.nameLabel}</label>
-                  <Input id="signup-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t.signup.step1.namePlaceholder} required />
+                  <label htmlFor="signup-name" className="text-sm font-medium">
+                    {t.signup.step1.nameLabel}
+                  </label>
+                  <Input
+                    id="signup-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t.signup.step1.namePlaceholder}
+                    required
+                  />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-email" className="text-sm font-medium">{t.signup.step1.emailLabel}</label>
-                  <Input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t.signup.step1.emailPlaceholder} required />
+                  <label htmlFor="signup-email" className="text-sm font-medium">
+                    {t.signup.step1.emailLabel}
+                  </label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={t.signup.step1.emailPlaceholder}
+                    required
+                  />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-password" className="text-sm font-medium">{t.signup.step1.passwordLabel}</label>
+                  <label htmlFor="signup-password" className="text-sm font-medium">
+                    {t.signup.step1.passwordLabel}
+                  </label>
                   <div className="relative">
                     <Input
                       id="signup-password"
@@ -309,11 +353,19 @@ export default function SignupPage() {
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
                       aria-label="Toggle password visibility"
                     >
-                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      {showPassword ? (
+                        <EyeOff className="size-4" />
+                      ) : (
+                        <Eye className="size-4" />
+                      )}
                     </button>
                   </div>
                 </div>
-                <Button id="signup-step1-next" type="submit" className="w-full font-semibold mt-1">
+                <Button
+                  id="signup-step1-next"
+                  type="submit"
+                  className="w-full font-semibold mt-1"
+                >
                   {t.signup.step1.next}
                 </Button>
               </form>
@@ -336,25 +388,32 @@ export default function SignupPage() {
                 }}
               >
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-workspace" className="text-sm font-medium">{t.signup.step2.workspaceLabel}</label>
-                  <Input id="signup-workspace" value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} placeholder={t.signup.step2.workspacePlaceholder} required />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-wow" className="text-sm font-medium">{t.signup.step2.waysOfWorkingLabel}</label>
-                  <textarea
-                    id="signup-wow"
-                    value={waysOfWorking}
-                    onChange={(e) => setWaysOfWorking(e.target.value)}
-                    placeholder={t.signup.step2.waysOfWorkingPlaceholder}
-                    rows={5}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+                  <label htmlFor="signup-workspace" className="text-sm font-medium">
+                    {t.signup.step2.workspaceLabel}
+                  </label>
+                  <Input
+                    id="signup-workspace"
+                    value={workspaceName}
+                    onChange={(e) => setWorkspaceName(e.target.value)}
+                    placeholder={t.signup.step2.workspacePlaceholder}
+                    required
                   />
                 </div>
                 <div className="flex gap-2 mt-1">
-                  <Button id="signup-step2-back" type="button" variant="outline" className="flex-1" onClick={() => setStep(1)}>
+                  <Button
+                    id="signup-step2-back"
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setStep(1)}
+                  >
                     {t.signup.step2.back}
                   </Button>
-                  <Button id="signup-step2-next" type="submit" className="flex-1 font-semibold">
+                  <Button
+                    id="signup-step2-next"
+                    type="submit"
+                    className="flex-1 font-semibold"
+                  >
                     {t.signup.step2.next}
                   </Button>
                 </div>
@@ -367,9 +426,37 @@ export default function SignupPage() {
             <div className="flex flex-col gap-4" id="signup-step-3">
               <div>
                 <h2 className="font-semibold text-foreground">{t.signup.step3.title}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{t.signup.step3.subtitle}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t.signup.step3.subtitle}
+                </p>
               </div>
 
+              {/* Fixed PM agent */}
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-xl">📋</span>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {t.signup.step3.roles.pm.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t.signup.step3.pmFixedHint}
+                    </p>
+                  </div>
+                  <span className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-xs font-semibold text-primary">
+                    {t.signup.step3.pmFixedBadge}
+                  </span>
+                </div>
+                <Input
+                  id="signup-pm-name"
+                  value={pmName}
+                  onChange={(e) => setPmName(e.target.value)}
+                  placeholder="Forge PM"
+                  className="h-8 text-sm"
+                />
+              </div>
+
+              {/* Optional roles */}
               <div className="flex flex-col gap-3">
                 {roles.map((role) => {
                   const roleData = t.signup.step3.roles[role];
@@ -381,15 +468,26 @@ export default function SignupPage() {
                         id={`signup-role-${role}`}
                         className={cn(
                           "flex items-center gap-4 rounded-xl border p-4 transition-all",
-                          isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border bg-background hover:border-primary/40"
+                          isSelected
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-border bg-background hover:border-primary/40"
                         )}
                       >
-                        <span className="text-2xl select-none">{ROLE_EMOJIS[role]}</span>
+                        <span className="text-2xl select-none">
+                          {ROLE_EMOJIS[role]}
+                        </span>
                         <div className="flex-1 min-w-0">
-                          <p className={cn("text-sm font-semibold", isSelected ? "text-foreground" : "text-muted-foreground")}>
+                          <p
+                            className={cn(
+                              "text-sm font-semibold",
+                              isSelected ? "text-foreground" : "text-muted-foreground"
+                            )}
+                          >
                             {roleData.title}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{roleData.description}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                            {roleData.description}
+                          </p>
                         </div>
                         <QuantityControl
                           id={`role-${role}`}
@@ -398,19 +496,23 @@ export default function SignupPage() {
                         />
                       </div>
 
-                      {/* Agent name inputs */}
                       {qty > 0 && (
                         <div className="flex flex-col gap-2 pl-4">
                           {Array.from({ length: qty }).map((_, i) => (
                             <div key={i} className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground w-4">{i + 1}.</span>
+                              <span className="text-xs text-muted-foreground w-4">
+                                {i + 1}.
+                              </span>
                               <Input
                                 id={`agent-name-${role}-${i}`}
                                 value={agentNames[role][i] ?? ""}
                                 onChange={(e) => {
                                   const newNames = [...agentNames[role]];
                                   newNames[i] = e.target.value;
-                                  setAgentNames((prev) => ({ ...prev, [role]: newNames }));
+                                  setAgentNames((prev) => ({
+                                    ...prev,
+                                    [role]: newNames,
+                                  }));
                                 }}
                                 placeholder={`${roleData.title} name`}
                                 className="h-8 text-sm"
@@ -425,24 +527,30 @@ export default function SignupPage() {
               </div>
 
               {/* Total summary */}
-              {totalAgents > 0 && (
-                <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-2.5 flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Total squad size</span>
-                  <span className="text-sm font-bold text-primary">
-                    {totalAgents} {t.signup.step3.agentsLabel}
-                  </span>
-                </div>
-              )}
+              <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-2.5 flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Total squad size
+                </span>
+                <span className="text-sm font-bold text-primary">
+                  {totalAgents} {t.signup.step3.agentsLabel}
+                </span>
+              </div>
 
               <div className="flex gap-2 mt-1">
-                <Button id="signup-step3-back" type="button" variant="outline" className="flex-1" onClick={() => setStep(2)}>
+                <Button
+                  id="signup-step3-back"
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setStep(2)}
+                >
                   {t.signup.step3.back}
                 </Button>
                 <Button
                   id="signup-launch"
                   type="button"
                   className="flex-1 font-semibold"
-                  disabled={totalAgents === 0 || isLoading}
+                  disabled={isLoading}
                   onClick={handleSubmit}
                 >
                   {isLoading ? t.signup.creatingAccount : t.signup.step3.launch}
@@ -455,7 +563,11 @@ export default function SignupPage() {
         {/* Footer */}
         <p className="mt-5 text-center text-sm text-muted-foreground">
           {t.signup.haveAccount}{" "}
-          <Link href="/login" id="signup-signin-link" className="font-medium text-primary hover:underline">
+          <Link
+            href="/login"
+            id="signup-signin-link"
+            className="font-medium text-primary hover:underline"
+          >
             {t.signup.signIn}
           </Link>
         </p>
