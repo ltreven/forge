@@ -2,16 +2,34 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Cpu, Minus, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Cpu, Eye, EyeOff, Minus, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useTranslation } from "@/lib/i18n";
+import { useAuth, API_BASE } from "@/lib/auth";
+import { apiErrorMessage } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 
 const TOTAL_STEPS = 3;
 
+// The PROJECT MANAGER is always created as a fixed agent (Forge's internal PM).
+// The PRODUCT MANAGER is a freely selectable role, just like engineer/architect.
 type RoleKey = "engineer" | "architect" | "pm";
+
+const AGENT_TYPE_MAP: Record<RoleKey, string> = {
+  engineer: "software_engineer",
+  architect: "software_architect",
+  pm: "product_manager",
+};
+
+const ROLE_EMOJIS: Record<RoleKey, string> = {
+  engineer: "🛠️",
+  architect: "🏛️",
+  pm: "📋",
+};
 
 function GoogleIcon() {
   return (
@@ -58,7 +76,7 @@ function QuantityControl({
       </button>
       <span
         className={cn(
-          "w-8 text-center text-sm font-bold tabular-nums transition-colors",
+          "w-6 text-center text-sm font-semibold tabular-nums",
           value > 0 ? "text-primary" : "text-muted-foreground"
         )}
       >
@@ -68,8 +86,9 @@ function QuantityControl({
         type="button"
         id={`${id}-increase`}
         aria-label="Increase"
-        onClick={() => onChange(Math.min(10, value + 1))}
-        className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        disabled={value >= 5}
+        onClick={() => onChange(Math.min(5, value + 1))}
+        className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
       >
         <Plus className="size-3.5" />
       </button>
@@ -79,15 +98,37 @@ function QuantityControl({
 
 export default function SignupPage() {
   const { t } = useTranslation();
+  const { login } = useAuth();
+  const router = useRouter();
+
   const [step, setStep] = useState(1);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Step 1 state
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Step 2 state — workspace name only (WoW kept in DB but not shown)
+  const [workspaceName, setWorkspaceName] = useState("");
+
+  // Step 3 state — engineer, architect, and product_manager are freely selectable
   const [quantities, setQuantities] = useState<Record<RoleKey, number>>({
     engineer: 1,
     architect: 0,
     pm: 0,
   });
+  const [agentNames, setAgentNames] = useState<Record<RoleKey, string[]>>({
+    engineer: ["Alice"],
+    architect: [],
+    pm: [],
+  });
 
-  const totalAgents = Object.values(quantities).reduce((a, b) => a + b, 0);
-  const canLaunch = totalAgents > 0;
+  // Fixed Forge Project Manager — always present, user can only rename
+  const [forgePmName, setForgePmName] = useState("Forge PM");
+
+  const roles: RoleKey[] = ["engineer", "architect", "pm"];
 
   const stepLabels = [
     t.signup.steps.account,
@@ -95,14 +136,75 @@ export default function SignupPage() {
     t.signup.steps.team,
   ];
 
-  const roles: { key: RoleKey; emoji: string }[] = [
-    { key: "engineer", emoji: "⚙️" },
-    { key: "architect", emoji: "🏗️" },
-    { key: "pm", emoji: "📋" },
-  ];
+  const totalAgents =
+    Object.values(quantities).reduce((a, b) => a + b, 0) + 1; // +1 for fixed Project Manager
+
+  const updateQuantity = (role: RoleKey, qty: number) => {
+    setQuantities((prev) => ({ ...prev, [role]: qty }));
+    setAgentNames((prev) => {
+      const current = prev[role];
+      if (qty > current.length) {
+        return {
+          ...prev,
+          [role]: [...current, ...Array(qty - current.length).fill("")],
+        };
+      }
+      return { ...prev, [role]: current.slice(0, qty) };
+    });
+  };
+
+  const buildAgents = () => {
+    const result: { name: string; type: string }[] = [];
+    // Fixed Forge Project Manager — always first, always project_manager type
+    result.push({ name: forgePmName || "Forge PM", type: "project_manager" });
+    // Freely selected roles (engineer, architect, product_manager)
+    roles.forEach((role) => {
+      for (let i = 0; i < quantities[role]; i++) {
+        result.push({
+          name: agentNames[role][i] || `${t.signup.step3.roles[role].title} ${i + 1}`,
+          type: AGENT_TYPE_MAP[role],
+        });
+      }
+    });
+    return result;
+  };
+
+  const handleSubmit = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          workspaceName,
+          teamName: workspaceName,   // team named after the workspace initially
+          agents: buildAgents(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(apiErrorMessage(data.error, "Signup failed. Please try again."));
+        return;
+      }
+
+      // Store token + user + teamId so /setup can pre-populate from the DB
+      login(data.data.token, data.data.user, data.data.teamId ?? null);
+      toast.success("Account created! Redirecting to team setup…");
+      router.replace("/setup");
+    } catch {
+      toast.error("Network error. Please check your connection.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/20 px-4 py-16">
+    <div className="flex min-h-[calc(100vh-4rem)] items-start justify-center bg-muted/20 px-4 py-12">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
@@ -118,8 +220,8 @@ export default function SignupPage() {
           </div>
         </div>
 
-        {/* Step indicators */}
-        <div className="mb-8 flex items-center justify-center">
+        {/* Stepper */}
+        <div className="mb-6 flex items-center justify-center gap-0">
           {stepLabels.map((label, i) => {
             const idx = i + 1;
             const isDone = step > idx;
@@ -130,19 +232,31 @@ export default function SignupPage() {
                   <div
                     className={cn(
                       "flex size-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-all",
-                      isDone ? "border-primary bg-primary text-primary-foreground"
-                        : isCurrent ? "border-primary bg-background text-primary"
+                      isDone
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : isCurrent
+                        ? "border-primary bg-background text-primary"
                         : "border-border bg-background text-muted-foreground"
                     )}
                   >
                     {isDone ? <Check className="size-4" /> : idx}
                   </div>
-                  <span className={cn("text-xs font-medium", isCurrent ? "text-foreground" : "text-muted-foreground")}>
+                  <span
+                    className={cn(
+                      "text-xs font-medium",
+                      isCurrent ? "text-foreground" : "text-muted-foreground"
+                    )}
+                  >
                     {label}
                   </span>
                 </div>
                 {i < TOTAL_STEPS - 1 && (
-                  <div className={cn("mx-2 mb-5 h-px w-12 transition-colors", step > idx ? "bg-primary" : "bg-border")} />
+                  <div
+                    className={cn(
+                      "mx-2 mb-5 h-px w-12 transition-colors",
+                      step > idx ? "bg-primary" : "bg-border"
+                    )}
+                  />
                 )}
               </div>
             );
@@ -156,29 +270,110 @@ export default function SignupPage() {
           {step === 1 && (
             <div className="flex flex-col gap-4" id="signup-step-1">
               <h2 className="font-semibold text-foreground">{t.signup.step1.title}</h2>
+
               <div className="flex flex-col gap-3">
-                <Button id="signup-google" variant="outline" className="w-full gap-2 font-medium">
-                  <GoogleIcon />{t.login.google}
+                <Button
+                  id="signup-google"
+                  variant="outline"
+                  className="w-full gap-2 font-medium"
+                  onClick={() => toast.info(t.signup.ssoComingSoon)}
+                  type="button"
+                >
+                  <GoogleIcon />
+                  {t.login.google}
                 </Button>
-                <Button id="signup-microsoft" variant="outline" className="w-full gap-2 font-medium">
-                  <MicrosoftIcon />{t.login.microsoft}
+                <Button
+                  id="signup-microsoft"
+                  variant="outline"
+                  className="w-full gap-2 font-medium"
+                  onClick={() => toast.info(t.signup.ssoComingSoon)}
+                  type="button"
+                >
+                  <MicrosoftIcon />
+                  {t.login.microsoft}
                 </Button>
               </div>
+
               <div className="flex items-center gap-3">
                 <Separator className="flex-1" />
-                <span className="text-xs text-muted-foreground">{t.signup.step1.orSignUpWith}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t.signup.step1.orSignUpWith}
+                </span>
                 <Separator className="flex-1" />
               </div>
-              <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); setStep(2); }}>
+
+              <form
+                className="flex flex-col gap-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!name.trim() || !email.trim() || password.length < 8) {
+                    toast.error(
+                      "Please fill in all fields. Password must be at least 8 characters."
+                    );
+                    return;
+                  }
+                  setStep(2);
+                }}
+              >
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-name" className="text-sm font-medium">{t.signup.step1.nameLabel}</label>
-                  <Input id="signup-name" placeholder={t.signup.step1.namePlaceholder} />
+                  <label htmlFor="signup-name" className="text-sm font-medium">
+                    {t.signup.step1.nameLabel}
+                  </label>
+                  <Input
+                    id="signup-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t.signup.step1.namePlaceholder}
+                    required
+                  />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-email" className="text-sm font-medium">{t.signup.step1.emailLabel}</label>
-                  <Input id="signup-email" type="email" placeholder={t.signup.step1.emailPlaceholder} />
+                  <label htmlFor="signup-email" className="text-sm font-medium">
+                    {t.signup.step1.emailLabel}
+                  </label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={t.signup.step1.emailPlaceholder}
+                    required
+                  />
                 </div>
-                <Button id="signup-step1-next" type="submit" className="w-full font-semibold mt-1">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="signup-password" className="text-sm font-medium">
+                    {t.signup.step1.passwordLabel}
+                  </label>
+                  <div className="relative">
+                    <Input
+                      id="signup-password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={t.signup.step1.passwordPlaceholder}
+                      className="pr-10"
+                      required
+                      minLength={8}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                      aria-label="Toggle password visibility"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="size-4" />
+                      ) : (
+                        <Eye className="size-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <Button
+                  id="signup-step1-next"
+                  type="submit"
+                  className="w-full font-semibold mt-1"
+                >
                   {t.signup.step1.next}
                 </Button>
               </form>
@@ -189,20 +384,44 @@ export default function SignupPage() {
           {step === 2 && (
             <div className="flex flex-col gap-4" id="signup-step-2">
               <h2 className="font-semibold text-foreground">{t.signup.step2.title}</h2>
-              <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); setStep(3); }}>
+              <form
+                className="flex flex-col gap-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!workspaceName.trim()) {
+                    toast.error("Workspace name is required.");
+                    return;
+                  }
+                  setStep(3);
+                }}
+              >
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-workspace" className="text-sm font-medium">{t.signup.step2.workspaceLabel}</label>
-                  <Input id="signup-workspace" placeholder={t.signup.step2.workspacePlaceholder} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="signup-cluster" className="text-sm font-medium">{t.signup.step2.clusterLabel}</label>
-                  <Input id="signup-cluster" placeholder={t.signup.step2.clusterPlaceholder} />
+                  <label htmlFor="signup-workspace" className="text-sm font-medium">
+                    {t.signup.step2.workspaceLabel}
+                  </label>
+                  <Input
+                    id="signup-workspace"
+                    value={workspaceName}
+                    onChange={(e) => setWorkspaceName(e.target.value)}
+                    placeholder={t.signup.step2.workspacePlaceholder}
+                    required
+                  />
                 </div>
                 <div className="flex gap-2 mt-1">
-                  <Button id="signup-step2-back" type="button" variant="outline" className="flex-1" onClick={() => setStep(1)}>
+                  <Button
+                    id="signup-step2-back"
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setStep(1)}
+                  >
                     {t.signup.step2.back}
                   </Button>
-                  <Button id="signup-step2-next" type="submit" className="flex-1 font-semibold">
+                  <Button
+                    id="signup-step2-next"
+                    type="submit"
+                    className="flex-1 font-semibold"
+                  >
                     {t.signup.step2.next}
                   </Button>
                 </div>
@@ -215,53 +434,115 @@ export default function SignupPage() {
             <div className="flex flex-col gap-4" id="signup-step-3">
               <div>
                 <h2 className="font-semibold text-foreground">{t.signup.step3.title}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{t.signup.step3.subtitle}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t.signup.step3.subtitle}
+                </p>
               </div>
 
+              {/* Fixed Forge Project Manager */}
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-xl">🤖</span>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {t.signup.step3.forgePmTitle}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t.signup.step3.forgePmHint}
+                    </p>
+                  </div>
+                  <span className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-xs font-semibold text-primary">
+                    {t.signup.step3.pmFixedBadge}
+                  </span>
+                </div>
+                <Input
+                  id="signup-pm-name"
+                  value={forgePmName}
+                  onChange={(e) => setForgePmName(e.target.value)}
+                  placeholder="Forge PM"
+                  className="h-8 text-sm"
+                />
+              </div>
+
+              {/* Optional roles */}
               <div className="flex flex-col gap-3">
-                {roles.map(({ key, emoji }) => {
-                  const role = t.signup.step3.roles[key];
-                  const qty = quantities[key];
+                {roles.map((role) => {
+                  const roleData = t.signup.step3.roles[role];
+                  const qty = quantities[role];
                   const isSelected = qty > 0;
                   return (
-                    <div
-                      key={key}
-                      id={`signup-role-${key}`}
-                      className={cn(
-                        "flex items-center gap-4 rounded-xl border p-4 transition-all",
-                        isSelected
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "border-border bg-background hover:border-primary/40"
-                      )}
-                    >
-                      <span className="text-2xl select-none">{emoji}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className={cn("text-sm font-semibold", isSelected ? "text-foreground" : "text-muted-foreground")}>
-                          {role.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                          {role.description}
-                        </p>
+                    <div key={role} className="flex flex-col gap-2">
+                      <div
+                        id={`signup-role-${role}`}
+                        className={cn(
+                          "flex items-center gap-4 rounded-xl border p-4 transition-all",
+                          isSelected
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-border bg-background hover:border-primary/40"
+                        )}
+                      >
+                        <span className="text-2xl select-none">
+                          {ROLE_EMOJIS[role]}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={cn(
+                              "text-sm font-semibold",
+                              isSelected ? "text-foreground" : "text-muted-foreground"
+                            )}
+                          >
+                            {roleData.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                            {roleData.description}
+                          </p>
+                        </div>
+                        <QuantityControl
+                          id={`role-${role}`}
+                          value={qty}
+                          onChange={(v) => updateQuantity(role, v)}
+                        />
                       </div>
-                      <QuantityControl
-                        id={`role-${key}`}
-                        value={qty}
-                        onChange={(v) => setQuantities((prev) => ({ ...prev, [key]: v }))}
-                      />
+
+                      {qty > 0 && (
+                        <div className="flex flex-col gap-2 pl-4">
+                          {Array.from({ length: qty }).map((_, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground w-4">
+                                {i + 1}.
+                              </span>
+                              <Input
+                                id={`agent-name-${role}-${i}`}
+                                value={agentNames[role][i] ?? ""}
+                                onChange={(e) => {
+                                  const newNames = [...agentNames[role]];
+                                  newNames[i] = e.target.value;
+                                  setAgentNames((prev) => ({
+                                    ...prev,
+                                    [role]: newNames,
+                                  }));
+                                }}
+                                placeholder={`${roleData.title} name`}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
 
               {/* Total summary */}
-              {totalAgents > 0 && (
-                <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-2.5 flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Total squad size</span>
-                  <span className="text-sm font-bold text-primary">
-                    {totalAgents} {t.signup.step3.agentsLabel}
-                  </span>
-                </div>
-              )}
+              <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-2.5 flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Total squad size
+                </span>
+                <span className="text-sm font-bold text-primary">
+                  {totalAgents} {t.signup.step3.agentsLabel}
+                </span>
+              </div>
 
               <div className="flex gap-2 mt-1">
                 <Button
@@ -277,10 +558,10 @@ export default function SignupPage() {
                   id="signup-launch"
                   type="button"
                   className="flex-1 font-semibold"
-                  disabled={!canLaunch}
-                  onClick={() => {}}
+                  disabled={isLoading}
+                  onClick={handleSubmit}
                 >
-                  {t.signup.step3.launch}
+                  {isLoading ? t.signup.creatingAccount : t.signup.step3.launch}
                 </Button>
               </div>
             </div>
@@ -290,7 +571,11 @@ export default function SignupPage() {
         {/* Footer */}
         <p className="mt-5 text-center text-sm text-muted-foreground">
           {t.signup.haveAccount}{" "}
-          <Link href="/login" id="signup-signin-link" className="font-medium text-primary hover:underline">
+          <Link
+            href="/login"
+            id="signup-signin-link"
+            className="font-medium text-primary hover:underline"
+          >
             {t.signup.signIn}
           </Link>
         </p>
