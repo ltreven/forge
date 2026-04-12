@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import { db } from "../db/client";
-import { users, workspaces, agents } from "../db/schema";
+import { users, workspaces, teams, agents } from "../db/schema";
 import { signupSchema, loginSchema } from "../schemas/auth.schema";
 import { signToken } from "../lib/jwt";
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -10,16 +10,16 @@ import { success, failure } from "../lib/response";
 export const authRouter = Router();
 
 // ── POST /auth/signup ─────────────────────────────────────────────────────────
+// Creates: user → workspace → team → agents (all in one transaction).
+// Returns: JWT token + user profile + teamId so the client can redirect to /setup.
 
 authRouter.post("/signup", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = signupSchema.parse(req.body);
 
     // Check for duplicate email.
-    const existing = await db.select().from(users).where(
-      // Drizzle eq helper
-      (await import("drizzle-orm")).eq(users.email, input.email)
-    );
+    const { eq } = await import("drizzle-orm");
+    const existing = await db.select().from(users).where(eq(users.email, input.email));
     if (existing.length > 0) {
       res.status(409).json(failure("A user with this email already exists"));
       return;
@@ -28,34 +28,53 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
     const passwordHash = await bcrypt.hash(input.password, 12);
 
     const result = await db.transaction(async (tx) => {
-      // Create user.
+      // 1. Create user.
       const [user] = await tx
         .insert(users)
         .values({ name: input.name, email: input.email, passwordHash })
         .returning();
 
-      // Create workspace.
+      // 2. Create workspace.
       await tx.insert(workspaces).values({
         userId: user.id,
         name: input.workspaceName,
         waysOfWorking: input.waysOfWorking,
       });
 
-      // Create any agents passed during signup (optional).
-      if (input.agents && input.agents.length > 0) {
-        // Agents belong to a team — we don't create a team here, only at /setup.
-        // Store agents are created at team-setup time. Nothing to persist yet.
-      }
+      // 3. Create the team — use workspace name as team name if no specific name given.
+      const teamName = input.teamName ?? input.workspaceName;
+      const [team] = await tx
+        .insert(teams)
+        .values({
+          name: teamName,
+          mission: input.mission ?? `${teamName}'s engineering team`,
+          waysOfWorking: input.waysOfWorking,
+        })
+        .returning();
 
-      return user;
+      // 4. Create agents — always include the fixed Forge PM (project_manager) first.
+      // The caller may pass additional agents; if none, only the PM is created.
+      const agentInputs =
+        input.agents && input.agents.length > 0
+          ? input.agents.map((a) => ({ teamId: team.id, name: a.name, type: a.type }))
+          : [{ teamId: team.id, name: "Forge PM", type: "project_manager" as const }];
+
+      const createdAgents = await tx.insert(agents).values(agentInputs).returning();
+
+      return { user, team, agents: createdAgents };
     });
 
-    const token = signToken({ userId: result.id, email: result.email });
+    const token = signToken({ userId: result.user.id, email: result.user.email });
 
     res.status(201).json(
       success({
         token,
-        user: { id: result.id, name: result.name, email: result.email },
+        user: {
+          id: result.user.id,
+          name: result.user.name,
+          email: result.user.email,
+        },
+        teamId: result.team.id,
       })
     );
   } catch (err) {
@@ -83,12 +102,21 @@ authRouter.post("/login", async (req: Request, res: Response, next: NextFunction
       return;
     }
 
+    // Fetch the user's team (most recently created).
+    const { desc } = await import("drizzle-orm");
+    const [latestTeam] = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .orderBy(desc(teams.createdAt))
+      .limit(1);
+
     const token = signToken({ userId: user.id, email: user.email });
 
     res.json(
       success({
         token,
         user: { id: user.id, name: user.name, email: user.email },
+        teamId: latestTeam?.id ?? null,
       })
     );
   } catch (err) {

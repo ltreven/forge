@@ -210,7 +210,7 @@ export const en = {
           description: "Designs systems, reviews architecture decisions, enforces technical standards.",
         },
         pm: {
-          title: "Project Manager",
+          title: "Product Manager",
           description: "Manages backlog, writes tickets, defines acceptance criteria, tracks progress.",
         },
       },
@@ -277,6 +277,7 @@ export const en = {
       webhookSecretHint: "Required only if the agent needs to react to GitHub events (e.g. PR comments).",
     },
     createTeam: "Create Team & Deploy",
+    saveChanges: "Save Changes",
     creating: "Creating team…",
     successTitle: "Team created!",
     successSubtitle: "Your agent squad is being provisioned. You'll receive a notification when they're live.",
