@@ -308,8 +308,8 @@ export default function SetupPage() {
             <h1 className="text-2xl font-bold text-foreground">{t.setup.successTitle}</h1>
             <p className="mt-2 text-muted-foreground">{t.setup.successSubtitle}</p>
           </div>
-          <Button onClick={() => router.replace("/")} variant="outline" className="mt-2">
-            Back to homepage
+          <Button onClick={() => router.replace("/agents")} variant="outline" className="mt-2">
+            Configure Agents
           </Button>
         </div>
       </div>
