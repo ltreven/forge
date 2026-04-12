@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, pgEnum, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, pgEnum, jsonb, integer } from "drizzle-orm/pg-core";
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -15,6 +15,14 @@ export const integrationProviderEnum = pgEnum("integration_provider", [
   "trello",
   "github",
 ]);
+
+export const counterpartTypeEnum = pgEnum("counterpart_type", [
+  "human",
+  "agent",
+  "external",
+]);
+
+export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
@@ -92,3 +100,42 @@ export const integrations = pgTable("integrations", {
 
 export type Integration = typeof integrations.$inferSelect;
 export type NewIntegration = typeof integrations.$inferInsert;
+
+// ── Conversations ─────────────────────────────────────────────────────────────
+
+/**
+ * A conversation thread between an agent and a counterpart
+ * (human user, another agent, or an external system).
+ */
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  counterpartType: counterpartTypeEnum("counterpart_type").notNull(),
+  /** FK to users, agents, or free-form string for external systems */
+  counterpartId: text("counterpart_id"),
+  counterpartName: text("counterpart_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Conversation = typeof conversations.$inferSelect;
+export type NewConversation = typeof conversations.$inferInsert;
+
+// ── Messages ──────────────────────────────────────────────────────────────────
+
+export const messages = pgTable("messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  conversationId: uuid("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  role: messageRoleEnum("role").notNull(),
+  content: text("content").notNull(),
+  /** Token usage for this message (informational) */
+  tokenCount: integer("token_count"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Message = typeof messages.$inferSelect;
+export type NewMessage = typeof messages.$inferInsert;

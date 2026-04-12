@@ -19,6 +19,12 @@ export const agentMetadataSchema = z
     telegramStatus: z
       .enum(["not_configured", "registering", "registered", "complete"])
       .optional(),
+    // Brain fields
+    personality: z.string().optional(),
+    identity: z.string().optional(),
+    longTermMemory: z.string().optional(),
+    // LLM model
+    model: z.string().optional(),
   })
   .passthrough();
 

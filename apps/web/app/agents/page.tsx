@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bot,
   Check,
   CheckCircle2,
   Edit2,
+  ExternalLink,
   Loader2,
   MessageCircle,
   Send,
@@ -371,6 +373,7 @@ interface AgentCardProps {
 
 function AgentCard({ agent, onUpdate, token, t }: AgentCardProps) {
   const ta = t.agents;
+  const router = useRouter();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(agent.name);
   const [avatarOpen, setAvatarOpen] = useState(false);
@@ -549,6 +552,17 @@ function AgentCard({ agent, onUpdate, token, t }: AgentCardProps) {
 
         {/* Actions */}
         <div className="flex shrink-0 items-center gap-2">
+          {/* View agent page */}
+          <button
+            id={`agent-view-${agent.id}`}
+            type="button"
+            onClick={() => router.push(`/agents/${agent.id}`)}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:border-primary/40 hover:text-primary"
+            title="Open agent"
+          >
+            <ExternalLink className="size-3.5" />
+            Open
+          </button>
           {(health === "online" || health === "warning") && (
             <Button
               id={`agent-send-msg-${agent.id}`}
