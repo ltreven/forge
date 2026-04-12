@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useTranslation } from "@/lib/i18n";
 import { useAuth, API_BASE } from "@/lib/auth";
+import { apiErrorMessage } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 
 const TOTAL_STEPS = 3;
@@ -187,7 +188,7 @@ export default function SignupPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error ?? "Signup failed. Please try again.");
+        toast.error(apiErrorMessage(data.error, "Signup failed. Please try again."));
         return;
       }
 
