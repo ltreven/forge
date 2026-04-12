@@ -214,6 +214,6 @@ export const en = {
   langSwitcher: {
     label: "Language",
   },
-} as const;
+};
 
 export type Dictionary = typeof en;
