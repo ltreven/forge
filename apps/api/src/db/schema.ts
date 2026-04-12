@@ -68,6 +68,8 @@ export const agents = pgTable("agents", {
   name: text("name").notNull(),
   type: agentTypeEnum("type").notNull(),
   icon: text("icon"),
+  /** JSON bag for avatarColor, telegramBotToken, telegramPairingCode, etc. */
+  metadata: jsonb("metadata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
