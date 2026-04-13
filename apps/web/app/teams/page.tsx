@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
-  Bot, Check, ChevronDown, ChevronRight, Code2, FileText,
-  Loader2, Pencil, Plus, Settings2, ShieldOff, Users, X, Zap,
+  Bot, Check, Code2, FileText,
+  Loader2, Pencil, Plus, Settings2, Users, X, Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -51,36 +52,8 @@ function teamAccent(team: Team): string {
   return DEFAULT_ACCENT_COLORS[idx];
 }
 
-// ── Tool definitions ──────────────────────────────────────────────────────────
-
-const TOOL_CATEGORIES = [
-  {
-    id: "codebase",
-    label: "Codebase",
-    icon: Code2,
-    tools: [
-      { id: "github", label: "GitHub", available: true, icon: "🐙" },
-    ],
-  },
-  {
-    id: "project",
-    label: "Project Management",
-    icon: Zap,
-    tools: [
-      { id: "linear", label: "Linear",   available: true,  icon: "⚡" },
-      { id: "trello", label: "Trello",   available: false, icon: "🃏" },
-      { id: "jira",   label: "Jira",     available: false, icon: "🔷" },
-    ],
-  },
-  {
-    id: "docs",
-    label: "Documentation",
-    icon: FileText,
-    tools: [
-      { id: "notion", label: "Notion", available: true, icon: "📝" },
-    ],
-  },
-] as const;
+// ── Tool definitions (kept for reference) ───────────────────────────────────
+// Full tool configuration lives in /teams/[id]/settings
 
 // ── Agent chip ────────────────────────────────────────────────────────────────
 
@@ -172,128 +145,8 @@ function EditTeamModal({ team, token, onSaved, onClose }: {
   );
 }
 
-// ── Team Tools Panel ──────────────────────────────────────────────────────────
-
-function TeamToolsPanel({ team, onClose }: { team: Team; onClose: () => void }) {
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 flex h-full w-full max-w-md flex-col bg-background shadow-2xl animate-in slide-in-from-right duration-300">
-        {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-xl bg-violet-500/10">
-              <Settings2 className="size-4 text-violet-600 dark:text-violet-400" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold">Team Tools</h2>
-              <p className="text-[11px] text-muted-foreground">{team.name}</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-            <X className="size-4" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          <p className="mb-5 text-xs leading-relaxed text-muted-foreground">
-            Connect external tools so your agents can read issues, push code, and update documentation autonomously.
-          </p>
-
-          <div className="flex flex-col gap-6">
-            {TOOL_CATEGORIES.map((cat) => (
-              <section key={cat.id}>
-                {/* Category header */}
-                <div className="mb-3 flex items-center gap-2">
-                  <cat.icon className="size-3.5 text-muted-foreground" />
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{cat.label}</span>
-                </div>
-
-                {/* Tools */}
-                <div className="flex flex-col gap-2">
-                  {cat.tools.map((tool) => (
-                    <ToolRow key={tool.id} tool={tool} teamId={team.id} />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ToolRow({ tool, teamId }: {
-  tool: { id: string; label: string; available: boolean; icon: string };
-  teamId: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [key, setKey]           = useState("");
-  const [saved, setSaved]       = useState(false);
-
-  if (!tool.available) {
-    return (
-      <div className="flex items-center justify-between rounded-xl border border-border bg-muted/30 px-4 py-3 opacity-60">
-        <div className="flex items-center gap-3">
-          <span className="text-xl">{tool.icon}</span>
-          <span className="text-sm font-medium text-foreground">{tool.label}</span>
-        </div>
-        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-semibold text-muted-foreground">Soon</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-sm">
-      <button type="button"
-        id={`tool-toggle-${tool.id}-${teamId}`}
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-3">
-          <span className="text-xl">{tool.icon}</span>
-          <span className="text-sm font-medium text-foreground">{tool.label}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {saved && <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"><Check className="size-3" /> Connected</span>}
-          <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", expanded && "rotate-180")} />
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="border-t border-border bg-muted/20 px-4 py-3">
-          <label className="mb-1.5 block text-[11px] font-semibold text-muted-foreground">API Key / Token</label>
-          <div className="flex gap-2">
-            <Input
-              id={`tool-key-${tool.id}`}
-              type="password"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder="Paste your API key…"
-              className="h-8 flex-1 text-xs"
-            />
-            <Button id={`tool-save-${tool.id}`} size="sm" className="h-8 px-3 text-xs"
-              disabled={!key.trim()}
-              onClick={() => { setSaved(true); setExpanded(false); toast.success(`${tool.label} connected.`); }}>
-              Save
-            </Button>
-          </div>
-          <p className="mt-1.5 text-[10px] text-muted-foreground">
-            Stored securely and scoped to this team only.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
+// ── Team Tools Panel (removed — now a full settings page) ────────────────────
+// Navigate to /teams/[id]/settings instead
 
 // ── Team Card (full-width) ────────────────────────────────────────────────────
 
@@ -303,10 +156,9 @@ function TeamCard({ team, onAgentClick, onEditSaved }: {
   onEditSaved: (updated: Team) => void;
 }) {
   const { token } = useAuth();
+  const router    = useRouter();
   const color     = teamAccent(team);
-
-  const [editOpen,  setEditOpen]  = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   return (
     <>
@@ -339,14 +191,14 @@ function TeamCard({ team, onAgentClick, onEditSaved }: {
                 <Pencil className="size-3.5" />
                 Edit
               </button>
-              {/* Tools */}
-              <button id={`tools-team-${team.id}`} type="button"
-                onClick={() => setToolsOpen(true)}
-                title="Configure tools"
+              {/* Tools → full settings page */}
+              <Link href={`/teams/${team.id}/settings`}
+                id={`tools-team-${team.id}`}
+                title="Team Settings"
                 className="flex items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/5 px-2.5 py-1.5 text-xs font-medium text-violet-700 dark:text-violet-400 transition-colors hover:bg-violet-500/10">
                 <Settings2 className="size-3.5" />
-                Tools
-              </button>
+                Settings
+              </Link>
             </div>
           </div>
 
@@ -381,15 +233,12 @@ function TeamCard({ team, onAgentClick, onEditSaved }: {
         </div>
       </div>
 
-      {/* Overlays */}
+      {/* Edit modal */}
       {editOpen && (
         <EditTeamModal
           team={team} token={token}
           onSaved={(updated) => { onEditSaved(updated); setEditOpen(false); }}
           onClose={() => setEditOpen(false)} />
-      )}
-      {toolsOpen && (
-        <TeamToolsPanel team={team} onClose={() => setToolsOpen(false)} />
       )}
     </>
   );
