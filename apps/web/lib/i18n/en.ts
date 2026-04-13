@@ -383,6 +383,17 @@ export const en = {
     tasks: "tasks",
     tokens: "tokens",
   },
+  teamsPage: {
+    title: "My Teams",
+    subtitle: "All your agent squads, in one place.",
+    agents: "Agents",
+    noAgents: "No agents yet.",
+    noTeams: "No teams yet.",
+    viewAgent: "Open agent",
+    newTeam: "New Team",
+    newTeamComingSoon: "Creating new teams is coming soon.",
+    workspaceLabel: "Workspace",
+  },
 };
 
 export type Dictionary = typeof en;

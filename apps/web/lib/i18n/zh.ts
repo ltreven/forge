@@ -385,4 +385,15 @@ export const zh: Dictionary = {
     tasks: "任务",
     tokens: "tokens",
   },
+  teamsPage: {
+    title: "我的团队",
+    subtitle: "您所有的智能体小队，尽在一处。",
+    agents: "智能体",
+    noAgents: "暂无智能体。",
+    noTeams: "暂无团队。",
+    viewAgent: "打开智能体",
+    newTeam: "新建团队",
+    newTeamComingSoon: "新建团队功能即将上线。",
+    workspaceLabel: "工作区",
+  },
 };

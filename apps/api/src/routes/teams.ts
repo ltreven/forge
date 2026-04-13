@@ -1,11 +1,54 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { teams, agents } from "../db/schema";
+import { teams, agents, workspaces } from "../db/schema";
 import { createTeamSchema, updateTeamSchema } from "../schemas/team.schema";
 import { success, failure } from "../lib/response";
+import { authMiddleware } from "../middleware/authMiddleware";
 
 export const teamsRouter = Router();
+
+// ── GET /teams/mine ──────────────────────────────────────────────────────────
+// Returns all teams (with agents) for the authenticated user's workspace.
+
+teamsRouter.get("/mine", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // 1. Find the user's workspace.
+    const [workspace] = await db
+      .select({ id: workspaces.id, name: workspaces.name })
+      .from(workspaces)
+      .where(eq(workspaces.userId, req.user!.userId))
+      .limit(1);
+
+    if (!workspace) {
+      res.json(success([]));
+      return;
+    }
+
+    // 2. Get all teams for that workspace.
+    const userTeams = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.workspaceId, workspace.id))
+      .orderBy(teams.createdAt);
+
+    // 3. For each team, load its agents.
+    const result = await Promise.all(
+      userTeams.map(async (team) => {
+        const teamAgents = await db
+          .select()
+          .from(agents)
+          .where(eq(agents.teamId, team.id))
+          .orderBy(agents.createdAt);
+        return { ...team, agents: teamAgents, workspace };
+      })
+    );
+
+    res.json(success(result));
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ── POST /teams ───────────────────────────────────────────────────────────────
 // Creates a team and automatically creates an associated project_manager agent.

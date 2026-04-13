@@ -56,6 +56,9 @@ export type NewWorkspace = typeof workspaces.$inferInsert;
 
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   mission: text("mission").notNull(),
   waysOfWorking: text("ways_of_working"),
@@ -65,6 +68,7 @@ export const teams = pgTable("teams", {
 
 export type Team = typeof teams.$inferSelect;
 export type NewTeam = typeof teams.$inferInsert;
+
 
 // ── Agents ────────────────────────────────────────────────────────────────────
 
