@@ -173,15 +173,18 @@ function NewTeamButton({ label, tooltip }: { label: string; tooltip: string }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TeamsPage() {
-  const { t }           = useTranslation();
-  const { token, user } = useAuth();
-  const router          = useRouter();
-  const tp              = t.teamsPage;
+  const { t }                     = useTranslation();
+  const { token, user, isLoading: authLoading } = useAuth();
+  const router                    = useRouter();
+  const tp                        = t.teamsPage;
 
-  const [teams, setTeams]       = useState<Team[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [teams, setTeams]           = useState<Team[]>([]);
+  const [isLoading, setIsLoading]   = useState(true);
 
   useEffect(() => {
+    // Wait until the auth context has rehydrated from localStorage.
+    if (authLoading) return;
+
     if (!token) {
       router.replace("/login");
       return;
@@ -197,9 +200,17 @@ export default function TeamsPage() {
       .then((d) => setTeams(d.data ?? []))
       .catch(() => toast.error("Failed to load teams."))
       .finally(() => setIsLoading(false));
-  }, [token, router]);
+  }, [token, router, authLoading]);
 
   const workspaceName = teams[0]?.workspace?.name ?? null;
+  // While auth is rehydrating from localStorage, show full-page spinner.
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
