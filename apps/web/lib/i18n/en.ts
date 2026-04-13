@@ -332,6 +332,7 @@ export const en = {
     backToSquad: "Back to Squad",
     openHistory: "Conversation History",
     openBrain: "Brain",
+    openDashboard: "Dashboard",
     openTools: "Tools",
     openSecurity: "Security",
     notFound: "Agent not found",
