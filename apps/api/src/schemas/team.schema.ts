@@ -3,6 +3,7 @@ import { z } from "zod";
 // ── Create / Update ───────────────────────────────────────────────────────────
 
 export const createTeamSchema = z.object({
+  workspaceId: z.string().uuid("workspaceId must be a valid UUID"),
   name: z.string().min(1, "name is required"),
   mission: z.string().min(1, "mission is required"),
   waysOfWorking: z.string().optional(),

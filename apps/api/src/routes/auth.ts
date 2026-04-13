@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import bcrypt from "bcryptjs";
+import { eq, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import { users, workspaces, teams, agents } from "../db/schema";
 import { signupSchema, loginSchema } from "../schemas/auth.schema";
@@ -18,7 +19,6 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
     const input = signupSchema.parse(req.body);
 
     // Check for duplicate email.
-    const { eq } = await import("drizzle-orm");
     const existing = await db.select().from(users).where(eq(users.email, input.email));
     if (existing.length > 0) {
       res.status(409).json(failure("A user with this email already exists"));
@@ -34,25 +34,26 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
         .values({ name: input.name, email: input.email, passwordHash })
         .returning();
 
-      // 2. Create workspace.
-      await tx.insert(workspaces).values({
+      // 3. Create workspace.
+      const [workspace] = await tx.insert(workspaces).values({
         userId: user.id,
         name: input.workspaceName,
         waysOfWorking: input.waysOfWorking,
-      });
+      }).returning();
 
-      // 3. Create the team — use workspace name as team name if no specific name given.
+      // 4. Create the first team, linked to the workspace.
       const teamName = input.teamName ?? input.workspaceName;
       const [team] = await tx
         .insert(teams)
         .values({
+          workspaceId: workspace.id,
           name: teamName,
           mission: input.mission ?? `${teamName}'s engineering team`,
           waysOfWorking: input.waysOfWorking,
         })
         .returning();
 
-      // 4. Create agents — always include the fixed Forge PM (project_manager) first.
+      // 5. Create agents — always include the fixed Forge PM (project_manager) first.
       // The caller may pass additional agents; if none, only the PM is created.
       const agentInputs =
         input.agents && input.agents.length > 0
@@ -102,13 +103,22 @@ authRouter.post("/login", async (req: Request, res: Response, next: NextFunction
       return;
     }
 
-    // Fetch the user's team (most recently created).
-    const { desc } = await import("drizzle-orm");
-    const [latestTeam] = await db
-      .select({ id: teams.id })
-      .from(teams)
-      .orderBy(desc(teams.createdAt))
+    // Fetch the user's workspace, then their teams.
+    const [userWorkspace] = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.userId, user.id))
       .limit(1);
+
+    const userTeams = userWorkspace
+      ? await db
+          .select({ id: teams.id })
+          .from(teams)
+          .where(eq(teams.workspaceId, userWorkspace.id))
+          .orderBy(desc(teams.createdAt))
+      : [];
+
+    const latestTeam = userTeams[0] ?? null;
 
     const token = signToken({ userId: user.id, email: user.email });
 
