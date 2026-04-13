@@ -9,7 +9,7 @@ import {
   Edit2,
   ExternalLink,
   Loader2,
-  MessageCircle,
+
   Send,
   X,
 } from "lucide-react";
@@ -563,17 +563,7 @@ function AgentCard({ agent, onUpdate, token, t }: AgentCardProps) {
             <ExternalLink className="size-3.5" />
             Open
           </button>
-          {(health === "online" || health === "warning") && (
-            <Button
-              id={`agent-send-msg-${agent.id}`}
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-            >
-              <MessageCircle className="size-3.5" />
-              {ta.sendMessage}
-            </Button>
-          )}
+
           <button
             id={`agent-telegram-toggle-${agent.id}`}
             type="button"
