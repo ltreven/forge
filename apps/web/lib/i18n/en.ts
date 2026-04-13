@@ -330,10 +330,10 @@ export const en = {
   },
   agentPage: {
     backToSquad: "Back to Squad",
-    openSettings: "Settings",
     openHistory: "Conversation History",
     openBrain: "Brain",
-    openDashboard: "Dashboard",
+    openTools: "Tools",
+    openSecurity: "Security",
     notFound: "Agent not found",
     chat: {
       placeholder: "Message the agent…",

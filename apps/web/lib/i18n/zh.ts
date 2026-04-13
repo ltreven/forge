@@ -332,10 +332,10 @@ export const zh: Dictionary = {
   },
   agentPage: {
     backToSquad: "返回团队",
-    openSettings: "设置",
     openHistory: "对话历史",
     openBrain: "大脑",
-    openDashboard: "仪表盘",
+    openTools: "工具",
+    openSecurity: "安全",
     notFound: "未找到该智能体",
     chat: {
       placeholder: "向智能体发送消息…",
