@@ -81,6 +81,67 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ─── TEMPLATES ────────────────────────────────────────────────── */}
+      <section id="templates" className="px-4 py-24 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="flex flex-col items-center gap-4 text-center mb-16">
+            <Badge variant="outline" className="text-xs font-semibold uppercase tracking-widest">
+              {t.templates.sectionBadge}
+            </Badge>
+            <h2 className="whitespace-pre-line text-3xl font-bold tracking-tight sm:text-4xl">
+              {t.templates.sectionTitle}
+            </h2>
+            <p className="max-w-2xl text-muted-foreground">
+              {t.templates.sectionSubtitle}
+            </p>
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-3">
+            {t.templates.items.map((tmpl, i) => {
+              const isComingSoon = tmpl.badge === "Coming Soon" || tmpl.badge === "即将推出";
+              return (
+                <div
+                  key={i}
+                  id={`template-card-${tmpl.key}`}
+                  className={`group relative flex flex-col rounded-2xl border bg-card p-7 shadow-sm transition-all duration-200 ${
+                    isComingSoon
+                      ? "border-border opacity-60 cursor-not-allowed"
+                      : "border-border hover:shadow-md hover:border-primary/40"
+                  }`}
+                >
+                  {tmpl.badge && (
+                    <span className={`absolute top-4 right-4 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      isComingSoon
+                        ? "bg-muted text-muted-foreground"
+                        : "bg-primary/10 text-primary"
+                    }`}>
+                      {tmpl.badge}
+                    </span>
+                  )}
+                  <div className="mb-5 text-4xl">{tmpl.icon}</div>
+                  <h3 className="mb-2 text-xl font-bold text-foreground">{tmpl.title}</h3>
+                  <p className="flex-1 text-sm text-muted-foreground leading-relaxed mb-6">
+                    {tmpl.description}
+                  </p>
+                  {isComingSoon ? (
+                    <Button variant="outline" disabled className="w-full font-medium">
+                      {tmpl.cta}
+                    </Button>
+                  ) : (
+                    <Link href="/signup" id={`template-cta-${tmpl.key}`}>
+                      <Button className="w-full gap-2 font-semibold group-hover:shadow-sm">
+                        {tmpl.cta}
+                        <ArrowRight className="size-4" />
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
       {/* ─── STATS BAR ────────────────────────────────────────────────── */}
       <section id="stats" className="border-y border-border bg-muted/20">
         <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -246,15 +307,15 @@ export default function HomePage() {
                   </div>
                   <div className="mt-2 flex justify-between text-xs text-muted-foreground">
                     <span>Velocity ↑12%</span>
-                    <span>Test coverage 87%</span>
+                    <span>Output quality 87%</span>
                     <span>0 blockers</span>
                   </div>
                 </div>
                 {/* Agent cards */}
                 {[
+                  { role: "Team Lead", status: "Active", task: "Coordinating sprint review", color: "text-violet-500" },
                   { role: "Software Engineer", status: "In Progress", task: "feat: add JWT auth middleware", color: "text-blue-500" },
-                  { role: "Software Architect", status: "Review", task: "ADR-12: API gateway pattern", color: "text-purple-500" },
-                  { role: "Product Manager", status: "Done", task: "FOR-31: User onboarding spec", color: "text-green-500" },
+                  { role: "Support Agent", status: "Done", task: "Resolved 12 tickets today", color: "text-green-500" },
                 ].map((agent, i) => (
                   <div key={i} className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-3">
                     <div className="flex flex-col gap-0.5">
@@ -268,7 +329,7 @@ export default function HomePage() {
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">⏳ Approval Required</p>
-                    <p className="text-xs text-muted-foreground">Deploy to production — FOR-30</p>
+                    <p className="text-xs text-muted-foreground">Deploy to production — FOR-46</p>
                   </div>
                   <Button size="sm" variant="outline" className="h-7 text-xs">Approve</Button>
                 </div>

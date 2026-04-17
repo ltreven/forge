@@ -2,17 +2,47 @@
 
 ## Overview
 
-**Forge** is a deployment framework for running specialized OpenClaw-based autonomous agents in repeatable, controllable environments.
+**Forge** is a platform for deploying and operating autonomous AI agent teams with world-class management discipline — structured roles, clear ownership, governed workflows, and real-time health visibility.
 
-The long-term vision is to let a consultant or operator deploy agent teams into customer environments using standardized infrastructure, configuration, and operational workflows.
+The core insight is simple: the same management practices that make great human organizations work — defined roles, process discipline, approval guardrails, measurable output — can now be applied to teams of AI agents. Forge makes that easy.
 
-In the near term, Forge is a personal laboratory for designing, validating, and hardening that model.
+Forge does not impose a domain. Whether you are building software, running customer support, or coordinating any other team-based function, Forge gives you the infrastructure to deploy autonomous agents that operate like a well-managed organization.
 
 ## Core Idea
 
-The product is not a hosted SaaS.
+Forge is a **deployable agent team platform**.
 
-Instead, Forge is a **deployable agent platform** that can be installed into environments controlled by the operator or by the customer. The system should make it easy to provision infrastructure, deploy OpenClaw-based agents, configure customer-specific integrations, and operate those agents safely.
+It can be installed into environments controlled by the operator or by the customer. The system makes it easy to:
+- define a team structure with clear roles and ownership
+- provision and deploy OpenClaw-based agents
+- configure team-specific integrations and operating norms
+- govern agent behavior through approval workflows and execution boundaries
+- observe and manage team health in real time
+
+## Unique Selling Proposition
+
+> *"Forge brings world-class team management discipline to autonomous AI agents — structured roles, clear ownership, approval workflows, and real-time health visibility — so your agent teams run like a well-managed human organization, at AI speed."*
+
+Unlike general-purpose AI tools, Forge is an **operational system**. It treats agent teams as managed entities, not raw tools. Every team has:
+- a defined **Team Lead** responsible for coordination and ownership
+- role-specific agents with scoped responsibilities
+- configurable approval workflows before any consequential action
+- persistent memory stored in Git for full restorability
+- a live Health Score reflecting team performance and blockers
+
+## Team Templates
+
+Forge uses templates to give teams a strong starting structure without sacrificing flexibility.
+
+### Current Templates
+
+| Template | Description |
+|---|---|
+| **Forge Starter** | The simplest possible team — just a Team Lead to coordinate work. Ideal for general-purpose or exploratory use. |
+| **Engineering** | A full software delivery squad with SDLC discipline: ticket ingestion, technical planning, implementation, testing, and PR submission. |
+| **Customer Support** | *(Coming soon)* An automated support team for handling tickets, routing issues, and maintaining customer SLAs. |
+
+Templates are a starting point. Teams can always evolve their composition over time.
 
 ## Who It Is For
 
@@ -20,99 +50,89 @@ Instead, Forge is a **deployable agent platform** that can be installed into env
 - Lourenço, acting as the initial operator, architect, and consultant
 
 ### Future users
-- consultants deploying agent systems for clients
-- technical operators responsible for customer-specific agent environments
-- engineering organizations that want dedicated autonomous software agents inside their own infrastructure boundaries
+- Consultants deploying agent systems for clients
+- Technical operators responsible for customer-specific agent environments
+- Organizations that want structured, governed AI teams in any business function
 
 ## Problem Statement
 
-Organizations interested in AI agents often run into the same problems:
+Organizations trying to adopt AI agents run into recurring problems:
 
-- deployments are ad hoc and difficult to reproduce
+- deployments are ad hoc and hard to reproduce
 - agents are not packaged as operational infrastructure
+- roles and ownership are undefined — agents act without clear accountability
+- approval boundaries are unclear or absent
+- observability and health monitoring are afterthoughts
 - environment-specific integrations are hard to configure cleanly
-- cost and capacity are not managed systematically
-- human approval boundaries are unclear
-- project management integrations are inconsistent
 
-There is a gap between a useful local AI agent and a deployable, client-ready agent system.
+There is a gap between a useful AI agent and a deployable, governed agent team that an organization can actually trust and operate.
 
 ## Value Proposition
 
-Forge provides a structured path from local experimentation to production-grade agent deployment.
-
-It aims to offer:
-- repeatable deployment patterns
-- infrastructure automation
-- configurable agent personas
-- integration with project management tools such as Linear, with room for Jira and other systems later
-- strong human approval boundaries
-- portability across local, containerized, and Kubernetes-based environments
+Forge bridges that gap by providing:
+- a clear **team structure model** with defined roles and a required Team Lead
+- **repeatable deployment patterns** for any agent team
+- **approval-aware workflows** — agents never act externally without explicit sign-off
+- **real-time health visibility** — velocity, blockers, and activity tracked continuously
+- **portability** across local, Docker, and Kubernetes environments
+- **vertical templates** for common team archetypes (Engineering, Customer Support, and more)
 
 ## Strategic Positioning
 
-Forge should be understood as an **agent deployment and operations framework**, not just a single AI developer container.
+Forge is an **agent team management platform**, not just a single AI developer container.
 
-Its differentiation comes from treating agents as operational units that can be:
-- provisioned
-- configured
-- scaled
-- monitored
-- replaced
-- assigned to customer-specific workflows
+Its differentiation comes from treating agent teams as operational units that can be:
+- provisioned with a defined structure
+- configured per customer or use case
+- governed through approval workflows
+- monitored via a live Health Score
+- scaled or restructured as needs evolve
+- restored from zero using Git-persisted state
 
 ## Product Principles
 
-1. **Deployment first**
-   - Agents must be easy to package, launch, and re-create.
+1. **Team structure first**
+   - Every team needs a minimum viable structure: at least one Team Lead with clear ownership.
 
 2. **Human approval remains central**
-   - Agents may assist aggressively, but they should not act externally without explicit approval where required.
+   - Agents may assist aggressively, but they do not act externally without explicit human sign-off where required.
 
 3. **Portable by design**
-   - The same agent model should work locally, in Docker, and later in Kubernetes.
+   - The same team model works locally, in Docker, and in Kubernetes.
 
 4. **Customer-specific configuration**
-   - Integrations and policy should be driven by environment-specific configuration, not hardcoded assumptions.
+   - Integrations, policies, and team composition are driven by environment-specific configuration, not hardcoded assumptions.
 
 5. **Infrastructure as product surface**
-   - Terraform, Helm, scripts, and future operators are first-class parts of the product.
+   - Helm charts, Terraform, scripts, and future operators are first-class product components.
 
-6. **Capability with governance**
-   - Real engineering tools matter, but sensitive execution capability should be mediated through clearly bounded environments instead of being granted directly by default.
+6. **Domain-agnostic by default, vertical-ready by design**
+   - Forge works for any team type out of the box. Vertical templates (Engineering, Customer Support) provide opinionated starting points without limiting the platform's scope.
 
 ## Product Direction
 
 ### Near term
-- create a local Docker-based software engineer agent
-- define the baseline project structure
-- establish configuration patterns for project-management integration
-- document workflow, operating model, and approval expectations
+- Support Forge Starter, Engineering, and Customer Support templates
+- Simplify onboarding so any team can get started in minutes
+- Establish the Team Lead as the universal ownership primitive
+- Document the operating model and approval expectations
 
 ### Mid term
-- package the system for Kubernetes deployment
-- introduce Helm-based customer configuration
-- support multiple agent roles and team topologies
-- improve observability and operational controls
+- Package the system for Kubernetes deployment with Helm
+- Introduce observability for multi-team workspaces
+- Support additional agent roles and team topologies
+- Add deeper integration options per vertical
 
 ### Long term
-- provision infrastructure automatically with Terraform
-- add deeper multi-customer deployment patterns
-- add Kubernetes operators for monitoring, health management, and team performance insights
-- support multiple ticketing backends such as Linear and Jira
+- Provision infrastructure automatically with Terraform
+- Add Kubernetes operators for health monitoring and team performance insights
+- Support multi-customer deployment patterns
+- Extend the template library with new verticals
 
 ## What Forge Is Not
 
 At least for now, Forge is not:
 - a generic chatbot product
 - a hosted multi-tenant SaaS
-- a replacement for human engineering leadership
+- a replacement for human leadership
 - an autonomous system allowed to perform unrestricted external actions
-
-## Initial Product Shape
-
-The first concrete deliverable is a containerized OpenClaw-based software engineer agent that:
-- can run locally
-- can be configured for project management integration
-- behaves conservatively around external actions
-- is ready to evolve into a Kubernetes-deployed agent model

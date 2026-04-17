@@ -10,99 +10,131 @@ export const en = {
     logout: "Log out",
   },
   hero: {
-    badge: "AI Engineering Squads for Modern Teams",
-    headline: "Engineering excellence,\non demand.",
+    badge: "AI Agent Teams, Managed with Best Practices",
+    headline: "Your agent team,\nrun like a top organization.",
     subheadline:
-      "Forge deploys managed, autonomous AI engineering squads directly into your infrastructure — combining the discipline of a Big Tech organization with the speed and cost-efficiency your business needs.",
+      "Forge deploys autonomous AI agent teams with the structure, discipline, and governance of a world-class organization — so every team delivers, no matter the domain.",
     ctaPrimary: "Get Started",
     ctaSecondary: "Contact Sales",
   },
   stats: {
     items: [
       { value: "10×", label: "Faster delivery cycles" },
-      { value: "70%", label: "Lower engineering overhead" },
+      { value: "70%", label: "Lower operational overhead" },
       { value: "24/7", label: "Continuous execution" },
-      { value: "0", label: "Knowledge lost between sprints" },
+      { value: "0", label: "Knowledge lost between tasks" },
     ],
   },
   chaos: {
     sectionBadge: "The Old Way vs The Forge Way",
-    sectionTitle: "Stop firefighting. Start delivering.",
+    sectionTitle: "Stop managing chaos. Start running teams.",
     sectionSubtitle:
-      "Most teams are stuck in a cycle of technical debt, unclear ownership, and unpredictable delivery. Forge replaces chaos with a governed, measurable execution layer.",
-    oldWayTitle: "Traditional Development",
+      "Most organizations deploying AI agents end up with ad hoc tools, unclear ownership, and unpredictable results. Forge replaces that with a governed, structured, measurable execution layer.",
+    oldWayTitle: "Ad Hoc Agents",
     forgeWayTitle: "The Forge Way",
     items: [
       {
-        old: "Inconsistent code quality with no enforced standards",
-        forge: "Strict SDLC with built-in testing and deployment discipline",
+        old: "Agents with no defined roles or ownership",
+        forge: "Every team has a Team Lead — clear ownership from day one",
       },
       {
-        old: "Knowledge siloed in individual developers",
+        old: "Knowledge disappears when a session ends",
         forge: "Every decision and context persisted in Git — zero knowledge loss",
       },
       {
-        old: "Unpredictable delivery timelines",
-        forge: "Continuous execution with real-time health scores and progress tracking",
+        old: "No visibility into what agents are doing",
+        forge: "Real-time Health Score — velocity, blockers, and activity tracked continuously",
       },
       {
-        old: "Runaway costs with junior hires or freelancers",
-        forge: "Dynamic model allocation — advanced AI for complex tasks, lightweight for routine work",
+        old: "Agents act without oversight or approval",
+        forge: "Multi-level approval guardrails — agents never act externally without your sign-off",
       },
       {
-        old: "Lack of oversight — you don't know what's happening",
-        forge: "Multi-level approval guardrails — agents never act without your authorization",
+        old: "Unpredictable output and inconsistent quality",
+        forge: "Structured workflows and role-specific discipline on every task",
       },
       {
-        old: "Technical debt accumulates with every sprint",
-        forge: "Engineering discipline enforced on every commit, PR, and deployment",
+        old: "Hard to reproduce, impossible to scale",
+        forge: "Repeatable deployment patterns — same team structure anywhere, any environment",
       },
     ],
   },
   pillars: {
     sectionBadge: "Why Forge",
-    sectionTitle: "A managed execution layer,\nnot just a coding tool.",
+    sectionTitle: "A managed execution layer,\nnot just another AI tool.",
     sectionSubtitle:
-      "Unlike freelancers or chat-based AI, Forge is an operational system that runs with the rigor of a senior engineering organization.",
+      "Unlike standalone AI assistants or chat tools, Forge is an operational system that treats your agent teams as a managed, governed organizational unit.",
     items: [
       {
-        title: "Productivity & ROI",
+        title: "Structured Ownership",
         description:
-          "Forge allocates AI models dynamically — deploying advanced reasoning for complex architecture decisions and lightweight, cost-efficient models for routine tasks. Your investment is always optimized.",
+          "Every Forge team has a defined structure with clear roles. The Team Lead ensures accountability, coordination, and consistent output — no matter the domain.",
         icon: "TrendingUp",
       },
       {
         title: "Real-Time Health Score",
         description:
-          "Every agent team publishes a live Health Score — a continuous signal of velocity, code quality, test coverage, and blockers. You always know the state of your product.",
+          "Every agent team publishes a live Health Score — a continuous signal of velocity, quality, and blockers. You always know what your teams are doing and how they are performing.",
         icon: "Activity",
       },
       {
         title: "Managed Autonomy",
         description:
-          "Autonomous does not mean uncontrolled. Define multi-level approval workflows, set execution boundaries, and ensure every external action requires explicit human sign-off.",
+          "Autonomous does not mean uncontrolled. Define multi-level approval workflows, set execution boundaries, and ensure every consequential action requires explicit human sign-off.",
         icon: "ShieldCheck",
       },
       {
-        title: "Engineering Discipline",
+        title: "Process Discipline",
         description:
-          "Forge enforces a rigid SDLC on every task: ticket ingestion, definition of ready, technical planning, implementation, testing, and PR submission. No shortcuts.",
+          "Forge enforces best-practice workflows on every task: clear intake, definition of ready, planning, execution, and delivery. No shortcuts, no surprises.",
         icon: "GitMerge",
+      },
+    ],
+  },
+  templates: {
+    sectionBadge: "Team Templates",
+    sectionTitle: "Start with a template.\nGrow into your own.",
+    sectionSubtitle:
+      "Choose a starting structure that fits your use case. Templates define the initial role composition — your team can always evolve from there.",
+    items: [
+      {
+        key: "starter",
+        icon: "🧩",
+        title: "Forge Starter",
+        description: "The simplest possible team — just a Team Lead to get you going. Perfect for general-purpose or exploratory use.",
+        badge: "",
+        cta: "Get Started",
+      },
+      {
+        key: "engineering",
+        icon: "💻",
+        title: "Engineering",
+        description: "A full software delivery squad with SDLC discipline — Engineer, Architect, and Product Manager working together.",
+        badge: "Popular",
+        cta: "Get Started",
+      },
+      {
+        key: "customer_support",
+        icon: "🎧",
+        title: "Customer Support",
+        description: "An automated support team designed to handle tickets, route issues, and maintain customer SLAs at scale.",
+        badge: "Coming Soon",
+        cta: "Join Waitlist",
       },
     ],
   },
   controlPlane: {
     sectionBadge: "Control Plane",
-    sectionTitle: "Your cockpit for performance and ROI.",
+    sectionTitle: "Your cockpit for team performance.",
     sectionSubtitle:
-      "The Forge Control Plane gives founders and engineering leaders a single interface to configure agent teams, set guardrails, monitor trends, and maintain full sovereignty over your AI workforce.",
+      "The Forge Control Plane gives leaders a single interface to configure agent teams, set guardrails, monitor health, and maintain full sovereignty over your AI workforce.",
     features: [
       "Multi-level approval rules per agent and action type",
-      "Real-time agent health score and activity log",
-      "Cost attribution per team, sprint, and task",
-      "Workflow templates aligned to your SDLC",
+      "Real-time team health score and activity log",
+      "Cost attribution per team and task",
+      "Workflow templates aligned to your operating norms",
       "Instant rollback and agent replacement",
-      "Integration with Linear, Jira, GitHub, and Slack",
+      "Persistent memory — teams are always restorable from Git",
     ],
   },
   howItWorks: {
@@ -111,33 +143,33 @@ export const en = {
     steps: [
       {
         number: "01",
-        title: "Configure your squad",
+        title: "Choose your team template",
         description:
-          "Select agent roles — Software Engineer, Architect, Product Manager — and set headcount per role. Define your stack, integrations, and approval policies.",
+          "Pick a starting structure — Forge Starter for simplicity, Engineering for software delivery, or Customer Support for service teams.",
       },
       {
         number: "02",
-        title: "Deploy to your infrastructure",
+        title: "Configure your team",
         description:
-          "One Helm command provisions your entire agent team inside your Kubernetes cluster. Your code, your data, your control — no vendor lock-in.",
+          "Name your team, define your Team Lead, and add the roles your use case requires. Set your operating norms and approval policies.",
       },
       {
         number: "03",
         title: "Monitor, approve, and scale",
         description:
-          "Agents pick up tickets, write code, open PRs, and report back. You approve critical actions. Scale up or swap roles as your roadmap evolves.",
+          "Agents execute tasks, report progress, and request approval when needed. You stay in control while your team operates continuously.",
       },
     ],
   },
   cta: {
-    headline: "Engineering excellence,\non demand.",
+    headline: "Your agent team,\nrun your way.",
     subheadline:
-      "Start with one agent. Scale to a full squad. All inside your own infrastructure, on your terms.",
+      "Start with one Team Lead. Grow into a full squad. All inside your own infrastructure, on your terms.",
     ctaPrimary: "Get Started Free",
     ctaSecondary: "Talk to a Specialist",
   },
   footer: {
-    tagline: "Deploy. Govern. Deliver.",
+    tagline: "Structure. Govern. Deliver.",
     product: "Product",
     company: "Company",
     links: {
@@ -169,8 +201,8 @@ export const en = {
     ssoComingSoon: "SSO coming soon",
   },
   signup: {
-    title: "Build your AI engineering squad",
-    subtitle: "Configure your team and deploy in minutes.",
+    title: "Build your agent team",
+    subtitle: "Choose a template and get started in minutes.",
     steps: {
       account: "Account",
       workspace: "Workspace",
@@ -191,16 +223,47 @@ export const en = {
       title: "Name your workspace",
       workspaceLabel: "Workspace name",
       workspacePlaceholder: "Acme Corp",
-      waysOfWorkingLabel: "Ways of working",
-      waysOfWorkingPlaceholder: "Describe your team culture, process expectations, and engineering standards…",
-      waysOfWorkingDefault:
-        "We follow trunk-based development with short-lived feature branches. All PRs require one human review. Tests are mandatory for every change. We document decisions in ADRs and keep the main branch always deployable.",
       next: "Continue",
       back: "Back",
     },
     step3: {
-      title: "Configure your agent squad",
-      subtitle: "Every team includes one Project Manager. Add engineers and architects below.",
+      title: "Choose your team template",
+      subtitle: "Pick a starting structure. You can always add more agents later.",
+      templates: {
+        starter: {
+          icon: "🧩",
+          title: "Forge Starter",
+          description: "Just a Team Lead to get you going. Simple and flexible.",
+        },
+        engineering: {
+          icon: "💻",
+          title: "Engineering",
+          description: "Full software delivery squad with SDLC discipline.",
+        },
+        customer_support: {
+          icon: "🎧",
+          title: "Customer Support",
+          description: "Automated support team. Coming soon.",
+          comingSoon: true,
+        },
+      },
+      next: "Continue",
+      back: "Back",
+    },
+    step4Starter: {
+      title: "Set up your Forge Starter team",
+      subtitle: "Let's give your team a name and a leader.",
+      teamNameLabel: "Team name",
+      teamNamePlaceholder: "e.g. Operations, Research, Strategy…",
+      teamLeadLabel: "Team Lead name",
+      teamLeadPlaceholder: "e.g. Alex, Casey, Jordan…",
+      teamLeadHint: "Your Team Lead is responsible for coordination and ownership.",
+      launch: "Create Team",
+      back: "Back",
+    },
+    step4Engineering: {
+      title: "Configure your engineering squad",
+      subtitle: "Every engineering team includes one Project Manager. Add engineers and architects below.",
       roles: {
         engineer: {
           title: "Software Engineer",
@@ -217,16 +280,16 @@ export const en = {
       },
       pmFixedBadge: "Required",
       forgePmTitle: "Forge Project Manager",
-      forgePmHint: "Forge's internal coordination agent. Every team has exactly one — you can rename it but not remove it.",
+      forgePmHint: "Forge's internal coordination agent. Every engineering team has exactly one.",
       agentNamePlaceholder: "Agent name",
-      launch: "Create Account & Continue",
+      launch: "Create Team",
       back: "Back",
       agentsLabel: "agents",
     },
     haveAccount: "Already have an account?",
     signIn: "Sign in",
     ssoComingSoon: "SSO coming soon",
-    creatingAccount: "Creating your account…",
+    creatingAccount: "Creating your team…",
   },
   setup: {
     title: "Team Setup",
@@ -245,43 +308,11 @@ export const en = {
       addAgent: "Add agent",
       removeAgent: "Remove",
     },
-    section2: {
-      title: "Project Management Integration",
-      subtitle: "Connect your task tracker so agents can pull tickets automatically.",
-      providerLabel: "Choose your tool",
-      apiKeyLabel: "API Key",
-      apiKeyPlaceholder: "Paste your API key here",
-      linearHint: "Create one at linear.app → Settings → API",
-      jiraHint: "Create at id.atlassian.com → Manage API tokens",
-      trelloHint: "Get via trello.com/app-key",
-    },
-    section3: {
-      title: "GitHub Integration",
-      subtitle: "Connect GitHub so agents can clone, push, and open pull requests using a GitHub App.",
-      addRepo: "Add repository",
-      removeRepo: "Remove",
-      repoCardDefault: "Repository",
-      optional: "optional",
-      repoUrlLabel: "Repository URL",
-      repoPlaceholder: "https://github.com/org/repo",
-      appIdLabel: "App ID",
-      appIdPlaceholder: "123456",
-      appIdHint: "Found in your GitHub App settings → General → About.",
-      installationIdLabel: "Installation ID",
-      installationIdPlaceholder: "12345678",
-      installationIdHint: "Found in the URL when you visit the app installation (github.com/settings/installations/…).",
-      privateKeyLabel: "Private Key (.pem)",
-      privateKeyPlaceholder: "-----BEGIN RSA PRIVATE KEY-----\n…\n-----END RSA PRIVATE KEY-----",
-      privateKeyHint: "Download from your GitHub App settings → Private keys.",
-      webhookSecretLabel: "Webhook Secret",
-      webhookSecretPlaceholder: "your-webhook-secret",
-      webhookSecretHint: "Required only if the agent needs to react to GitHub events (e.g. PR comments).",
-    },
-    createTeam: "Create Team & Deploy",
+    createTeam: "Create Team",
     saveChanges: "Save Changes",
     creating: "Creating team…",
     successTitle: "Team created!",
-    successSubtitle: "Your agent squad is ready to configure. Set up each agent below.",
+    successSubtitle: "Your agent team is ready. Head to your teams dashboard to get started.",
   },
   agents: {
     title: "Your Team",
@@ -301,6 +332,7 @@ export const en = {
     healthWarning: "Needs Setup",
     healthOffline: "Offline",
     roleLabels: {
+      team_lead: "Team Lead",
       software_engineer: "Software Engineer",
       software_architect: "Software Architect",
       product_manager: "Product Manager",
@@ -329,7 +361,7 @@ export const en = {
     label: "Language",
   },
   agentPage: {
-    backToSquad: "Back to Squad",
+    backToSquad: "Back to Team",
     openHistory: "Conversation History",
     openBrain: "Brain",
     openDashboard: "Dashboard",
@@ -385,7 +417,7 @@ export const en = {
   },
   teamsPage: {
     title: "My Teams",
-    subtitle: "All your agent squads, in one place.",
+    subtitle: "All your agent teams, in one place.",
     agents: "Agents",
     noAgents: "No agents yet.",
     noTeams: "No teams yet.",
