@@ -48,8 +48,9 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
         .values({
           workspaceId: workspace.id,
           name: teamName,
-          mission: input.mission ?? `${teamName}'s engineering team`,
+          mission: input.mission ?? undefined,
           waysOfWorking: input.waysOfWorking,
+          template: input.template ?? "starter",
         })
         .returning();
 
