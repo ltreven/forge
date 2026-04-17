@@ -12,99 +12,131 @@ export const zh: Dictionary = {
     logout: "退出登录",
   },
   hero: {
-    badge: "面向现代团队的AI工程小队",
-    headline: "随需应变，\n卓越工程。",
+    badge: "AI智能体团队，以最佳实践管理",
+    headline: "您的智能体团队，\n像顶尖组织一样运转。",
     subheadline:
-      "Forge 将托管的自主AI工程小队直接部署至您的基础设施——将大型科技公司的工程纪律与您企业所需的速度和成本效益完美融合。",
+      "Forge 以世界级的组织管理纪律部署自主AI智能体团队——无论您从事哪个领域，都能让您的智能体团队像管理良好的人类组织一样在AI速度下交付成果。",
     ctaPrimary: "立即开始",
     ctaSecondary: "联系销售",
   },
   stats: {
     items: [
       { value: "10×", label: "交付周期加速" },
-      { value: "70%", label: "工程成本降低" },
+      { value: "70%", label: "运营成本降低" },
       { value: "24/7", label: "持续执行" },
-      { value: "0", label: "迭代间知识损失" },
+      { value: "0", label: "任务间知识损失" },
     ],
   },
   chaos: {
     sectionBadge: "传统方式 vs Forge 方式",
-    sectionTitle: "停止救火，开始交付。",
+    sectionTitle: "停止管理混乱，开始运营团队。",
     sectionSubtitle:
-      "大多数团队深陷技术债、职责不清和交付不可预期的恶性循环。Forge 以受治理、可量化的执行层取而代之。",
-    oldWayTitle: "传统开发方式",
+      "大多数部署AI智能体的组织最终陷入临时工具、职责不清和不可预期结果的困境。Forge 以受治理、结构化、可量化的执行层取而代之。",
+    oldWayTitle: "临时部署智能体",
     forgeWayTitle: "Forge 方式",
     items: [
       {
-        old: "代码质量参差不齐，缺乏统一标准",
-        forge: "严格的SDLC，内置测试与部署规范",
+        old: "智能体没有明确角色或归属",
+        forge: "每个团队都有组长——从第一天起就有清晰的归属",
       },
       {
-        old: "知识沉淀在个别开发者身上",
+        old: "会话结束后知识随之消失",
         forge: "所有决策与上下文持久化至Git，零知识流失",
       },
       {
-        old: "交付时间线不可预期",
-        forge: "持续执行，实时健康评分与进度追踪",
+        old: "不知道智能体在做什么",
+        forge: "实时健康评分——持续追踪速度、阻塞项和活动",
       },
       {
-        old: "初级外包或自由职业者成本失控",
-        forge: "动态模型分配——复杂任务用高级AI，例行任务用轻量模型",
+        old: "智能体在无监督无审批的情况下自主行动",
+        forge: "多级审批护栏——智能体未经授权绝不对外行动",
       },
       {
-        old: "缺乏监管，不知道正在发生什么",
-        forge: "多级审批护栏——智能体在未获授权时绝不自主行动",
+        old: "产出不可预期，质量参差不齐",
+        forge: "结构化工作流与角色专属纪律贯穿每项任务",
       },
       {
-        old: "每个迭代都在积累技术债",
-        forge: "每次提交、PR和部署都强制执行工程纪律",
+        old: "难以复现，无法扩展",
+        forge: "可重复的部署模式——相同的团队结构，适用于任何环境",
       },
     ],
   },
   pillars: {
     sectionBadge: "为什么选择 Forge",
-    sectionTitle: "托管执行层，\n而非简单的编码工具。",
+    sectionTitle: "托管执行层，\n而非另一个AI工具。",
     sectionSubtitle:
-      "与自由职业者或对话式AI不同，Forge 是一个以资深工程组织标准运转的运营系统。",
+      "与单一AI助手或对话工具不同，Forge 是一个将智能体团队视为受管理的治理组织单元的运营系统。",
     items: [
       {
-        title: "生产力与投资回报",
+        title: "结构化归属",
         description:
-          "Forge 动态分配AI模型——复杂架构决策调用高级推理能力，日常任务使用轻量、高性价比模型。您的投入始终处于最优配置。",
+          "每个 Forge 团队都有明确的角色结构。无论涉及哪个领域，组长都能确保问责制、协调能力和一致的产出。",
         icon: "TrendingUp",
       },
       {
         title: "实时健康评分",
         description:
-          "每个智能体团队持续发布健康评分，涵盖交付速度、代码质量、测试覆盖率和阻塞项。您随时掌握产品状态。",
+          "每个智能体团队持续发布健康评分——速度、质量和阻塞项的连续信号。您始终知道您的团队在做什么以及表现如何。",
         icon: "Activity",
       },
       {
         title: "可管控的自主性",
         description:
-          "自主不等于失控。定义多级审批工作流，设置执行边界，确保每一次外部操作都需要明确的人工授权。",
+          "自主不等于失控。定义多级审批工作流，设置执行边界，确保每一次重要行动都需要明确的人工授权。",
         icon: "ShieldCheck",
       },
       {
-        title: "工程纪律",
+        title: "流程纪律",
         description:
-          "Forge 对每项任务强制执行严格的软件开发生命周期：工单摄取、就绪定义、技术规划、实现、测试与PR提交，一步不少。",
+          "Forge 对每项任务强制执行最佳实践工作流：明确摄取、就绪定义、规划、执行与交付。没有捷径，没有意外。",
         icon: "GitMerge",
+      },
+    ],
+  },
+  templates: {
+    sectionBadge: "团队模板",
+    sectionTitle: "从模板开始，\n按您的方式成长。",
+    sectionSubtitle:
+      "选择适合您用例的起始结构。模板定义初始角色组成——您的团队随时可以从这里演进。",
+    items: [
+      {
+        key: "starter",
+        icon: "🧩",
+        title: "Forge Starter",
+        description: "最简单的团队——仅一名组长即可开始。适合通用或探索性用途。",
+        badge: "",
+        cta: "立即开始",
+      },
+      {
+        key: "engineering",
+        icon: "💻",
+        title: "Engineering",
+        description: "具备SDLC纪律的完整软件交付小队——工程师、架构师和产品经理协同工作。",
+        badge: "热门",
+        cta: "立即开始",
+      },
+      {
+        key: "customer_support",
+        icon: "🎧",
+        title: "Customer Support",
+        description: "专为处理工单、路由问题和规模化维护客户SLA而设计的自动化支持团队。",
+        badge: "即将推出",
+        cta: "加入候补",
       },
     ],
   },
   controlPlane: {
     sectionBadge: "控制平面",
-    sectionTitle: "您的性能与ROI驾驶舱。",
+    sectionTitle: "您的团队绩效驾驶舱。",
     sectionSubtitle:
-      "Forge 控制平面为创始人和工程负责人提供统一界面，用于配置智能体团队、设定护栏、监控趋势，并对AI员工保持完全主权。",
+      "Forge 控制平面为领导者提供统一界面，用于配置智能体团队、设定护栏、监控健康状况，并对AI员工保持完全主权。",
     features: [
       "按智能体和操作类型设置多级审批规则",
-      "实时智能体健康评分与活动日志",
-      "按团队、迭代和任务的成本归因",
-      "符合您SDLC的工作流模板",
+      "实时团队健康评分与活动日志",
+      "按团队和任务的成本归因",
+      "符合您运营规范的工作流模板",
       "即时回滚与智能体替换",
-      "集成 Linear、Jira、GitHub 和 Slack",
+      "持久记忆——团队始终可从Git恢复",
     ],
   },
   howItWorks: {
@@ -113,33 +145,33 @@ export const zh: Dictionary = {
     steps: [
       {
         number: "01",
-        title: "配置您的小队",
+        title: "选择您的团队模板",
         description:
-          "选择智能体角色——软件工程师、架构师、产品经理——并设置每个角色的人数。定义您的技术栈、集成和审批策略。",
+          "选择起始结构——Forge Starter 简单灵活，Engineering 适合软件交付，Customer Support 专为服务团队设计。",
       },
       {
         number: "02",
-        title: "部署到您的基础设施",
+        title: "配置您的团队",
         description:
-          "一条Helm命令即可在您的Kubernetes集群内完整部署智能体团队。您的代码、您的数据、您的掌控——无供应商锁定。",
+          "为您的团队命名，指定组长，并根据用例添加所需角色。设置运营规范和审批策略。",
       },
       {
         number: "03",
         title: "监控、审批与扩展",
         description:
-          "智能体自主接取工单、编写代码、提交PR并反馈进展。您审批关键操作。随着路线图演进，随时扩展或调整角色配置。",
+          "智能体执行任务、汇报进展，并在需要时申请审批。您始终保持掌控，而团队持续运转。",
       },
     ],
   },
   cta: {
-    headline: "随需应变，\n卓越工程。",
+    headline: "您的智能体团队，\n按您的方式运营。",
     subheadline:
-      "从单个智能体起步，扩展为完整小队。全程在您自己的基础设施内，按您的条件运行。",
+      "从一名组长起步，成长为完整团队。全程在您自己的基础设施内，按您的条件运行。",
     ctaPrimary: "免费开始",
     ctaSecondary: "与专家交流",
   },
   footer: {
-    tagline: "部署。治理。交付。",
+    tagline: "结构。治理。交付。",
     product: "产品",
     company: "公司",
     links: {
@@ -171,8 +203,8 @@ export const zh: Dictionary = {
     ssoComingSoon: "SSO 即将上线",
   },
   signup: {
-    title: "组建您的AI工程小队",
-    subtitle: "配置您的团队，数分钟内完成部署。",
+    title: "组建您的AI智能体团队",
+    subtitle: "选择模板，数分钟内完成部署。",
     steps: {
       account: "账户",
       workspace: "工作区",
@@ -193,16 +225,47 @@ export const zh: Dictionary = {
       title: "命名您的工作区",
       workspaceLabel: "工作区名称",
       workspacePlaceholder: "示例科技有限公司",
-      waysOfWorkingLabel: "工作方式",
-      waysOfWorkingPlaceholder: "描述您的团队文化、流程期望和工程标准…",
-      waysOfWorkingDefault:
-        "我们遵循主干开发模式，使用短命功能分支。所有PR需要至少一名人工审阅。每次变更必须包含测试。架构决策通过ADR记录，主分支始终保持可部署状态。",
       next: "继续",
       back: "返回",
     },
     step3: {
-      title: "配置您的智能体小队",
-      subtitle: "每个团队固定包含一名项目经理。请在下方添加工程师和架构师。",
+      title: "选择您的团队模板",
+      subtitle: "选择起始结构。您随时可以在此基础上添加更多智能体。",
+      templates: {
+        starter: {
+          icon: "🧩",
+          title: "Forge Starter",
+          description: "仅一名组长即可开始。简单灵活。",
+        },
+        engineering: {
+          icon: "💻",
+          title: "Engineering",
+          description: "具备SDLC纪律的完整软件交付小队。",
+        },
+        customer_support: {
+          icon: "🎧",
+          title: "Customer Support",
+          description: "自动化支持团队。即将推出。",
+          comingSoon: true,
+        },
+      },
+      next: "继续",
+      back: "返回",
+    },
+    step4Starter: {
+      title: "配置您的 Forge Starter 团队",
+      subtitle: "为您的团队命名并指定一位领导者。",
+      teamNameLabel: "团队名称",
+      teamNamePlaceholder: "例如：运营、研究、战略…",
+      teamLeadLabel: "组长姓名",
+      teamLeadPlaceholder: "例如：Alex、Casey、Jordan…",
+      teamLeadHint: "您的组长负责协调和归属。",
+      launch: "创建团队",
+      back: "返回",
+    },
+    step4Engineering: {
+      title: "配置您的工程小队",
+      subtitle: "每个工程团队固定包含一名项目经理。请在下方添加工程师和架构师。",
       roles: {
         engineer: {
           title: "软件工程师",
@@ -219,16 +282,16 @@ export const zh: Dictionary = {
       },
       pmFixedBadge: "必须保留",
       forgePmTitle: "Forge 项目经理",
-      forgePmHint: "Forge 内建的协调智能体。每个团队有且仅有一个——可以改名，不可删除。",
+      forgePmHint: "Forge 内建的协调智能体。每个工程团队有且仅有一个。",
       agentNamePlaceholder: "智能体名称",
-      launch: "创建账户并继续",
+      launch: "创建团队",
       back: "返回",
       agentsLabel: "个智能体",
     },
     haveAccount: "已有账户？",
     signIn: "立即登录",
     ssoComingSoon: "SSO 即将上线",
-    creatingAccount: "正在创建账户…",
+    creatingAccount: "正在创建团队…",
   },
   setup: {
     title: "团队配置",
@@ -247,43 +310,11 @@ export const zh: Dictionary = {
       addAgent: "添加智能体",
       removeAgent: "移除",
     },
-    section2: {
-      title: "项目管理集成",
-      subtitle: "连接您的任务追踪工具，让智能体自动拉取工单。",
-      providerLabel: "选择您的工具",
-      apiKeyLabel: "API 密钥",
-      apiKeyPlaceholder: "在此粘贴您的 API 密钥",
-      linearHint: "在 linear.app → 设置 → API 中创建",
-      jiraHint: "在 id.atlassian.com → 管理API令牌 中创建",
-      trelloHint: "通过 trello.com/app-key 获取",
-    },
-    section3: {
-      title: "GitHub 集成",
-      subtitle: "通过 GitHub App 连接仓库，让智能体能够克隆、推送代码并开启 Pull Request。",
-      addRepo: "添加仓库",
-      removeRepo: "移除",
-      repoCardDefault: "仓库",
-      optional: "可选",
-      repoUrlLabel: "仓库地址",
-      repoPlaceholder: "https://github.com/org/repo",
-      appIdLabel: "App ID",
-      appIdPlaceholder: "123456",
-      appIdHint: "在 GitHub App 设置页面 → General → About 中查找。",
-      installationIdLabel: "Installation ID",
-      installationIdPlaceholder: "12345678",
-      installationIdHint: "访问应用安装页面时 URL 末尾的数字（github.com/settings/installations/…）。",
-      privateKeyLabel: "私钥 (.pem)",
-      privateKeyPlaceholder: "-----BEGIN RSA PRIVATE KEY-----\n…\n-----END RSA PRIVATE KEY-----",
-      privateKeyHint: "在 GitHub App 设置页面 → Private keys 中下载。",
-      webhookSecretLabel: "Webhook Secret",
-      webhookSecretPlaceholder: "your-webhook-secret",
-      webhookSecretHint: "仅当智能体需要响应 GitHub 事件（如 PR 评论）时才需要填写。",
-    },
-    createTeam: "创建团队并部署",
+    createTeam: "创建团队",
     saveChanges: "保存修改",
     creating: "正在创建团队…",
     successTitle: "团队已创建！",
-    successSubtitle: "您的智能体小队已就绪，请在下方完成每个智能体的配置。",
+    successSubtitle: "您的智能体团队已就绪。前往团队仪表盘开始使用。",
   },
   agents: {
     title: "您的团队",
@@ -303,6 +334,7 @@ export const zh: Dictionary = {
     healthWarning: "需要配置",
     healthOffline: "离线",
     roleLabels: {
+      team_lead: "组长",
       software_engineer: "软件工程师",
       software_architect: "软件架构师",
       product_manager: "产品经理",
@@ -387,7 +419,7 @@ export const zh: Dictionary = {
   },
   teamsPage: {
     title: "我的团队",
-    subtitle: "您所有的智能体小队，尽在一处。",
+    subtitle: "您所有的智能体团队，尽在一处。",
     agents: "智能体",
     noAgents: "暂无智能体。",
     noTeams: "暂无团队。",

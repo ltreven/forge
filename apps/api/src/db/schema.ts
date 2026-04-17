@@ -3,6 +3,7 @@ import { pgTable, uuid, text, timestamp, pgEnum, jsonb, integer } from "drizzle-
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
 export const agentTypeEnum = pgEnum("agent_type", [
+  "team_lead",
   "software_engineer",
   "product_manager",
   "project_manager",
@@ -60,8 +61,10 @@ export const teams = pgTable("teams", {
     .notNull()
     .references(() => workspaces.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  mission: text("mission").notNull(),
+  mission: text("mission"),
   waysOfWorking: text("ways_of_working"),
+  /** Template vertical: starter | engineering | customer_support */
+  template: text("template").notNull().default("starter"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
