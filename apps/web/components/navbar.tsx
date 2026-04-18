@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Menu, X, Cpu, LogOut, ChevronDown } from "lucide-react";
+import { Menu, X, Cpu, LogOut, ChevronDown, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { useTranslation } from "@/lib/i18n";
@@ -108,12 +108,13 @@ export function Navbar() {
                     </div>
                     <div className="p-1">
                       <Link
-                        href="/setup"
-                        id="nav-go-setup"
+                        href="/teams"
+                        id="nav-go-teams"
                         onClick={() => setDropdownOpen(false)}
                         className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
                       >
-                        {t.nav.setup}
+                        <Users className="size-4 text-muted-foreground" />
+                        My Teams
                       </Link>
                       <button
                         id="nav-logout"
@@ -136,7 +137,7 @@ export function Navbar() {
                   {t.nav.login}
                 </Button>
               </Link>
-              <Link href="/signup" id="nav-get-started">
+              <Link href={user ? "/teams" : "/signup"} id="nav-get-started">
                 <Button size="sm" className="font-semibold shadow-sm">
                   {t.nav.getStarted}
                 </Button>
@@ -194,7 +195,7 @@ export function Navbar() {
                     {t.nav.login}
                   </Button>
                 </Link>
-                <Link href="/signup" className="flex-1">
+                <Link href={user ? "/teams" : "/signup"} className="flex-1">
                   <Button size="sm" className="w-full font-semibold">
                     {t.nav.getStarted}
                   </Button>
