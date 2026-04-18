@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth";
 
 const pillarIcons: Record<string, React.ElementType> = {
   TrendingUp,
@@ -24,6 +25,8 @@ const pillarIcons: Record<string, React.ElementType> = {
 
 export default function HomePage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const signupHref = user ? "/teams" : "/signup";
 
   return (
     <div className="flex flex-col">
@@ -66,7 +69,7 @@ export default function HomePage() {
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-            <Link href="/signup" id="hero-cta-primary">
+            <Link href={signupHref} id="hero-cta-primary">
               <Button size="lg" className="gap-2 font-semibold shadow-md px-6">
                 {t.hero.ctaPrimary}
                 <ArrowRight className="size-4" />
@@ -128,7 +131,7 @@ export default function HomePage() {
                       {tmpl.cta}
                     </Button>
                   ) : (
-                    <Link href="/signup" id={`template-cta-${tmpl.key}`}>
+                    <Link href={signupHref} id={`template-cta-${tmpl.key}`}>
                       <Button className="w-full gap-2 font-semibold group-hover:shadow-sm">
                         {tmpl.cta}
                         <ArrowRight className="size-4" />
@@ -173,40 +176,63 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Comparison table */}
-          <div className="rounded-2xl border border-border overflow-hidden shadow-sm">
-            {/* Header */}
-            <div className="grid grid-cols-2 border-b border-border">
-              <div className="flex items-center gap-2 px-6 py-4 bg-destructive/5 border-r border-border">
-                <X className="size-4 text-destructive shrink-0" />
-                <span className="font-semibold text-sm text-destructive">
-                  {t.chaos.oldWayTitle}
-                </span>
+          {/* Comparison — two premium cards */}
+          <div className="grid gap-5 sm:grid-cols-2">
+
+            {/* ── Ad Hoc card ── */}
+            <div className="relative overflow-hidden rounded-2xl border border-destructive/20 bg-destructive/5 shadow-sm">
+              {/* Gradient stripe */}
+              <div className="h-1 w-full bg-gradient-to-r from-destructive/60 via-rose-400/60 to-destructive/20" />
+              {/* Header */}
+              <div className="flex items-center gap-3 px-6 py-5 border-b border-destructive/10">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-destructive/10">
+                  <X className="size-4 text-destructive" />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-destructive">{t.chaos.oldWayTitle}</p>
+                  <p className="text-xs text-destructive/60">The status quo</p>
+                </div>
               </div>
-              <div className="flex items-center gap-2 px-6 py-4 bg-primary/5">
-                <Check className="size-4 text-primary shrink-0" />
-                <span className="font-semibold text-sm text-primary">
-                  {t.chaos.forgeWayTitle}
-                </span>
-              </div>
+              {/* Items */}
+              <ul className="flex flex-col divide-y divide-destructive/10 px-6 py-3">
+                {t.chaos.items.map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 py-3.5">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+                      <X className="size-2.5 text-destructive" />
+                    </span>
+                    <p className="text-sm text-muted-foreground leading-snug">{item.old}</p>
+                  </li>
+                ))}
+              </ul>
             </div>
 
-            {/* Rows */}
-            {t.chaos.items.map((item, i) => (
-              <div
-                key={i}
-                className="grid grid-cols-2 border-b border-border last:border-0 transition-colors hover:bg-muted/20"
-              >
-                <div className="flex items-start gap-3 px-6 py-4 border-r border-border">
-                  <X className="size-3.5 text-destructive/60 mt-0.5 shrink-0" />
-                  <p className="text-sm text-muted-foreground">{item.old}</p>
+            {/* ── Forge Way card ── */}
+            <div className="relative overflow-hidden rounded-2xl border border-primary/25 bg-primary/5 shadow-sm">
+              {/* Gradient stripe */}
+              <div className="h-1 w-full bg-gradient-to-r from-primary via-violet-400 to-primary/40" />
+              {/* Header */}
+              <div className="flex items-center gap-3 px-6 py-5 border-b border-primary/10">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-primary/15">
+                  <Check className="size-4 text-primary" />
                 </div>
-                <div className="flex items-start gap-3 px-6 py-4">
-                  <Check className="size-3.5 text-primary mt-0.5 shrink-0" />
-                  <p className="text-sm text-foreground font-medium">{item.forge}</p>
+                <div>
+                  <p className="text-base font-bold text-primary">{t.chaos.forgeWayTitle}</p>
+                  <p className="text-xs text-primary/50">Governed, structured, measurable</p>
                 </div>
               </div>
-            ))}
+              {/* Items */}
+              <ul className="flex flex-col divide-y divide-primary/10 px-6 py-3">
+                {t.chaos.items.map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 py-3.5">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                      <Check className="size-2.5 text-primary" />
+                    </span>
+                    <p className="text-sm text-foreground font-medium leading-snug">{item.forge}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
           </div>
         </div>
       </section>
@@ -276,7 +302,7 @@ export default function HomePage() {
                 ))}
               </ul>
               <div className="pt-2">
-                <Link href="/signup" id="control-plane-cta">
+                <Link href={signupHref} id="control-plane-cta">
                   <Button className="gap-2 font-semibold">
                     {t.hero.ctaPrimary}
                     <ArrowRight className="size-4" />
@@ -387,7 +413,7 @@ export default function HomePage() {
           </h2>
           <p className="mt-5 text-lg text-background/70">{t.cta.subheadline}</p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-            <Link href="/signup" id="cta-get-started">
+            <Link href={signupHref} id="cta-get-started">
               <Button size="lg" variant="secondary" className="font-semibold gap-2">
                 {t.cta.ctaPrimary}
                 <ArrowRight className="size-4" />

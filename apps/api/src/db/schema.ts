@@ -6,7 +6,6 @@ export const agentTypeEnum = pgEnum("agent_type", [
   "team_lead",
   "software_engineer",
   "product_manager",
-  "project_manager",
   "software_architect",
 ]);
 
@@ -61,6 +60,7 @@ export const teams = pgTable("teams", {
     .notNull()
     .references(() => workspaces.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  icon: text("icon"),
   mission: text("mission"),
   waysOfWorking: text("ways_of_working"),
   /** Template vertical: starter | engineering | customer_support */

@@ -265,7 +265,7 @@ export const zh: Dictionary = {
     },
     step4Engineering: {
       title: "配置您的工程小队",
-      subtitle: "每个工程团队固定包含一名项目经理。请在下方添加工程师和架构师。",
+      subtitle: "每个工程团队固定包含一名组长。请在下方添加工程师、架构师和经理。",
       roles: {
         engineer: {
           title: "软件工程师",
@@ -281,8 +281,8 @@ export const zh: Dictionary = {
         },
       },
       pmFixedBadge: "必须保留",
-      forgePmTitle: "Forge 项目经理",
-      forgePmHint: "Forge 内建的协调智能体。每个工程团队有且仅有一个。",
+      forgePmTitle: "Forge 组长",
+      forgePmHint: "您团队的协调者和负责人。每个团队有且仅有一名组长。",
       agentNamePlaceholder: "智能体名称",
       launch: "创建团队",
       back: "返回",
@@ -338,7 +338,6 @@ export const zh: Dictionary = {
       software_engineer: "软件工程师",
       software_architect: "软件架构师",
       product_manager: "产品经理",
-      project_manager: "项目经理",
     },
     telegram: {
       sectionTitle: "Telegram",

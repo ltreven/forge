@@ -14,7 +14,7 @@ export const signupSchema = z.object({
     .array(
       z.object({
         name: z.string().min(1),
-        type: z.enum(["team_lead", "software_engineer", "product_manager", "project_manager", "software_architect"]),
+        type: z.enum(["team_lead", "software_engineer", "product_manager", "software_architect"]),
       })
     )
     .optional(),

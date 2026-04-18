@@ -29,6 +29,20 @@
       "when": 1776431710089,
       "tag": "0003_curly_sage",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776500000000,
+      "tag": "0005_team_icon",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776501000000,
+      "tag": "0006_remove_project_manager",
+      "breakpoints": true
     }
   ]
 }
