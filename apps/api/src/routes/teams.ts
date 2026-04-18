@@ -51,28 +51,45 @@ teamsRouter.get("/mine", authMiddleware, async (req: Request, res: Response, nex
 });
 
 // ── POST /teams ───────────────────────────────────────────────────────────────
-// Creates a team and automatically creates an associated project_manager agent.
+// Creates a team and automatically creates an associated team_lead agent.
 
-teamsRouter.post("/", async (req: Request, res: Response, next: NextFunction) => {
+teamsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createTeamSchema.parse(req.body);
+
+    // Resolve workspaceId from the authenticated user when not explicitly provided.
+    let workspaceId = input.workspaceId;
+    if (!workspaceId) {
+      const [workspace] = await db
+        .select({ id: workspaces.id })
+        .from(workspaces)
+        .where(eq(workspaces.userId, req.user!.userId))
+        .limit(1);
+      if (!workspace) {
+        res.status(400).json(failure("No workspace found for this user."));
+        return;
+      }
+      workspaceId = workspace.id;
+    }
 
     // Use a transaction so team + agents are created atomically.
     const result = await db.transaction(async (tx) => {
       const [team] = await tx
         .insert(teams)
         .values({
+          workspaceId,
           name: input.name,
           mission: input.mission,
           waysOfWorking: input.waysOfWorking,
+          template: input.template,
         })
         .returning();
 
-      // Create agents provided by the caller, or fall back to a default PM.
+      // Create agents provided by the caller, or fall back to a default team lead.
       const agentInputs =
         input.agents && input.agents.length > 0
           ? input.agents.map((a) => ({ teamId: team.id, name: a.name, type: a.type, icon: a.icon }))
-          : [{ teamId: team.id, name: "Forge PM", type: "project_manager" as const }];
+          : [{ teamId: team.id, name: "Forge Team Lead", type: "team_lead" as const }];
 
       const createdAgents = await tx.insert(agents).values(agentInputs).returning();
 
@@ -84,6 +101,7 @@ teamsRouter.post("/", async (req: Request, res: Response, next: NextFunction) =>
     next(err);
   }
 });
+
 
 // ── GET /teams ────────────────────────────────────────────────────────────────
 

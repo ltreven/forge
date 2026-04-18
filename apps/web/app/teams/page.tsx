@@ -4,19 +4,23 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Bot, Loader2, Plus, Users,
+  Bot, ChevronRight, Loader2, Plus, Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/i18n";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type AgentType =
   | "team_lead"
   | "software_engineer" | "software_architect"
-  | "product_manager"   | "project_manager";
+  | "product_manager";
+
+type Template = "starter" | "engineering";
 
 interface Agent {
   id: string; name: string; type: AgentType;
@@ -36,7 +40,6 @@ const ROLE_COLORS: Record<string, string> = {
   software_engineer:  "#3b82f6",
   software_architect: "#8b5cf6",
   product_manager:    "#ec4899",
-  project_manager:    "#f59e0b",
 };
 
 const DEFAULT_ACCENT_COLORS = [
@@ -51,50 +54,48 @@ function teamAccent(team: Team): string {
   return DEFAULT_ACCENT_COLORS[idx];
 }
 
+const TEMPLATES = [
+  {
+    key: "starter" as Template,
+    icon: "🧩",
+    title: "Forge Starter",
+    description: "Just a Team Lead to get you going. Simple and flexible.",
+  },
+  {
+    key: "engineering" as Template,
+    icon: "💻",
+    title: "Engineering",
+    description: "Full software delivery squad with SDLC discipline.",
+  },
+  {
+    key: "customer_support",
+    icon: "🎧",
+    title: "Customer Support",
+    description: "Automated support team. Coming soon.",
+    comingSoon: true,
+  },
+];
+
 // ── Agent Chip ────────────────────────────────────────────────────────────────
 
-function AgentChip({ agent, onClick }: { agent: Agent; onClick: () => void }) {
+function AgentChip({ agent }: { agent: Agent }) {
   const color = agent.metadata?.avatarColor ?? ROLE_COLORS[agent.type] ?? "#6366f1";
   return (
-    <button id={`agent-chip-${agent.id}`} type="button" onClick={onClick}
+    <div id={`agent-chip-${agent.id}`}
       title={agent.name}
-      className="group flex items-center gap-2 rounded-xl border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-all hover:border-primary/50 hover:shadow-sm active:scale-95">
+      className="flex items-center gap-2 rounded-xl border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground">
       <span className="flex size-6 shrink-0 items-center justify-center rounded-full text-sm"
         style={{ background: color }}>
         {agent.icon ?? "🤖"}
       </span>
       <span className="max-w-[90px] truncate">{agent.name}</span>
-    </button>
-  );
-}
-
-// ── New Team Button ───────────────────────────────────────────────────────────
-
-function NewTeamButton() {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div className="relative">
-      <button id="new-team-btn" type="button" disabled
-        onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-        className="flex items-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-2.5 text-sm font-medium text-muted-foreground opacity-60 cursor-not-allowed">
-        <Plus className="size-4" />
-        New Team
-      </button>
-      {hovered && (
-        <span className="absolute -top-9 left-1/2 -translate-x-1/2 z-10 rounded-lg bg-foreground px-3 py-1.5 text-[11px] text-background whitespace-nowrap shadow-lg">
-          Coming soon
-        </span>
-      )}
     </div>
   );
 }
 
 // ── Team Card ─────────────────────────────────────────────────────────────────
 
-function TeamCard({ team, onAgentClick }: {
-  team: Team;
-  onAgentClick: (agentId: string) => void;
-}) {
+function TeamCard({ team }: { team: Team }) {
   const color = teamAccent(team);
 
   return (
@@ -145,9 +146,9 @@ function TeamCard({ team, onAgentClick }: {
               <p className="text-xs text-muted-foreground">No agents yet.</p>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2" onClick={(e) => e.preventDefault()}>
+            <div className="flex flex-wrap gap-2">
               {team.agents.map((agent) => (
-                <AgentChip key={agent.id} agent={agent} onClick={() => onAgentClick(agent.id)} />
+                <AgentChip key={agent.id} agent={agent} />
               ))}
             </div>
           )}
@@ -157,7 +158,7 @@ function TeamCard({ team, onAgentClick }: {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+
 
 export default function TeamsPage() {
   const { t }                             = useTranslation();
@@ -168,10 +169,8 @@ export default function TeamsPage() {
   const [teams, setTeams]         = useState<Team[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!token) { router.replace("/login"); return; }
-
+  const loadTeams = useCallback(() => {
+    if (!token) return;
     fetch(`${API_BASE}/teams/mine`, {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     })
@@ -179,7 +178,14 @@ export default function TeamsPage() {
       .then((d) => setTeams(d.data ?? []))
       .catch(() => toast.error("Failed to load teams."))
       .finally(() => setIsLoading(false));
-  }, [token, router, authLoading]);
+  }, [token]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!token) { router.replace("/login"); return; }
+    loadTeams();
+  }, [token, router, authLoading, loadTeams]);
+
 
   const workspaceName = teams[0]?.workspace?.name ?? null;
 
@@ -192,44 +198,59 @@ export default function TeamsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-      {/* Header */}
-      <div className="mb-8 flex items-end justify-between gap-4">
-        <div>
-          {workspaceName && (
-            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              {tp.workspaceLabel} · {workspaceName}
-            </p>
-          )}
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">{tp.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{tp.subtitle}</p>
-        </div>
-        <NewTeamButton />
-      </div>
-
-      {/* Content */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      ) : teams.length === 0 ? (
-        <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border bg-muted/20 py-20 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-muted">
-            <Users className="size-7 text-muted-foreground" />
+    <>
+      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+        {/* Header */}
+        <div className="mb-8 flex items-end justify-between gap-4">
+          <div>
+            {workspaceName && (
+              <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                {tp.workspaceLabel} · {workspaceName}
+              </p>
+            )}
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">{tp.title}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{tp.subtitle}</p>
           </div>
-          <p className="text-sm text-muted-foreground">{tp.noTeams}</p>
+
+          <Link
+            href="/newteam"
+            id="new-team-btn"
+            className="flex items-center gap-2 rounded-xl border border-primary/50 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary transition-all hover:bg-primary hover:text-primary-foreground hover:shadow-md active:scale-95">
+            <Plus className="size-4" />
+            New Team
+          </Link>
         </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {teams.map((team) => (
-            <TeamCard
-              key={team.id}
-              team={team}
-              onAgentClick={(id) => router.push(`/agents/${id}`)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+
+        {/* Content */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="size-8 animate-spin text-primary" />
+          </div>
+        ) : teams.length === 0 ? (
+          <div className="flex flex-col items-center gap-6 rounded-2xl border border-dashed border-border bg-muted/20 py-20 text-center">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-muted">
+              <Users className="size-7 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">No teams yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Create your first team to get started.</p>
+            </div>
+            <Link
+              href="/newteam"
+              id="new-team-empty-btn"
+              className="flex items-center gap-2 rounded-xl border border-primary/50 bg-primary/10 px-5 py-2.5 text-sm font-semibold text-primary transition-all hover:bg-primary hover:text-primary-foreground hover:shadow-md">
+              <Plus className="size-4" />
+              Create your first team
+            </Link>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {teams.map((team) => (
+              <TeamCard key={team.id} team={team} />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   );
 }

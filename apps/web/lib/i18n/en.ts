@@ -11,7 +11,7 @@ export const en = {
   },
   hero: {
     badge: "AI Agent Teams, Managed with Best Practices",
-    headline: "Your agent team,\nrun like a top organization.",
+    headline: "Teams excellence\non demand.",
     subheadline:
       "Forge deploys autonomous AI agent teams with the structure, discipline, and governance of a world-class organization — so every team delivers, no matter the domain.",
     ctaPrimary: "Get Started",
@@ -263,7 +263,7 @@ export const en = {
     },
     step4Engineering: {
       title: "Configure your engineering squad",
-      subtitle: "Every engineering team includes one Project Manager. Add engineers and architects below.",
+      subtitle: "Every engineering team includes one Team Lead. Add engineers, architects, and managers below.",
       roles: {
         engineer: {
           title: "Software Engineer",
@@ -279,8 +279,8 @@ export const en = {
         },
       },
       pmFixedBadge: "Required",
-      forgePmTitle: "Forge Project Manager",
-      forgePmHint: "Forge's internal coordination agent. Every engineering team has exactly one.",
+      forgePmTitle: "Forge Team Lead",
+      forgePmHint: "Your team's coordinator and owner. Every team has exactly one Team Lead.",
       agentNamePlaceholder: "Agent name",
       launch: "Create Team",
       back: "Back",
@@ -336,7 +336,6 @@ export const en = {
       software_engineer: "Software Engineer",
       software_architect: "Software Architect",
       product_manager: "Product Manager",
-      project_manager: "Project Manager",
     },
     telegram: {
       sectionTitle: "Telegram",

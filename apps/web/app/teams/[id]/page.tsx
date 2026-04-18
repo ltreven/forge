@@ -6,20 +6,16 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Bot,
-  Check,
+  ChevronRight,
   Crown,
-  FileText,
   Layers,
   Loader2,
-  Save,
   Settings2,
   Zap,
   Activity,
   FolderKanban,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +24,7 @@ import { cn } from "@/lib/utils";
 type AgentType =
   | "team_lead"
   | "software_engineer" | "software_architect"
-  | "product_manager"   | "project_manager";
+  | "product_manager";
 
 interface Agent {
   id: string; name: string; type: AgentType;
@@ -36,7 +32,7 @@ interface Agent {
 }
 
 interface Team {
-  id: string; name: string; mission?: string;
+  id: string; name: string; icon?: string; mission?: string;
   waysOfWorking?: string; template?: string;
   createdAt: string;
 }
@@ -48,7 +44,6 @@ const ROLE_COLORS: Record<string, string> = {
   software_engineer:  "#3b82f6",
   software_architect: "#8b5cf6",
   product_manager:    "#ec4899",
-  project_manager:    "#f59e0b",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -56,7 +51,6 @@ const ROLE_LABELS: Record<string, string> = {
   software_engineer:  "Software Engineer",
   software_architect: "Software Architect",
   product_manager:    "Product Manager",
-  project_manager:    "Project Manager",
 };
 
 const ROLE_EMOJIS: Record<string, string> = {
@@ -64,25 +58,7 @@ const ROLE_EMOJIS: Record<string, string> = {
   software_engineer:  "🛠️",
   software_architect: "🏛️",
   product_manager:    "📋",
-  project_manager:    "🤖",
 };
-
-type SettingsTab = "general" | "integrations";
-
-// ── PM Providers ──────────────────────────────────────────────────────────────
-
-const PM_PROVIDERS = [
-  { key: "internal", label: "Forge (Internal)", icon: "⚡", available: true  },
-  { key: "linear",   label: "Linear",           icon: "◆",  available: false },
-  { key: "jira",     label: "Jira",             icon: "🔵", available: false },
-  { key: "trello",   label: "Trello",           icon: "🟦", available: false },
-];
-
-const DOC_PROVIDERS = [
-  { key: "internal",   label: "Forge (Internal)", icon: "📁", available: true  },
-  { key: "confluence", label: "Confluence",       icon: "🔷", available: false },
-  { key: "notion",     label: "Notion",           icon: "📝", available: false },
-];
 
 // ── Agent Card ────────────────────────────────────────────────────────────────
 
@@ -102,11 +78,8 @@ function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) {
           : "border-border hover:border-primary/30"
       )}
     >
-      {/* Avatar */}
       <div
-        className={cn(
-          "relative flex size-11 shrink-0 items-center justify-center rounded-xl text-xl shadow-sm transition-transform group-hover:scale-105",
-        )}
+        className="relative flex size-11 shrink-0 items-center justify-center rounded-xl text-xl shadow-sm transition-transform group-hover:scale-105"
         style={{ background: color + "25" }}
       >
         <span>{agent.icon ?? ROLE_EMOJIS[agent.type] ?? "🤖"}</span>
@@ -116,8 +89,6 @@ function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) {
           </span>
         )}
       </div>
-
-      {/* Info */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold text-foreground truncate">{agent.name}</p>
@@ -129,11 +100,14 @@ function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) {
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{ROLE_LABELS[agent.type] ?? agent.type}</p>
       </div>
-
-      {/* Status dot */}
       <div className="shrink-0 flex flex-col items-end gap-1">
-        <span className="size-2 rounded-full bg-muted-foreground/30" title="Offline (not configured)" />
-        <span className="text-[10px] text-muted-foreground/50">Offline</span>
+        <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          Open →
+        </span>
+        <div className="flex items-center gap-1">
+          <span className="size-2 rounded-full bg-muted-foreground/30" title="Offline (not configured)" />
+          <span className="text-[10px] text-muted-foreground/50">Offline</span>
+        </div>
       </div>
     </button>
   );
@@ -150,51 +124,6 @@ function SectionTitle({ icon: Icon, label }: { icon: React.ElementType; label: s
   );
 }
 
-// ── Provider Picker ────────────────────────────────────────────────────────────
-
-function ProviderPicker({
-  providers,
-  selected,
-  onSelect,
-  id,
-}: {
-  providers: { key: string; label: string; icon: string; available: boolean }[];
-  selected: string | null;
-  onSelect: (key: string) => void;
-  id: string;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {providers.map((p) => (
-        <button
-          key={p.key}
-          id={`${id}-${p.key}`}
-          type="button"
-          disabled={!p.available}
-          onClick={() => p.available && onSelect(p.key)}
-          className={cn(
-            "relative flex flex-col items-center gap-2 rounded-xl border p-4 text-xs font-medium transition-all",
-            !p.available && "cursor-not-allowed opacity-40",
-            selected === p.key
-              ? "border-primary bg-primary/5 text-foreground shadow-sm"
-              : p.available
-                ? "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                : "border-border text-muted-foreground"
-          )}
-        >
-          <span className="text-2xl">{p.icon}</span>
-          <span className="text-center leading-tight">{p.label}</span>
-          {!p.available && (
-            <span className="absolute -top-2 -right-2 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
-              Soon
-            </span>
-          )}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TeamDetailPage() {
@@ -206,17 +135,6 @@ export default function TeamDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [team, setTeam]           = useState<Team | null>(null);
   const [agents, setAgents]       = useState<Agent[]>([]);
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
-
-  // General settings state
-  const [teamName, setTeamName]         = useState("");
-  const [mission, setMission]           = useState("");
-  const [waysOfWorking, setWaysOfWorking] = useState("");
-  const [isSavingGeneral, setIsSavingGeneral] = useState(false);
-
-  // Integration placeholders
-  const [selectedPm, setSelectedPm]   = useState<string | null>("internal");
-  const [selectedDoc, setSelectedDoc] = useState<string | null>("internal");
 
   // ── Load data ──────────────────────────────────────────────────────────────
 
@@ -238,9 +156,6 @@ export default function TeamDetailPage() {
           const d = await teamRes.json();
           const t: Team = d.data;
           setTeam(t);
-          setTeamName(t.name ?? "");
-          setMission(t.mission ?? "");
-          setWaysOfWorking(t.waysOfWorking ?? "");
         } else {
           toast.error("Team not found.");
           router.replace("/teams");
@@ -262,29 +177,8 @@ export default function TeamDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
 
-  // ── Save general ──────────────────────────────────────────────────────────
-
-  const saveGeneral = async () => {
-    if (!teamName.trim()) { toast.error("Team name is required."); return; }
-    setIsSavingGeneral(true);
-    try {
-      const r = await fetch(`${API_BASE}/teams/${teamId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: teamName.trim(), mission: mission.trim(), waysOfWorking: waysOfWorking.trim() }),
-      });
-      if (!r.ok) throw new Error();
-      const d = await r.json();
-      setTeam((prev) => prev ? { ...prev, ...d.data } : prev);
-      toast.success("Team settings saved.");
-    } catch {
-      toast.error("Failed to save settings.");
-    } finally {
-      setIsSavingGeneral(false);
-    }
-  };
-
   // ── Guards ────────────────────────────────────────────────────────────────
+
 
   if (authLoading || isLoading) {
     return (
@@ -314,8 +208,8 @@ export default function TeamDetailPage() {
 
       {/* ── Page header ────────────────────────────────────────────────── */}
       <div className="mb-8 flex items-start gap-4">
-        <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
-          <Layers className="size-7" />
+        <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl text-3xl shadow-sm bg-primary/10">
+          {team.icon ?? <Layers className="size-7 text-primary" />}
         </div>
         <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">{team.name}</h1>
@@ -410,154 +304,34 @@ export default function TeamDetailPage() {
           </section>
         </div>
 
-        {/* ── RIGHT COLUMN: Settings panel ── */}
+        {/* ── RIGHT COLUMN: Nav cards ── */}
         <div className="flex flex-col gap-4">
-          <section id="team-settings" className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-            {/* Tab bar */}
-            <div className="flex border-b border-border">
-              {(["general", "integrations"] as SettingsTab[]).map((tab) => (
-                <button
-                  key={tab}
-                  id={`settings-tab-${tab}`}
-                  type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={cn(
-                    "flex-1 flex items-center justify-center gap-1.5 px-3 py-3 text-xs font-semibold capitalize transition-colors",
-                    activeTab === tab
-                      ? "border-b-2 border-primary text-primary bg-primary/5"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                  )}
-                >
-                  {tab === "general"
-                    ? <Settings2 className="size-3.5" />
-                    : <Zap className="size-3.5" />}
-                  {tab === "general" ? "General" : "Integrations"}
-                </button>
-              ))}
+
+          {/* General Settings card */}
+          <Link href={`/teams/${teamId}/general`} id="nav-general-settings"
+            className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 transition-transform group-hover:scale-105">
+              <Settings2 className="size-5 text-primary" />
             </div>
-
-            <div className="p-5">
-
-              {/* ─ General tab ─ */}
-              {activeTab === "general" && (
-                <div className="flex flex-col gap-4" id="settings-general">
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="settings-team-name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Team name
-                    </label>
-                    <Input id="settings-team-name" value={teamName}
-                      onChange={(e) => setTeamName(e.target.value)}
-                      placeholder="e.g. Operations, Research…" className="h-9" />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="settings-mission" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Mission
-                      <span className="ml-1 font-normal normal-case text-muted-foreground/60">(optional)</span>
-                    </label>
-                    <Input id="settings-mission" value={mission}
-                      onChange={(e) => setMission(e.target.value)}
-                      placeholder="What does this team do?" className="h-9" />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="settings-wow" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Ways of Working
-                      <span className="ml-1 font-normal normal-case text-muted-foreground/60">(optional)</span>
-                    </label>
-                    <textarea
-                      id="settings-wow"
-                      value={waysOfWorking}
-                      onChange={(e) => setWaysOfWorking(e.target.value)}
-                      placeholder="Describe team norms, processes, and expectations…"
-                      rows={4}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
-                    />
-                  </div>
-
-                  <Button
-                    id="settings-save-general"
-                    size="sm"
-                    disabled={isSavingGeneral || !teamName.trim()}
-                    onClick={saveGeneral}
-                    className="w-full gap-2 font-semibold"
-                  >
-                    {isSavingGeneral
-                      ? <><Loader2 className="size-3.5 animate-spin" /> Saving…</>
-                      : <><Save className="size-3.5" /> Save Changes</>}
-                  </Button>
-                </div>
-              )}
-
-              {/* ─ Integrations tab ─ */}
-              {activeTab === "integrations" && (
-                <div className="flex flex-col gap-6" id="settings-integrations">
-
-                  {/* Project Management */}
-                  <div>
-                    <div className="mb-3 flex items-center gap-2">
-                      <FolderKanban className="size-3.5 text-muted-foreground" />
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Project Management
-                      </p>
-                    </div>
-                    <ProviderPicker
-                      id="pm-provider"
-                      providers={PM_PROVIDERS}
-                      selected={selectedPm}
-                      onSelect={setSelectedPm}
-                    />
-                    {selectedPm && selectedPm !== "internal" && (
-                      <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3">
-                        <p className="text-xs text-muted-foreground text-center">
-                          {selectedPm} integration coming soon.
-                        </p>
-                      </div>
-                    )}
-                    {selectedPm === "internal" && (
-                      <div className="mt-3 flex items-center gap-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5">
-                        <Check className="size-4 text-primary shrink-0" />
-                        <p className="text-xs text-primary font-medium">Forge internal tracking active.</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Separator */}
-                  <div className="h-px bg-border" />
-
-                  {/* Documentation */}
-                  <div>
-                    <div className="mb-3 flex items-center gap-2">
-                      <FileText className="size-3.5 text-muted-foreground" />
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Documentation
-                      </p>
-                    </div>
-                    <ProviderPicker
-                      id="doc-provider"
-                      providers={DOC_PROVIDERS}
-                      selected={selectedDoc}
-                      onSelect={setSelectedDoc}
-                    />
-                    {selectedDoc && selectedDoc !== "internal" && (
-                      <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3">
-                        <p className="text-xs text-muted-foreground text-center">
-                          {selectedDoc} integration coming soon.
-                        </p>
-                      </div>
-                    )}
-                    {selectedDoc === "internal" && (
-                      <div className="mt-3 flex items-center gap-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5">
-                        <Check className="size-4 text-primary shrink-0" />
-                        <p className="text-xs text-primary font-medium">Forge internal docs active.</p>
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-              )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">General Settings</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Name, emoji, mission, ways of working</p>
             </div>
-          </section>
+            <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </Link>
+
+          {/* Integrations card */}
+          <Link href={`/teams/${teamId}/integrations`} id="nav-integrations"
+            className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 transition-transform group-hover:scale-105">
+              <Zap className="size-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Integrations</p>
+              <p className="text-xs text-muted-foreground mt-0.5">GitHub, Linear, Jira, Notion and more</p>
+            </div>
+            <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          </Link>
 
           {/* Quick info card */}
           <div className="rounded-2xl border border-border bg-muted/20 px-5 py-4 text-xs text-muted-foreground flex flex-col gap-2">
@@ -576,8 +350,8 @@ export default function TeamDetailPage() {
               </span>
             </div>
           </div>
-        </div>
 
+        </div>
       </div>
     </div>
   );

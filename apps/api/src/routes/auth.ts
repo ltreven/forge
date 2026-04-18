@@ -54,12 +54,12 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
         })
         .returning();
 
-      // 5. Create agents — always include the fixed Forge PM (project_manager) first.
-      // The caller may pass additional agents; if none, only the PM is created.
+      // 5. Create agents — always include the fixed Forge Team Lead first.
+      // The caller may pass additional agents; if none, only the team lead is created.
       const agentInputs =
         input.agents && input.agents.length > 0
           ? input.agents.map((a) => ({ teamId: team.id, name: a.name, type: a.type }))
-          : [{ teamId: team.id, name: "Forge PM", type: "project_manager" as const }];
+          : [{ teamId: team.id, name: "Forge Team Lead", type: "team_lead" as const }];
 
       const createdAgents = await tx.insert(agents).values(agentInputs).returning();
 

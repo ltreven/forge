@@ -16,6 +16,7 @@ export interface ModelOption {
 }
 
 export const AVAILABLE_MODELS: ModelOption[] = [
+  { provider: "auto",      model: "auto",              label: "Auto Route",          badge: "Smart",     color: "violet" },
   { provider: "openai",    model: "gpt-4o",            label: "GPT-4o",             badge: "OpenAI",    color: "emerald" },
   { provider: "openai",    model: "gpt-4o-mini",       label: "GPT-4o mini",        badge: "OpenAI",    color: "emerald" },
   { provider: "openai",    model: "o3",                label: "o3",                 badge: "OpenAI",    color: "emerald" },
@@ -26,6 +27,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
 ];
 
 const badgeColors: Record<string, string> = {
+  violet:  "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   blue:    "bg-blue-500/10 text-blue-600 dark:text-blue-400",
   amber:   "bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -115,7 +117,33 @@ export function ModelSelector({ currentModel, onSave, t }: ModelSelectorProps) {
           style={{ top: "100%" }}
         >
           <div className="p-1.5">
-            {AVAILABLE_MODELS.map((opt) => (
+            {/* Auto Route separator */}
+            <div className="mb-1">
+              {AVAILABLE_MODELS.filter((o) => o.provider === "auto").map((opt) => (
+                <button
+                  key={opt.model}
+                  type="button"
+                  onClick={() => handleSelect(opt)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-muted",
+                    current.model === opt.model && "bg-primary/5"
+                  )}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", badgeColors[opt.color])}>
+                      {opt.badge}
+                    </span>
+                    <div>
+                      <span className="font-medium text-foreground">{opt.label}</span>
+                      <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Picks the best model for each task</p>
+                    </div>
+                  </div>
+                  {current.model === opt.model && <Check className="size-3.5 text-primary" />}
+                </button>
+              ))}
+            </div>
+            <div className="mb-1.5 h-px bg-border" />
+            {AVAILABLE_MODELS.filter((o) => o.provider !== "auto").map((opt) => (
               <button
                 key={opt.model}
                 type="button"
@@ -131,9 +159,7 @@ export function ModelSelector({ currentModel, onSave, t }: ModelSelectorProps) {
                   </span>
                   <span className="font-medium text-foreground">{opt.label}</span>
                 </div>
-                {current.model === opt.model && (
-                  <Check className="size-3.5 text-primary" />
-                )}
+                {current.model === opt.model && <Check className="size-3.5 text-primary" />}
               </button>
             ))}
           </div>
