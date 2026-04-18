@@ -1,8 +1,10 @@
 # Forge
 
-**Forge** is a platform for deploying and operating autonomous AI engineering agent teams inside customer-controlled infrastructure.
+**Forge** is a platform for deploying and operating autonomous AI agent teams with world-class management discipline — structured roles, clear ownership, governed workflows, and real-time health visibility.
 
-Forge gives organizations a governed, production-ready execution layer — deploying squads of autonomous AI agents (Software Engineer, Architect, Product Manager) directly into their own Kubernetes clusters via Helm. Agents follow a strict SDLC: ticket ingestion, technical planning, implementation, testing, and PR submission — with multi-level human approval at every critical step.
+> *"Forge brings world-class team management discipline to autonomous AI agents — so your agent teams run like a well-managed human organization, at AI speed."*
+
+Whether you are building software, running customer support, or coordinating any other team-based function, Forge gives you the infrastructure to deploy autonomous agents that operate like a well-managed organization.
 
 ---
 
@@ -23,7 +25,19 @@ forge/
 - **Frontend:** Next.js 16, Tailwind CSS, shadcn/ui, i18n (EN + ZH)
 - **Backend:** Node.js, Express, Drizzle ORM, PostgreSQL, JWT auth (bcryptjs)
 - **Agents:** OpenClaw, containerized via Docker/Kubernetes, deployed via Helm
-- **Integrations:** Linear, Jira, Trello (PM tools), GitHub (VCS)
+- **Integrations:** Linear (Engineering template)
+
+---
+
+## Team Templates
+
+| Template | Description |
+|---|---|
+| **Forge Starter** | Minimal team — Team Lead only. General-purpose or exploratory use. |
+| **Engineering** | Full software delivery squad with SDLC discipline (Engineer, Architect, PM). |
+| **Customer Support** | *(Coming soon)* Automated support team. |
+
+Every team requires at least a **Team Lead** — the ownership and coordination primitive.
 
 ---
 
@@ -79,19 +93,14 @@ Once all three services are running:
 
 1. **`/signup`** — Create an account (3 steps):
    - Step 1: Full name + work email + password
-   - Step 2: Workspace name + "Ways of Working" (pre-filled, editable)
-   - Step 3: Agent squad — pick roles (Engineer / Architect / PM) and name each agent
-   - Submits to the API → redirects to `/setup`
+   - Step 2: Workspace name
+   - Step 3: Choose a team template (Forge Starter or Engineering)
+     - **Forge Starter:** Team name + Team Lead name → creates team → goes to `/teams`
+     - **Engineering:** Team name + agent squad (Engineer / Architect / PM) → goes to `/teams`
 
-2. **`/setup`** — Configure your team:
-   - Team name, mission, Ways of Working, agent editor (add/remove)
-   - PM tool: choose Linear / Jira / Trello and paste your API key
-   - GitHub: paste a Personal Access Token + add repo URLs
-   - Click **"Create Team & Deploy"** → persists all data to the database
+2. **`/teams`** — Your agent team dashboard after onboarding
 
-3. **Navbar (authenticated):** Click your avatar in the top-right → dropdown shows "Team Setup" and "Log out"
-
-4. **`/login`** — Sign back in with the credentials you created
+3. **`/login`** — Sign back in with the credentials you created
 
 > **Note:** SSO (Google / Microsoft) is UI-only in the current MVP — clicking the buttons shows a "Coming soon" toast. Real OAuth support is a future ticket.
 
@@ -145,16 +154,9 @@ All responses use the envelope: `{ success, data, error }`.
 | `PUT` | `/agents/:id` | Update agent |
 | `DELETE` | `/agents/:id` | Delete agent |
 
-### Integrations
+**Agent types:** `team_lead` · `software_engineer` · `software_architect` · `product_manager` · `project_manager`
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/teams/:id/integrations` | Add PM or GitHub integration to a team |
-| `GET` | `/teams/:id/integrations` | List integrations for a team |
-
-**Agent types:** `software_engineer` · `software_architect` · `product_manager` · `project_manager`
-
-**Integration providers:** `linear` · `jira` · `trello` · `github`
+**Team templates:** `starter` · `engineering` · `customer_support`
 
 ### Environment variables (apps/api/.env)
 
@@ -178,7 +180,7 @@ make k8s-test
 
 The Helm chart supports:
 - Configurable agent profile, model provider, and model name
-- Linear and GitHub MCP integrations (enabled via values)
+- Linear MCP integration (enabled via values, Engineering template)
 - Telegram bot token for agent communication
 - Non-privileged container execution
 

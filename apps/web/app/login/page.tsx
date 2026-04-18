@@ -63,7 +63,7 @@ export default function LoginPage() {
 
       login(data.data.token, data.data.user, data.data.teamId ?? null);
       toast.success("Welcome back!");
-      router.replace("/setup");
+      router.replace("/teams");
     } catch {
       toast.error("Network error. Please check your connection.");
     } finally {

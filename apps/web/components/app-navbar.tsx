@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 import { LangSwitcher } from "@/components/lang-switcher";
 
 /**
- * Logged-in application navbar. Shown inside the authenticated /setup shell.
- * Replaces the public marketing navbar for authenticated pages.
+ * Logged-in application navbar. Used in authenticated app pages.
+ * Replaces the public marketing navbar for authenticated routes.
  */
 export function AppNavbar() {
   const { user, logout } = useAuth();

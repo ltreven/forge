@@ -5,7 +5,6 @@ import { z } from "zod";
 export const agentTypeSchema = z.enum([
   "software_engineer",
   "product_manager",
-  "project_manager",
   "software_architect",
 ]);
 
