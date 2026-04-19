@@ -12,12 +12,11 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -123,8 +122,8 @@ func (r *AgentReconciler) createOrUpdateConfigMap(ctx context.Context, desired *
 	}
 	existing.Data = desired.Data
 	existing.Labels = desired.Labels
-	// Preserve ownerReferences on update
-	controllerutil.AddOwnerReference(existing, desired.OwnerReferences[0], r.Scheme) //nolint:errcheck
+	// Ensure ownerReference is set on existing resource
+	existing.OwnerReferences = desired.OwnerReferences
 	return r.Update(ctx, existing)
 }
 
@@ -217,7 +216,7 @@ func (r *AgentReconciler) patchStatus(
 		LastTransitionTime: now,
 	}
 
-	meta.SetStatusCondition(&cr.Status.Conditions, condition)
+	apimeta.SetStatusCondition(&cr.Status.Conditions, condition)
 	cr.Status.Phase              = phase
 	cr.Status.PodName            = podName
 	cr.Status.ObservedGeneration = cr.Generation
