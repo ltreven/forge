@@ -41,12 +41,8 @@ helm_resource(
   namespace='ingress-nginx',
   flags=[
     '--create-namespace',
-    '--set', 'controller.service.type=NodePort',
-    '--set', 'controller.service.nodePorts.http=30080',
-    '--set', 'controller.service.nodePorts.https=30443',
-    '--set', 'controller.hostPort.enabled=true',
-    '--set', 'controller.hostPort.ports.http=80',
-    '--set', 'controller.hostPort.ports.https=443',
+    # Docker Desktop natively supports LoadBalancer — binds to localhost:80 / localhost:443
+    '--set', 'controller.service.type=LoadBalancer',
   ],
   resource_deps=[],
   labels=['infra'],
