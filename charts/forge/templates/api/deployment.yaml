@@ -64,6 +64,7 @@ spec:
               value: {{ $value | quote }}
             {{- end }}
             {{- if .Values.api.existingSecret }}
+            {{- /* UAT/Prod: credentials come from a pre-existing Kubernetes Secret */}}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -75,14 +76,10 @@ spec:
                   name: {{ .Values.api.existingSecret }}
                   key: JWT_SECRET
             {{- else if .Values.postgresql.embedded }}
+            {{- /* Local: DATABASE_URL built from embedded PostgreSQL values */}}
+            {{- /* JWT_SECRET is already injected above via the env range loop */}}
             - name: DATABASE_URL
               value: {{ include "forge.postgresql.connectionString" . | quote }}
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: forge-api-local-secret
-                  key: JWT_SECRET
-                  optional: true
             {{- end }}
           livenessProbe:
             {{- toYaml .Values.api.livenessProbe | nindent 12 }}
@@ -91,3 +88,4 @@ spec:
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
 {{- end }}
+

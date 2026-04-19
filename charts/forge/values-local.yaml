@@ -20,9 +20,12 @@ api:
     NODE_ENV: development
     PORT: "4000"
     CORS_ORIGIN: "http://forge.localhost,http://localhost:3000"
-  # Local secret is created by the Tiltfile from .env
-  existingSecret: forge-api-local-secret
-  runMigrations: true
+    # JWT_SECRET inline for local dev only (not a real secret)
+    JWT_SECRET: "forge-local-dev-secret-change-in-prod"
+  # No existingSecret in local — DATABASE_URL is built from embedded PostgreSQL
+  existingSecret: ""
+  # Disable migration init container until --migrate-only flag is implemented
+  runMigrations: false
 
 web:
   replicaCount: 1
