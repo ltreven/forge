@@ -107,21 +107,55 @@ docker_build(
 )
 
 # ── 5a. Build forge-agent image ──────────────────────────────────────────────
-# IMPORTANT: docker_build() only fires when a Tilt-managed k8s resource uses
-# the image. Since forge-agent pods are created by the Go controller in
-# forge-ws-* namespaces (outside Tilt's scope), docker_build() would NEVER run.
-# local_resource() builds directly and always produces forge/agent:local in the
-# Docker daemon, which Docker Desktop's k8s sees immediately (pullPolicy=Never).
-local_resource(
-  'forge-agent-image',
-  cmd='docker build -t {} apps/agents -f apps/agents/Dockerfile'.format(AGENT_IMAGE),
-  deps=[
-    'apps/agents/Dockerfile',
-    'apps/agents/bootstrap.sh',
-    'apps/agents/profiles',
-  ],
-  labels=['agent'],
+# docker_build() builds the image AND loads it into the k8s node's containerd
+# via Tilt's injection mechanism. This works because of the DaemonSet below
+# that references the image — Tilt needs ≥1 k8s resource to associate the image
+# with so it knows to load it into the cluster.
+docker_build(
+  AGENT_IMAGE,
+  context='apps/agents',
+  dockerfile='apps/agents/Dockerfile',
+  ignore=['*.md'],
 )
+
+# Preload DaemonSet: exists solely so Tilt loads forge/agent:local into the
+# node's containerd. Agent pods in forge-ws-* namespaces use pullPolicy=Never
+# and need the image pre-loaded. The pod runs a no-op sleep loop (8Mi RAM).
+k8s_yaml(blob("""
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: forge-agent-preload
+  namespace: forge
+  labels:
+    app.kubernetes.io/name: forge-agent-preload
+    app.kubernetes.io/managed-by: tilt
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-agent-preload
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forge-agent-preload
+    spec:
+      tolerations:
+        - operator: Exists
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: preload
+          image: {agent_image}
+          command: ["sh", "-c", "echo 'forge-agent image loaded on node'; exec sleep infinity"]
+          resources:
+            requests:
+              memory: "8Mi"
+              cpu: "5m"
+            limits:
+              memory: "32Mi"
+              cpu: "50m"
+""".format(agent_image=AGENT_IMAGE)))
+
+k8s_resource('forge-agent-preload', labels=['agent'])
 
 # ── 5b. Build forge-controller (Go) ─────────────────────────────────────────
 docker_build(
