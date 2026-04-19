@@ -7,12 +7,18 @@ import { signupSchema, loginSchema } from "../schemas/auth.schema";
 import { signToken } from "../lib/jwt";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { success, failure } from "../lib/response";
+import {
+  workspaceNamespace,
+  ensureNamespace,
+  applyCredentialsSecret,
+  applyForgeAgentCR,
+} from "../k8s/provisioner";
 
 export const authRouter = Router();
 
 // ── POST /auth/signup ─────────────────────────────────────────────────────────
 // Creates: user → workspace → team → agents (all in one transaction).
-// Returns: JWT token + user profile + teamId so the client can redirect to /setup.
+// After commit, provisions K8s namespace + ForgeAgent CRs (non-blocking).
 
 authRouter.post("/signup", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -34,14 +40,14 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
         .values({ name: input.name, email: input.email, passwordHash })
         .returning();
 
-      // 3. Create workspace.
+      // 2. Create workspace.
       const [workspace] = await tx.insert(workspaces).values({
         userId: user.id,
         name: input.workspaceName,
         waysOfWorking: input.waysOfWorking,
       }).returning();
 
-      // 4. Create the first team, linked to the workspace.
+      // 3. Create the first team, linked to the workspace.
       const teamName = input.teamName ?? input.workspaceName;
       const [team] = await tx
         .insert(teams)
@@ -54,17 +60,49 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
         })
         .returning();
 
-      // 5. Create agents — always include the fixed Forge Team Lead first.
+      // 4. Create agents — always include the Forge Team Lead.
       // The caller may pass additional agents; if none, only the team lead is created.
       const agentInputs =
         input.agents && input.agents.length > 0
-          ? input.agents.map((a) => ({ teamId: team.id, name: a.name, type: a.type }))
-          : [{ teamId: team.id, name: "Forge Team Lead", type: "team_lead" as const }];
+          ? input.agents.map((a) => ({
+              teamId: team.id,
+              name: a.name,
+              type: a.type,
+              k8sStatus: "pending" as const,
+            }))
+          : [{ teamId: team.id, name: "Forge Team Lead", type: "team_lead" as const, k8sStatus: "pending" as const }];
 
       const createdAgents = await tx.insert(agents).values(agentInputs).returning();
 
-      return { user, team, agents: createdAgents };
+      return { user, workspace, team, agents: createdAgents };
     });
+
+    // ── K8s provisioning (after transaction commits — non-blocking) ────────────
+    // Provision namespace + Secret + ForgeAgent CR for each agent.
+    // Failures log an error but don't fail the signup response.
+    const namespace = workspaceNamespace(result.workspace.id);
+    try {
+      await ensureNamespace(namespace);
+
+      // Persist namespace on workspace so future requests don't re-derive it
+      await db
+        .update(workspaces)
+        .set({ k8sNamespace: namespace })
+        .where(eq(workspaces.id, result.workspace.id));
+
+      for (const agent of result.agents) {
+        await applyCredentialsSecret(namespace, agent);
+        await applyForgeAgentCR(namespace, agent, result.workspace.id);
+        await db
+          .update(agents)
+          .set({ k8sStatus: "provisioning", k8sResourceName: agent.id })
+          .where(eq(agents.id, agent.id));
+      }
+
+      console.log(`[signup] K8s provisioned namespace=${namespace} agents=${result.agents.length}`);
+    } catch (k8sErr) {
+      console.error("[signup] K8s provisioning failed — agents remain pending:", k8sErr);
+    }
 
     const token = signToken({ userId: result.user.id, email: result.user.email });
 
