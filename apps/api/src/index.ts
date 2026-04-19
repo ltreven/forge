@@ -44,8 +44,10 @@ app.use(errorHandler);
 
 // ── Listen ────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, "127.0.0.1", () => {
-  console.log(`🚀 Forge API running on http://127.0.0.1:${PORT}`);
+const HOST = process.env.HOST ?? "0.0.0.0";
+
+app.listen(PORT, HOST, () => {
+  console.log(`🚀 Forge API running on http://${HOST}:${PORT}`);
 });
 
 export default app;
