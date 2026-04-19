@@ -107,34 +107,36 @@ docker_build(
 )
 
 # ── 5a. Build forge-agent image ──────────────────────────────────────────────
-# Problem: Tilt's docker_build() substitutes image tags internally (tilt-XXXX),
-# but the Go controller uses 'forge/agent:local' literally. The DaemonSet trick
-# doesn't work because Tilt rewrites the tag there too.
-#
-# Solution: build with docker build, then use nsenter to import the image
-# directly into Docker Desktop's containerd k8s.io namespace with the exact
-# 'forge/agent:local' tag. This is the standard approach for Docker Desktop.
-local_resource(
-  'forge-agent-image',
-  cmd="""
-    set -e
-    echo '[forge-agent] Building image...'
-    docker build -t forge/agent:local apps/agents -f apps/agents/Dockerfile
-    echo '[forge-agent] Importing into k8s containerd...'
-    docker save forge/agent:local | docker run --rm -i --privileged --pid=host \
-      alpine nsenter -t 1 -m -- sh -c \
-      'ctr -n k8s.io images import - 2>&1 || \\
-       (echo "ctr import failed, trying crictl..."; \
-        crictl -r unix:///var/run/containerd/containerd.sock pull --creds="" forge/agent:local 2>&1 || true)'
-    echo '[forge-agent] Done — forge/agent:local available in k8s containerd'
-  """,
-  deps=[
-    'apps/agents/Dockerfile',
-    'apps/agents/bootstrap.sh',
-    'apps/agents/profiles',
-  ],
-  labels=['agent'],
+# docker_build registers the image with Tilt. Tilt SUBSTITUTES the tag from
+# forge/agent:local → forge/agent:tilt-XXXX (the actual built digest) in any
+# k8s_yaml it manages that references this image.
+# The ConfigMap below carries the substituted tag. The Go controller reads it,
+# so agent pods always use the exact image Tilt has loaded into k8s containerd.
+# pullPolicy: IfNotPresent (not Never) — safe since the image is from a build.
+docker_build(
+  AGENT_IMAGE,
+  context='apps/agents',
+  dockerfile='apps/agents/Dockerfile',
+  ignore=['*.md'],
 )
+
+# ConfigMap in forge namespace that holds the current agent image ref.
+# Tilt will substitute AGENT_IMAGE here → the exact tilt-tagged digest.
+# The Go controller reads this to build agent Deployments.
+k8s_yaml(blob("""
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forge-agent-image
+  namespace: forge
+  labels:
+    app.kubernetes.io/managed-by: tilt
+data:
+  image: "{image}"
+  pullPolicy: "IfNotPresent"
+""".format(image=AGENT_IMAGE)))
+
+k8s_resource('forge-agent-image', labels=['agent'])
 
 # ── 5b. Build forge-controller (Go) ─────────────────────────────────────────
 docker_build(

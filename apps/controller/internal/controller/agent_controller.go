@@ -15,6 +15,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -83,7 +84,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// ── 3. Reconcile Deployment ──────────────────────────────────────────────
 	logger.Info("reconciling Deployment")
-	desiredDeploy := resources.AgentDeployment(&cr, ownerRef, r.AgentImage, r.AgentImagePullPolicy)
+	agentImage, pullPolicy := r.resolveAgentImage(ctx)
+	desiredDeploy := resources.AgentDeployment(&cr, ownerRef, agentImage, pullPolicy)
 	if err := r.createOrUpdateDeployment(ctx, desiredDeploy); err != nil {
 		return r.failWith(ctx, &cr, "DeploymentFailed", err)
 	}
@@ -254,4 +256,40 @@ func buildOwnerRef(cr *forgev1alpha1.Agent, scheme *runtime.Scheme) *metav1.Owne
 		Controller:         func() *bool { b := true; return &b }(),
 		BlockOwnerDeletion: func() *bool { b := true; return &b }(),
 	}
+}
+
+// ── Agent image resolution ─────────────────────────────────────────────────────
+
+// resolveAgentImage returns the image ref and pull policy to use for agent pods.
+//
+// In local development (Tilt), it reads the "forge-agent-image" ConfigMap in the
+// forge namespace. Tilt manages this ConfigMap and substitutes the "image" field
+// with the actual tilt-tagged digest it has loaded into the k8s containerd store.
+// This ensures agent pods always use an image that IS present in containerd.
+//
+// In production (no ConfigMap), falls back to r.AgentImage / r.AgentImagePullPolicy
+// which are set via --agent-image and --agent-image-pull-policy flags.
+func (r *AgentReconciler) resolveAgentImage(ctx context.Context) (image, pullPolicy string) {
+	image = r.AgentImage
+	pullPolicy = r.AgentImagePullPolicy
+	if pullPolicy == "" {
+		pullPolicy = "IfNotPresent"
+	}
+
+	var cm corev1.ConfigMap
+	err := r.Get(ctx, types.NamespacedName{
+		Namespace: "forge",
+		Name:      "forge-agent-image",
+	}, &cm)
+	if err != nil {
+		// ConfigMap not found (production or Tilt not running) — use flag values.
+		return
+	}
+	if v := cm.Data["image"]; v != "" {
+		image = v
+	}
+	if v := cm.Data["pullPolicy"]; v != "" {
+		pullPolicy = v
+	}
+	return
 }
