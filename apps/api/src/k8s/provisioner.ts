@@ -13,20 +13,22 @@ export function workspaceNamespace(workspaceId: string): string {
 /**
  * Ensures the Kubernetes namespace for a workspace exists.
  * Idempotent — safe to call multiple times.
+ *
+ * @kubernetes/client-node@0.22.x positional arg API:
+ *   readNamespace(name: string)
+ *   createNamespace(body: V1Namespace)
  */
 export async function ensureNamespace(namespace: string): Promise<void> {
   try {
-    await coreV1.readNamespace({ name: namespace });
+    await coreV1.readNamespace(namespace);
   } catch (err: any) {
-    if (err?.response?.statusCode === 404) {
+    if (httpStatus(err) === 404) {
       await coreV1.createNamespace({
-        body: {
-          metadata: {
-            name: namespace,
-            labels: {
-              "app.kubernetes.io/managed-by": "forge",
-              "forge.ai/component":           "workspace",
-            },
+        metadata: {
+          name: namespace,
+          labels: {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.ai/component":           "workspace",
           },
         },
       });
@@ -38,8 +40,7 @@ export async function ensureNamespace(namespace: string): Promise<void> {
 
 /**
  * Creates or updates the credentials Secret for an agent.
- * The Secret is created in the workspace namespace and referenced
- * by the ForgeAgent CR spec — never embedded in the CR itself.
+ * Positional API: createNamespacedSecret(namespace, body) / replaceNamespacedSecret(name, namespace, body)
  */
 export async function applyCredentialsSecret(
   namespace: string,
@@ -48,19 +49,16 @@ export async function applyCredentialsSecret(
   const metadata = (agent.metadata ?? {}) as Record<string, unknown>;
   const name = `${agent.id}-creds`;
 
-  // Collect all sensitive values from agent metadata.
-  // Only non-empty values are included.
   const stringData: Record<string, string> = {};
-
-  if (metadata.telegramBotToken)    stringData.TELEGRAM_BOT_TOKEN    = String(metadata.telegramBotToken);
-  if (metadata.linearApiKey)        stringData.LINEAR_API_KEY         = String(metadata.linearApiKey);
-  if (metadata.linearEnabled)       stringData.LINEAR_ENABLED         = String(metadata.linearEnabled);
-  if (metadata.githubToken)         stringData.GITHUB_PERSONAL_ACCESS_TOKEN = String(metadata.githubToken);
-  if (metadata.githubEnabled)       stringData.GITHUB_ENABLED         = String(metadata.githubEnabled);
-  if (metadata.githubAuthMode)      stringData.GITHUB_AUTH_MODE       = String(metadata.githubAuthMode);
-  if (metadata.openaiApiKey)        stringData.OPENAI_API_KEY         = String(metadata.openaiApiKey);
-  if (metadata.geminiApiKey)        stringData.GEMINI_API_KEY         = String(metadata.geminiApiKey);
-  if (metadata.gatewayToken)        stringData.OPENCLAW_GATEWAY_TOKEN = String(metadata.gatewayToken);
+  if (metadata.telegramBotToken)           stringData.TELEGRAM_BOT_TOKEN    = String(metadata.telegramBotToken);
+  if (metadata.linearApiKey)               stringData.LINEAR_API_KEY         = String(metadata.linearApiKey);
+  if (metadata.linearEnabled)              stringData.LINEAR_ENABLED          = String(metadata.linearEnabled);
+  if (metadata.githubToken)                stringData.GITHUB_PERSONAL_ACCESS_TOKEN = String(metadata.githubToken);
+  if (metadata.githubEnabled)              stringData.GITHUB_ENABLED          = String(metadata.githubEnabled);
+  if (metadata.githubAuthMode)             stringData.GITHUB_AUTH_MODE        = String(metadata.githubAuthMode);
+  if (metadata.openaiApiKey)               stringData.OPENAI_API_KEY          = String(metadata.openaiApiKey);
+  if (metadata.geminiApiKey)               stringData.GEMINI_API_KEY          = String(metadata.geminiApiKey);
+  if (metadata.gatewayToken)               stringData.OPENCLAW_GATEWAY_TOKEN  = String(metadata.gatewayToken);
 
   const secretBody = {
     metadata: {
@@ -75,11 +73,12 @@ export async function applyCredentialsSecret(
   };
 
   try {
-    await coreV1.readNamespacedSecret({ name, namespace });
-    await coreV1.replaceNamespacedSecret({ name, namespace, body: secretBody });
+    await coreV1.readNamespacedSecret(name, namespace);
+    // Exists — replace
+    await coreV1.replaceNamespacedSecret(name, namespace, secretBody);
   } catch (err: any) {
-    if (err?.response?.statusCode === 404) {
-      await coreV1.createNamespacedSecret({ namespace, body: secretBody });
+    if (httpStatus(err) === 404) {
+      await coreV1.createNamespacedSecret(namespace, secretBody);
     } else {
       throw err;
     }
@@ -87,10 +86,8 @@ export async function applyCredentialsSecret(
 }
 
 /**
- * Applies the ForgeAgent Custom Resource in the workspace namespace.
- * This is the ONLY "desired state" write for agent provisioning.
- * The Agent Controller watches these CRs and reconciles all runtime resources.
- * Idempotent — creates or updates.
+ * Applies the ForgeAgent Custom Resource (create-or-replace semantics).
+ * Uses create → 409 conflict → get resourceVersion → replace to avoid PATCH Content-Type issues.
  */
 export async function applyForgeAgentCR(
   namespace: string,
@@ -98,9 +95,9 @@ export async function applyForgeAgentCR(
   workspaceId: string,
 ): Promise<void> {
   const metadata = (agent.metadata ?? {}) as Record<string, unknown>;
-  const name = agent.id; // CR name = agent UUID (deterministic)
+  const name = agent.id;
 
-  const crBody = {
+  const crBody: Record<string, unknown> = {
     apiVersion: `${FORGE_AI_GROUP}/${FORGE_AI_VERSION}`,
     kind: "Agent",
     metadata: {
@@ -129,38 +126,25 @@ export async function applyForgeAgentCR(
         requests: { cpu: "250m",  memory: "512Mi" },
         limits:   { cpu: "1000m", memory: "2Gi"   },
       },
-      persistence: {
-        size: "10Gi",
-      },
+      persistence: { size: "10Gi" },
     },
   };
 
   try {
-    await customObjects.getNamespacedCustomObject({
-      group:     FORGE_AI_GROUP,
-      version:   FORGE_AI_VERSION,
-      namespace,
-      plural:    FORGE_AI_PLURAL,
-      name,
-    });
-    // CR exists — patch spec
-    await customObjects.patchNamespacedCustomObject({
-      group:     FORGE_AI_GROUP,
-      version:   FORGE_AI_VERSION,
-      namespace,
-      plural:    FORGE_AI_PLURAL,
-      name,
-      body:      crBody,
-    }, { headers: { "Content-Type": "application/merge-patch+json" } });
+    await customObjects.createNamespacedCustomObject(
+      FORGE_AI_GROUP, FORGE_AI_VERSION, namespace, FORGE_AI_PLURAL, crBody,
+    );
   } catch (err: any) {
-    if (err?.response?.statusCode === 404) {
-      await customObjects.createNamespacedCustomObject({
-        group:     FORGE_AI_GROUP,
-        version:   FORGE_AI_VERSION,
-        namespace,
-        plural:    FORGE_AI_PLURAL,
-        body:      crBody,
-      });
+    if (httpStatus(err) === 409) {
+      // Already exists — replace (requires current resourceVersion for optimistic lock)
+      const existing = await customObjects.getNamespacedCustomObject(
+        FORGE_AI_GROUP, FORGE_AI_VERSION, namespace, FORGE_AI_PLURAL, name,
+      ) as any;
+      (crBody.metadata as any).resourceVersion = existing.metadata?.resourceVersion;
+
+      await customObjects.replaceNamespacedCustomObject(
+        FORGE_AI_GROUP, FORGE_AI_VERSION, namespace, FORGE_AI_PLURAL, name, crBody,
+      );
     } else {
       throw err;
     }
@@ -168,55 +152,57 @@ export async function applyForgeAgentCR(
 }
 
 /**
- * Deletes the ForgeAgent CR.
- * The K8s Garbage Collector cascades to all child resources (ownerReferences).
+ * Deletes the ForgeAgent CR. K8s GC cascades to all child resources (ownerReferences).
  * Idempotent — 404 is treated as success.
  */
 export async function deleteForgeAgentCR(namespace: string, agentId: string): Promise<void> {
   try {
-    await customObjects.deleteNamespacedCustomObject({
-      group:   FORGE_AI_GROUP,
-      version: FORGE_AI_VERSION,
-      namespace,
-      plural:  FORGE_AI_PLURAL,
-      name:    agentId,
-    });
+    await customObjects.deleteNamespacedCustomObject(
+      FORGE_AI_GROUP, FORGE_AI_VERSION, namespace, FORGE_AI_PLURAL, agentId,
+    );
   } catch (err: any) {
-    if (err?.response?.statusCode !== 404) throw err;
+    if (httpStatus(err) !== 404) throw err;
   }
 }
 
 /**
  * Deletes the agent credentials Secret.
- * Called alongside CR deletion during agent deprovisioning.
  */
 export async function deleteCredentialsSecret(namespace: string, agentId: string): Promise<void> {
   try {
-    await coreV1.deleteNamespacedSecret({ name: `${agentId}-creds`, namespace });
+    await coreV1.deleteNamespacedSecret(`${agentId}-creds`, namespace);
   } catch (err: any) {
-    if (err?.response?.statusCode !== 404) throw err;
+    if (httpStatus(err) !== 404) throw err;
   }
 }
 
 /**
- * Reads the live status of a ForgeAgent CR from the cluster.
- * Returns null if the CR does not exist yet.
+ * Reads the live status of a ForgeAgent CR. Returns null if not found.
  */
 export async function getForgeAgentStatus(
   namespace: string,
   agentId: string,
 ): Promise<{ phase: string; podName?: string; conditions?: unknown[] } | null> {
   try {
-    const cr = await customObjects.getNamespacedCustomObject({
-      group:   FORGE_AI_GROUP,
-      version: FORGE_AI_VERSION,
-      namespace,
-      plural:  FORGE_AI_PLURAL,
-      name:    agentId,
-    }) as any;
+    const cr = await customObjects.getNamespacedCustomObject(
+      FORGE_AI_GROUP, FORGE_AI_VERSION, namespace, FORGE_AI_PLURAL, agentId,
+    ) as any;
     return cr?.status ?? { phase: "Pending" };
   } catch (err: any) {
-    if (err?.response?.statusCode === 404) return null;
+    if (httpStatus(err) === 404) return null;
     throw err;
   }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Extracts the HTTP status code from a @kubernetes/client-node error.
+ * The error shape varies by library version; this handles both styles.
+ */
+function httpStatus(err: any): number {
+  return err?.response?.statusCode       // axios-style (older versions)
+    ?? err?.body?.code                   // K8s API body code
+    ?? err?.statusCode                   // direct property
+    ?? 0;
 }

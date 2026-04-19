@@ -36,7 +36,7 @@ internalRouter.patch(
       const [updated] = await db
         .update(agents)
         .set({ k8sStatus: phase as any, updatedAt: new Date() })
-        .where(eq(agents.id, id))
+        .where(eq(agents.id, String(id)))
         .returning({ id: agents.id, k8sStatus: agents.k8sStatus });
 
       if (!updated) {
