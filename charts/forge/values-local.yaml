@@ -43,7 +43,11 @@ web:
   env:
     NODE_ENV: development
     PORT: "3000"
-    NEXT_PUBLIC_API_URL: "http://forge.localhost/api"
+    # Server-side: Next.js pod calls forge-api via ClusterIP (pod-to-pod, internal)
+    API_INTERNAL_URL: "http://forge-api:4000"
+    # Client-side: browser calls /api/* on the same origin → Next.js rewrites to API_INTERNAL_URL
+    NEXT_PUBLIC_API_URL: "/api"
+
 
 ingress:
   enabled: true
