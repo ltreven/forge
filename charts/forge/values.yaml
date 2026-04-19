@@ -38,7 +38,13 @@ api:
   env:
     NODE_ENV: production
     PORT: "4000"
+    # In Kubernetes, ClusterIP Services route traffic via pod IP — not loopback.
+    # HOST=0.0.0.0 is required for pod-to-pod communication via the Service.
+    # Security boundary: NetworkPolicy (only forge-web can reach forge-api) + no external Ingress.
+    # The code default (127.0.0.1) applies in bare-metal dev only (outside k8s).
+    HOST: "0.0.0.0"
     # DATABASE_URL and JWT_SECRET must come from the secret referenced by existingSecret
+
 
   # Run Drizzle migrations as an init container before the API starts.
   # DISABLED: requires --migrate-only flag in apps/api/src/index.ts (not yet implemented).
