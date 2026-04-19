@@ -122,18 +122,10 @@ docker_build(
   ignore=['vendor'],
 )
 
-# ── 5c. Apply ForgeAgent CRD ─────────────────────────────────────────────────
-# IMPORTANT: Tilt's helm() does NOT process the crds/ directory automatically.
-# The CRD must be applied explicitly here so it exists before the Helm chart
-# deploys the controller and API (which reference the ForgeAgent kind).
-# This makes tilt up fully self-contained on a zero-km cluster.
-k8s_yaml('charts/forge/crds/agent.forge.ai.yaml')
-k8s_resource(
-  'agents.forge.ai',          # name = CRD metadata.name
-  labels=['crd'],
-)
-
 # ── 5. Deploy the forge Helm chart ────────────────────────────────────────────
+# Note: Tilt passes --include-crds to helm template automatically, so CRDs in
+# charts/forge/crds/ (ForgeAgent CRD) are applied as part of this step.
+# No separate kubectl apply step is needed, even on a zero-km cluster.
 k8s_yaml(
   helm(
     HELM_CHART,
