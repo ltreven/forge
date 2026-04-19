@@ -1,0 +1,48 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: forge-ingress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "forge.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    {{- if .Values.ingress.tls.certManager.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.certManager.clusterIssuer | quote }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          # Web — catch-all (must come after /api)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-web
+                port:
+                  name: http
+          # NOTE: /api is intentionally NOT routed through the Ingress.
+          # The web app calls the API internally via forge-api ClusterIP service.
+          # This keeps the API fully private to the cluster.
+{{- end }}

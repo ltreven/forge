@@ -143,3 +143,8 @@ vite.config.ts.timestamp-*
 
 .DS_Store
 **/.DS_Store
+
+# ── Tilt ──────────────────────────────────────────────────────────────────────
+# Local developer overrides (copy from tilt-settings.yaml.example)
+tilt-settings.yaml
+.tilt/
