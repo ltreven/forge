@@ -52,20 +52,13 @@ helm_resource(
   labels=['infra'],
 )
 
-# ── 2. Create a local secret from .env (if it exists) ────────────────────────
-# Reads the root .env file and creates a Kubernetes Secret in the forge namespace.
-# Only JWT_SECRET is required; DATABASE_URL is built from the embedded PostgreSQL.
+# ── 2. Ensure the forge namespace exists ─────────────────────────────────────
+# For local mode, all credentials are injected via values-local.yaml (no Secret needed).
+# DATABASE_URL is built from embedded PostgreSQL, JWT_SECRET is inlined as an env var.
 
 local_resource(
-  'create-local-secrets',
-  cmd="""
-    kubectl create namespace forge --dry-run=client -o yaml | kubectl apply -f - && \
-    kubectl create secret generic forge-api-local-secret \
-      --namespace=forge \
-      --from-env-file=.env \
-      --dry-run=client -o yaml | kubectl apply -f -
-  """,
-  deps=['.env'],
+  'ensure-namespace',
+  cmd='kubectl create namespace forge --dry-run=client -o yaml | kubectl apply -f -',
   labels=['setup'],
 )
 
@@ -140,7 +133,7 @@ k8s_resource(
 # API depends on PostgreSQL being healthy
 k8s_resource(
   'forge-api',
-  resource_deps=['forge-postgresql', 'create-local-secrets'],
+  resource_deps=['forge-postgresql', 'ensure-namespace'],
   labels=['app'],
   port_forwards=['4000:4000'],
   links=[
