@@ -13,19 +13,49 @@ Whether you are building software, running customer support, or coordinating any
 ```
 forge/
 ├── apps/
-│   ├── web/          # Next.js marketing site + onboarding UI (port 3000)
-│   └── api/          # Node.js/Express REST API (port 4000)
-├── src/
-│   └── k8s/helm/     # Helm chart for Kubernetes agent deployment
-├── Makefile          # Top-level dev commands
-└── .env.example      # Root environment variable reference
+│   ├── web/              # Next.js SaaS frontend (port 3000)
+│   │   └── tests/        # Web unit & integration tests
+│   ├── api/              # Node.js/Express REST API (port 4000)
+│   │   └── tests/        # API unit & integration tests
+│   └── agents/           # Per-tenant agent runtime (Kubernetes workload)
+│       ├── profiles/     # Agent persona markdown files (IDENTITY, SOUL, PROCESS, …)
+│       ├── helm/         # Helm chart — deploys one namespace per customer tenant
+│       │   ├── Chart.yaml
+│       │   ├── values.yaml
+│       │   ├── templates/
+│       │   └── files/bootstrap.sh
+│       └── tests/        # Agent deployment test scripts
+│
+├── docs/                 # Product vision, system overview, ADRs
+├── Makefile              # Top-level dev commands
+└── .env.example          # Root environment variable reference
+
+# Coming soon
+├── infra/                # Cross-cutting infrastructure
+│   ├── argocd/           # ArgoCD App-of-Apps + ApplicationSets
+│   ├── terraform/        # Cloud provider IaC (AWS, GCP, Azure)
+│   └── environments/     # Per-environment Helm values (dev, uat, prod)
+├── e2e/                  # Cross-system end-to-end tests
+└── .github/workflows/    # CI/CD pipelines
 ```
+
+> **Deployment convention:** each app that runs on Kubernetes will have its Dockerfile and Helm chart under a `deploy/` subfolder (e.g., `apps/web/deploy/`, `apps/api/deploy/`). ArgoCD will point to those paths per environment.
 
 **Stack:**
 - **Frontend:** Next.js 16, Tailwind CSS, shadcn/ui, i18n (EN + ZH)
 - **Backend:** Node.js, Express, Drizzle ORM, PostgreSQL, JWT auth (bcryptjs)
 - **Agents:** OpenClaw, containerized via Docker/Kubernetes, deployed via Helm
 - **Integrations:** Linear (Engineering template)
+
+---
+
+## Multi-tenant model
+
+Each paying Forge customer gets their own **isolated Kubernetes namespace**, provisioned via the Helm chart in `apps/agents/helm/`. This means:
+
+- 1 shared deployment of `apps/web` and `apps/api` (the SaaS layer)
+- N namespaces, one per customer, each running that customer's agent team
+- Future additions per namespace: RabbitMQ, dedicated PostgreSQL, Ingress, monitoring
 
 ---
 
@@ -120,7 +150,7 @@ make db-migrate     Run Drizzle migrations
 make db-seed        Seed the database with demo data
 make docker-db      Start local PostgreSQL via Docker
 
-make k8s-test       Run Helm test deployment (requires .env)
+make agents-test    Run agent Helm test deployment (requires .env)
 make clean          Remove build artifacts
 ```
 
@@ -169,13 +199,13 @@ All responses use the envelope: `{ success, data, error }`.
 
 ---
 
-## Kubernetes / Helm deployment
+## Agent Kubernetes deployment
 
-Agents are deployed as containerized OpenClaw instances via the Helm chart in `src/k8s/helm/forge/`.
+Agents are deployed as containerized OpenClaw instances via the Helm chart in `apps/agents/helm/`.
 
 ```bash
 # Quick test deployment (reads credentials from .env)
-make k8s-test
+make agents-test
 ```
 
 The Helm chart supports:
@@ -183,8 +213,9 @@ The Helm chart supports:
 - Linear MCP integration (enabled via values, Engineering template)
 - Telegram bot token for agent communication
 - Non-privileged container execution
+- One namespace per customer tenant (multi-tenant isolation)
 
-See `src/k8s/helm/forge/values.yaml` for the full configuration reference.
+See `apps/agents/helm/values.yaml` for the full configuration reference.
 
 ---
 
