@@ -19,7 +19,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
-          version: "3.17.x"
+          version: "v3.17.3"
 
       - name: Lint chart (local values)
         run: helm lint charts/forge -f charts/forge/values-local.yaml
