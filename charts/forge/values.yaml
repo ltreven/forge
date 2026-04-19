@@ -175,3 +175,14 @@ networkPolicy:
 # ── Image Pull Secrets (for ghcr.io or private registries) ───────────────────
 imagePullSecrets: []
 # - name: ghcr-pull-secret
+
+# ── Agent Controller ──────────────────────────────────────────────────────────
+controller:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/ltreven/forge-controller
+    tag: "latest"
+    pullPolicy: IfNotPresent
+

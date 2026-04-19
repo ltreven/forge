@@ -6,6 +6,7 @@ import { agentsRouter } from "./routes/agents";
 import { authRouter } from "./routes/auth";
 import { integrationsRouter } from "./routes/integrations";
 import { conversationsRouter } from "./routes/conversations";
+import { internalRouter } from "./routes/internal";
 import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
@@ -37,6 +38,10 @@ app.use("/conversations", conversationsRouter);
 
 // Nested: /teams/:id/integrations
 app.use("/teams/:id/integrations", integrationsRouter);
+
+// Internal routes — not exposed via Ingress; protected by NetworkPolicy.
+// Only reachable by the Agent Controller pod within the cluster.
+app.use("/internal", internalRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 

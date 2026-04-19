@@ -1,0 +1,54 @@
+{{- /*
+  RBAC for the Forge API pod.
+  Permissions needed:
+    - Create/read Namespaces (one per workspace)
+    - CRUD ForgeAgent CRs (agents.forge.ai) in workspace namespaces
+    - CRUD Secrets (credentials per agent) in workspace namespaces
+*/ -}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forge-api
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: forge-api
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: forge-api
+  labels:
+    app.kubernetes.io/name: forge-api
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+  # Namespace management — one per workspace (forge-ws-*)
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create"]
+  # ForgeAgent Custom Resources — desired state write
+  - apiGroups: ["forge.ai"]
+    resources: ["agents"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  # Credentials Secrets — created alongside ForgeAgent CRs
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: forge-api
+  labels:
+    app.kubernetes.io/name: forge-api
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: forge-api
+subjects:
+  - kind: ServiceAccount
+    name: forge-api
+    namespace: {{ .Values.namespace }}

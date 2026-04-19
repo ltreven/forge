@@ -22,8 +22,10 @@ settings = read_yaml("tilt-settings.yaml", default={})
 NAMESPACE      = "forge"
 HELM_CHART     = "charts/forge"
 VALUES_LOCAL   = "charts/forge/values-local.yaml"
-API_IMAGE      = settings.get("api_image", "forge/api")
-WEB_IMAGE      = settings.get("web_image", "forge/web")
+API_IMAGE        = settings.get("api_image",        "forge/api")
+WEB_IMAGE        = settings.get("web_image",        "forge/web")
+AGENT_IMAGE      = settings.get("agent_image",      "forge/agent")
+CONTROLLER_IMAGE = settings.get("controller_image", "forge/controller")
 TILT_HOST      = settings.get("host", "forge.localhost")
 
 # ── 1. Install ingress-nginx via Helm (only if not already present) ────────────
@@ -104,6 +106,22 @@ docker_build(
   # Tilt will trigger a rebuild automatically when files in apps/web/ change.
 )
 
+# ── 5a. Build forge-agent image ──────────────────────────────────────────────
+docker_build(
+  AGENT_IMAGE,
+  context='apps/agents',
+  dockerfile='apps/agents/Dockerfile',
+  ignore=['node_modules', '*.md'],
+)
+
+# ── 5b. Build forge-controller (Go) ─────────────────────────────────────────
+docker_build(
+  CONTROLLER_IMAGE,
+  context='apps/controller',
+  dockerfile='apps/controller/Dockerfile',
+  ignore=['vendor'],
+)
+
 # ── 5. Deploy the forge Helm chart ────────────────────────────────────────────
 k8s_yaml(
   helm(
@@ -116,6 +134,8 @@ k8s_yaml(
       'api.image.tag=local',
       'web.image.repository=' + WEB_IMAGE,
       'web.image.tag=local',
+      'controller.image.repository=' + CONTROLLER_IMAGE,
+      'controller.image.tag=local',
       'ingress.host=' + TILT_HOST,
     ],
   )
