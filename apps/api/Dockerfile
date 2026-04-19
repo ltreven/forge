@@ -32,9 +32,14 @@ COPY --from=builder /app/dist ./dist
 # Copy migrations so the app can run them on startup
 COPY migrations ./migrations
 
+# Install curl — required for exec-based k8s liveness/readiness probes
+# (probe: curl -sf http://127.0.0.1:4000/health)
+RUN apk add --no-cache curl
+
 # Run as non-root user
 RUN addgroup -S forge && adduser -S forge -G forge
 USER forge
+
 
 EXPOSE 4000
 

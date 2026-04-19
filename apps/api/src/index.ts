@@ -44,10 +44,15 @@ app.use(errorHandler);
 
 // ── Listen ────────────────────────────────────────────────────────────────────
 
-const HOST = process.env.HOST ?? "0.0.0.0";
+// Bind to loopback by default per security policy (GEMINI.md: "Bind to loopback only").
+// In Kubernetes, liveness/readiness probes use exec (curl on loopback) — not httpGet —
+// so the kubelet never needs to reach the pod IP directly.
+// Override with HOST=0.0.0.0 only if an explicit network exposure is required.
+const HOST = process.env.HOST ?? "127.0.0.1";
 
 app.listen(PORT, HOST, () => {
   console.log(`🚀 Forge API running on http://${HOST}:${PORT}`);
 });
+
 
 export default app;
