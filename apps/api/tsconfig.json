@@ -4,6 +4,7 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "lib": ["ES2022"],
+    "rootDir": "src",
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
@@ -11,6 +12,6 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", "seed/**/*", "drizzle.config.ts"],
-  "exclude": ["node_modules", "dist", "migrations"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "migrations", "seed"]
 }
