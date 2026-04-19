@@ -1,4 +1,4 @@
-.PHONY: help web web-install web-kill web-build api api-install db-migrate db-seed docker-db k8s-test clean
+.PHONY: help web web-install web-kill web-build api api-install db-migrate db-seed docker-db agents-test clean
 
 # Default target
 help:
@@ -20,9 +20,9 @@ help:
 	@echo "  make db-seed        Seed the database with demo data"
 	@echo "  make docker-db      Start local PostgreSQL via Docker"
 	@echo ""
-	@echo "  Kubernetes / Helm"
+	@echo "  Agents (apps/agents)"
 	@echo "  ─────────────────────────────────────"
-	@echo "  make k8s-test       Run Helm test deployment"
+	@echo "  make agents-test    Run agent Helm test deployment"
 	@echo ""
 	@echo "  Utilities"
 	@echo "  ─────────────────────────────────────"
@@ -67,10 +67,10 @@ docker-db:
 		-p 5432:5432 \
 		postgres:16-alpine
 
-# ── Kubernetes / Helm ──────────────────────────────────────────────────────────
+# ── Agents ────────────────────────────────────────────────────────────────────
 
-k8s-test:
-	bash src/test/test-simple.sh
+agents-test:
+	bash apps/agents/tests/test-simple.sh
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
