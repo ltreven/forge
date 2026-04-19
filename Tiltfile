@@ -107,55 +107,34 @@ docker_build(
 )
 
 # ── 5a. Build forge-agent image ──────────────────────────────────────────────
-# docker_build() builds the image AND loads it into the k8s node's containerd
-# via Tilt's injection mechanism. This works because of the DaemonSet below
-# that references the image — Tilt needs ≥1 k8s resource to associate the image
-# with so it knows to load it into the cluster.
-docker_build(
-  AGENT_IMAGE,
-  context='apps/agents',
-  dockerfile='apps/agents/Dockerfile',
-  ignore=['*.md'],
+# Problem: Tilt's docker_build() substitutes image tags internally (tilt-XXXX),
+# but the Go controller uses 'forge/agent:local' literally. The DaemonSet trick
+# doesn't work because Tilt rewrites the tag there too.
+#
+# Solution: build with docker build, then use nsenter to import the image
+# directly into Docker Desktop's containerd k8s.io namespace with the exact
+# 'forge/agent:local' tag. This is the standard approach for Docker Desktop.
+local_resource(
+  'forge-agent-image',
+  cmd="""
+    set -e
+    echo '[forge-agent] Building image...'
+    docker build -t forge/agent:local apps/agents -f apps/agents/Dockerfile
+    echo '[forge-agent] Importing into k8s containerd...'
+    docker save forge/agent:local | docker run --rm -i --privileged --pid=host \
+      alpine nsenter -t 1 -m -- sh -c \
+      'ctr -n k8s.io images import - 2>&1 || \\
+       (echo "ctr import failed, trying crictl..."; \
+        crictl -r unix:///var/run/containerd/containerd.sock pull --creds="" forge/agent:local 2>&1 || true)'
+    echo '[forge-agent] Done — forge/agent:local available in k8s containerd'
+  """,
+  deps=[
+    'apps/agents/Dockerfile',
+    'apps/agents/bootstrap.sh',
+    'apps/agents/profiles',
+  ],
+  labels=['agent'],
 )
-
-# Preload DaemonSet: exists solely so Tilt loads forge/agent:local into the
-# node's containerd. Agent pods in forge-ws-* namespaces use pullPolicy=Never
-# and need the image pre-loaded. The pod runs a no-op sleep loop (8Mi RAM).
-k8s_yaml(blob("""
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: forge-agent-preload
-  namespace: forge
-  labels:
-    app.kubernetes.io/name: forge-agent-preload
-    app.kubernetes.io/managed-by: tilt
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: forge-agent-preload
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: forge-agent-preload
-    spec:
-      tolerations:
-        - operator: Exists
-      terminationGracePeriodSeconds: 1
-      containers:
-        - name: preload
-          image: {agent_image}
-          command: ["sh", "-c", "echo 'forge-agent image loaded on node'; exec sleep infinity"]
-          resources:
-            requests:
-              memory: "8Mi"
-              cpu: "5m"
-            limits:
-              memory: "32Mi"
-              cpu: "50m"
-""".format(agent_image=AGENT_IMAGE)))
-
-k8s_resource('forge-agent-preload', labels=['agent'])
 
 # ── 5b. Build forge-controller (Go) ─────────────────────────────────────────
 docker_build(
