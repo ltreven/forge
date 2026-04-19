@@ -1,0 +1,61 @@
+# ── Local Development Overrides (docker-desktop) ──────────────────────────────
+# Used by: tilt up, helm install ... -f values-local.yaml
+
+namespace: forge
+
+api:
+  replicaCount: 1
+  image:
+    repository: forge/api
+    tag: local         # built by Tilt from apps/api/Dockerfile
+    pullPolicy: Never  # never pull — always use local image built by Tilt
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: "200m"
+      memory: 256Mi
+  env:
+    NODE_ENV: development
+    PORT: "4000"
+    CORS_ORIGIN: "http://forge.localhost,http://localhost:3000"
+  # Local secret is created by the Tiltfile from .env
+  existingSecret: forge-api-local-secret
+  runMigrations: true
+
+web:
+  replicaCount: 1
+  image:
+    repository: forge/web
+    tag: local
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: "200m"
+      memory: 256Mi
+  env:
+    NODE_ENV: development
+    PORT: "3000"
+    NEXT_PUBLIC_API_URL: "http://forge.localhost/api"
+
+ingress:
+  enabled: true
+  className: nginx
+  host: forge.localhost
+  tls:
+    enabled: false
+
+postgresql:
+  embedded: true
+  password: forge_local_only
+  persistence:
+    enabled: true
+    size: 2Gi
+
+networkPolicy:
+  # Disable NetworkPolicy locally — Docker Desktop doesn't enforce them well
+  enabled: false
