@@ -17,6 +17,8 @@ spec:
       labels:
         {{- include "forge.api.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: forge-api
+      automountServiceAccountToken: true
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
