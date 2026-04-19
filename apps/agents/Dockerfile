@@ -9,10 +9,8 @@ COPY profiles/ /opt/forge/profiles/
 
 # ── bootstrap entrypoint ──────────────────────────────────────────────────────
 # The bootstrap script is also baked into the image.
-# The ConfigMap mounts a thin exec wrapper at /bootstrap/bootstrap.sh
-# that delegates here — keeping the ConfigMap stable across image versions.
-COPY helm/files/bootstrap.sh /opt/forge/bootstrap.sh
-RUN chmod +x /opt/forge/bootstrap.sh
+# --chmod=755 sets permissions at copy time (BuildKit) — avoids needing root.
+COPY --chmod=755 helm/files/bootstrap.sh /opt/forge/bootstrap.sh
 
 # ── MCP packages (pre-installed — no npm install at runtime) ──────────────────
 # Installing here avoids network calls during agent startup and makes
