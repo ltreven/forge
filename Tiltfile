@@ -107,11 +107,20 @@ docker_build(
 )
 
 # ── 5a. Build forge-agent image ──────────────────────────────────────────────
-docker_build(
-  AGENT_IMAGE,
-  context='apps/agents',
-  dockerfile='apps/agents/Dockerfile',
-  ignore=['node_modules', '*.md'],
+# IMPORTANT: docker_build() only fires when a Tilt-managed k8s resource uses
+# the image. Since forge-agent pods are created by the Go controller in
+# forge-ws-* namespaces (outside Tilt's scope), docker_build() would NEVER run.
+# local_resource() builds directly and always produces forge/agent:local in the
+# Docker daemon, which Docker Desktop's k8s sees immediately (pullPolicy=Never).
+local_resource(
+  'forge-agent-image',
+  cmd='docker build -t {} apps/agents -f apps/agents/Dockerfile'.format(AGENT_IMAGE),
+  deps=[
+    'apps/agents/Dockerfile',
+    'apps/agents/bootstrap.sh',
+    'apps/agents/profiles',
+  ],
+  labels=['agent'],
 )
 
 # ── 5b. Build forge-controller (Go) ─────────────────────────────────────────
