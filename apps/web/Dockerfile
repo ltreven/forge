@@ -14,18 +14,23 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build-time arg: destination for the /api/* rewrite (Next.js bakes rewrites at build time).
-# In Kubernetes: forge-api is the ClusterIP service name (pod-to-pod routing).
-# In local bare-metal dev: omit or set to http://localhost:4000.
+# Build-time args:
+# API_INTERNAL_URL: destination for Next.js rewrites() — baked at build time.
+#   In k8s:  http://forge-api:4000 (ClusterIP, pod-to-pod)
+#   In bare-metal dev: http://localhost:4000 (default fallback)
+# NEXT_PUBLIC_API_URL: URL the browser will call — also baked into the client bundle.
+#   In k8s:  /api  (relative path, goes through Next.js rewrite proxy)
+#   In bare-metal dev: http://localhost:4000 (direct)
 ARG API_INTERNAL_URL=http://forge-api:4000
+ARG NEXT_PUBLIC_API_URL=/api
 
 # Disable telemetry during build
 ENV NEXT_TELEMETRY_DISABLED=1
-# Make the ARG available to next.config.mjs during build
+# Expose build args as env vars for next.config.mjs and client bundle
 ENV API_INTERNAL_URL=${API_INTERNAL_URL}
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 RUN npm run build
-
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 FROM node:22-alpine AS runtime

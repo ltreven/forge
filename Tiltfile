@@ -86,18 +86,22 @@ docker_build(
   WEB_IMAGE,
   context='apps/web',
   dockerfile='apps/web/Dockerfile',
+  # Build args: baked into the Next.js bundle at build time.
+  # NEXT_PUBLIC_API_URL → relative path used by browser, routed through Next.js rewrite proxy.
+  # API_INTERNAL_URL    → ClusterIP used by the Next.js server to reach the API pod.
+  build_args={
+    'NEXT_PUBLIC_API_URL': '/api',
+    'API_INTERNAL_URL': 'http://forge-api:4000',
+  },
   ignore=[
     'node_modules',
     '.next',
     '*.md',
   ],
-  live_update=[
-    # Sync Next.js app directory for HMR (Next.js dev server handles the rest)
-    sync('apps/web/app', '/app/app'),
-    sync('apps/web/components', '/app/components'),
-    sync('apps/web/lib', '/app/lib'),
-    sync('apps/web/public', '/app/public'),
-  ],
+  # NOTE: live_update is disabled for the web in standalone mode.
+  # Next.js standalone bakes configuration at build time (rewrites, env vars),
+  # so file syncs cannot update them — a full image rebuild is required.
+  # Tilt will trigger a rebuild automatically when files in apps/web/ change.
 )
 
 # ── 5. Deploy the forge Helm chart ────────────────────────────────────────────
