@@ -1,0 +1,101 @@
+name: Build & Push (dev → ghcr.io)
+
+on:
+  push:
+    branches: [dev]
+
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  ORG: ${{ github.repository_owner }}
+
+jobs:
+  build-and-push:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # required for ghcr.io push
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.ORG }}/forge-api
+            ${{ env.REGISTRY }}/${{ env.ORG }}/forge-web
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+
+      - name: Build & push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/api
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.ORG }}/forge-api:${{ github.sha }},${{ env.REGISTRY }}/${{ env.ORG }}/forge-api:dev-latest
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/web
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.ORG }}/forge-web:${{ github.sha }},${{ env.REGISTRY }}/${{ env.ORG }}/forge-web:dev-latest
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Deploy to UAT — DISABLED until Terraform provisions the cluster ──────────
+  # Uncomment this job when the UAT cluster is ready.
+  #
+  # deploy-uat:
+  #   name: Deploy to UAT
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   environment: uat
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Set up Helm
+  #       uses: azure/setup-helm@v4
+  #       with:
+  #         version: "3.17.x"
+  #
+  #     - name: Configure kubectl (from secret)
+  #       run: |
+  #         echo "${{ secrets.UAT_KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+  #         echo "KUBECONFIG=/tmp/kubeconfig" >> $GITHUB_ENV
+  #
+  #     - name: Helm upgrade UAT
+  #       run: |
+  #         helm upgrade --install forge charts/forge \
+  #           --namespace forge-uat \
+  #           --create-namespace \
+  #           -f charts/forge/values-uat.yaml \
+  #           --set api.image.tag=${{ github.sha }} \
+  #           --set web.image.tag=${{ github.sha }} \
+  #           --wait --timeout 5m

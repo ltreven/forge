@@ -1,0 +1,161 @@
+# ── Global ────────────────────────────────────────────────────────────────────
+# These are the base defaults. Override via values-local.yaml / values-uat.yaml / values-prod.yaml
+
+nameOverride: ""
+fullnameOverride: ""
+
+namespace: forge
+
+# ── API ───────────────────────────────────────────────────────────────────────
+api:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: forge/api
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  # Port the Express server listens on
+  port: 4000
+
+  service:
+    type: ClusterIP
+    port: 4000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "500m"
+      memory: 512Mi
+
+  # Environment variables injected from a Kubernetes Secret.
+  # The secret must be created separately (see charts/forge/templates/api/SECRETS.md)
+  existingSecret: ""
+
+  env:
+    NODE_ENV: production
+    PORT: "4000"
+    # DATABASE_URL and JWT_SECRET must come from the secret referenced by existingSecret
+
+  # Run Drizzle migrations as an init container before the API starts
+  runMigrations: true
+
+  # Liveness / readiness probes
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 4000
+    initialDelaySeconds: 15
+    periodSeconds: 20
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 4000
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+# ── Web ───────────────────────────────────────────────────────────────────────
+web:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: forge/web
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  port: 3000
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "500m"
+      memory: 512Mi
+
+  env:
+    NODE_ENV: production
+    PORT: "3000"
+    # NEXT_PUBLIC_API_URL is set per-environment in values-*.yaml
+
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 20
+    periodSeconds: 30
+
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  host: forge.localhost
+  tls:
+    enabled: false
+    secretName: forge-tls
+    certManager:
+      enabled: false
+      clusterIssuer: letsencrypt-prod
+
+  annotations: {}
+
+# ── PostgreSQL (embedded — for local/dev only) ────────────────────────────────
+postgresql:
+  # Set to true to deploy PostgreSQL as a StatefulSet inside the cluster.
+  # Set to false in UAT/Prod and provide externalConnectionString via a Secret.
+  embedded: true
+
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+
+  database: forge
+  username: forge
+
+  # For embedded mode: the password is stored in a generated secret.
+  # Do NOT use this in production — use externalConnectionString via a Secret instead.
+  password: forge_local_only
+
+  port: 5432
+
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "500m"
+      memory: 512Mi
+
+# ── Network Policies ──────────────────────────────────────────────────────────
+networkPolicy:
+  # Enforce strict ingress/egress rules on the API pod.
+  # The API is only reachable from the web pod — never from outside the cluster.
+  enabled: true
+
+# ── Image Pull Secrets (for ghcr.io or private registries) ───────────────────
+imagePullSecrets: []
+# - name: ghcr-pull-secret
