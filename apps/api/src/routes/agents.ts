@@ -58,7 +58,6 @@ agentsRouter.post("/", async (req: Request, res: Response, next: NextFunction) =
       .values({
         ...input,
         k8sStatus: "pending",
-        k8sResourceName: undefined, // will be set after CR creation
       })
       .returning();
 
