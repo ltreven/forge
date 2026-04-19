@@ -1,4 +1,5 @@
-.PHONY: help web web-install web-kill web-build api api-install db-migrate db-seed docker-db agents-test clean
+.PHONY: help web web-install web-kill web-build api api-install db-migrate db-seed docker-db agents-test \
+        tilt-up tilt-down k8s-lint k8s-render k8s-namespace clean
 
 # Default target
 help:
@@ -23,6 +24,14 @@ help:
 	@echo "  Agents (apps/agents)"
 	@echo "  ─────────────────────────────────────"
 	@echo "  make agents-test    Run agent Helm test deployment"
+	@echo ""
+	@echo "  Kubernetes / Tilt (FOR-53)"
+	@echo "  ─────────────────────────────────────"
+	@echo "  make tilt-up        Start local k8s dev environment (Tilt)"
+	@echo "  make tilt-down      Stop Tilt and clean up local k8s resources"
+	@echo "  make k8s-lint       Lint the Helm chart (all environments)"
+	@echo "  make k8s-render     Render Helm templates for local (dry-run)"
+	@echo "  make k8s-namespace  Create the forge namespace (one-time setup)"
 	@echo ""
 	@echo "  Utilities"
 	@echo "  ─────────────────────────────────────"
@@ -72,8 +81,37 @@ docker-db:
 agents-test:
 	bash apps/agents/tests/test-simple.sh
 
+# ── Kubernetes / Tilt ─────────────────────────────────────────────────────────
+
+## Start the full local k8s environment via Tilt (docker-desktop context required)
+tilt-up:
+	tilt up
+
+## Stop Tilt and remove all deployed resources from the local cluster
+tilt-down:
+	tilt down
+
+## Lint the Helm chart against all environment values files
+k8s-lint:
+	@echo "→ Linting chart with values-local.yaml..."
+	helm lint charts/forge -f charts/forge/values-local.yaml
+	@echo "→ Linting chart with values-uat.yaml..."
+	helm lint charts/forge -f charts/forge/values-uat.yaml --set api.image.tag=lint --set web.image.tag=lint
+	@echo "→ Linting chart with values-prod.yaml..."
+	helm lint charts/forge -f charts/forge/values-prod.yaml --set api.image.tag=lint --set web.image.tag=lint
+	@echo "✓ All Helm lints passed"
+
+## Render and print Helm templates for local (useful for debugging)
+k8s-render:
+	helm template forge charts/forge -f charts/forge/values-local.yaml
+
+## Create the forge namespace (idempotent — safe to run multiple times)
+k8s-namespace:
+	kubectl create namespace forge --dry-run=client -o yaml | kubectl apply -f -
+
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
 clean: web-kill
 	rm -rf apps/web/.next apps/api/dist
 	@echo "✓ Clean done"
+
