@@ -74,4 +74,8 @@ controller:
     repository: forge/controller
     tag: local
     pullPolicy: Never
-
+  # Image the controller will use for agent Pods.
+  # In local dev: built by Tilt with pullPolicy=Never.
+  # In prod: override with the published ghcr.io reference.
+  agentImage: "forge/agent:local"
+  agentImagePullPolicy: "Never"
