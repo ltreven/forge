@@ -199,7 +199,137 @@ All responses use the envelope: `{ success, data, error }`.
 
 ---
 
-## Agent Kubernetes deployment
+## 🚀 Local Kubernetes development (Tilt + Docker Desktop)
+
+This is the recommended workflow to develop and test the full stack (Web + API + PostgreSQL) locally inside Kubernetes, mirroring the production environment.
+
+### One-time setup (do once, ever)
+
+```bash
+# 1. Enable Kubernetes in Docker Desktop
+#    Docker Desktop → Settings → Kubernetes → Enable Kubernetes → Apply
+
+# 2. Install Tilt
+brew install tilt
+
+# 3. Confirm Helm is in your PATH (add to ~/.zshrc if needed)
+echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+helm version --short   # should show v3.x or v4.x
+```
+
+### Daily workflow
+
+```bash
+# 1. Switch kubectl context to Docker Desktop (only needed if you use multiple clusters)
+kubectl config use-context docker-desktop
+
+# 2. Start everything (builds images, deploys to local k8s, opens dashboard)
+cd /path/to/forge
+tilt up
+
+# 3. Open the Tilt dashboard (auto-opens, or navigate manually)
+open http://localhost:10350
+
+# 4. When done for the day — stop Tilt and remove cluster resources
+tilt down
+```
+
+> **Context tip:** Docker Desktop persists the `docker-desktop` Kubernetes context permanently. You only need `kubectl config use-context docker-desktop` if you've been working with another cluster (e.g., a cloud cluster) and need to switch back.
+
+### What Tilt does automatically
+
+| Step | What happens |
+|---|---|
+| Detects file changes | Syncs changed files directly into running pods (live_update) |
+| `apps/api/src/**` changed | TypeScript recompiled inside pod → API restarts in ~3s |
+| `apps/web/app/**` changed | Files synced → Next.js HMR picks it up in ~2s |
+| `charts/forge/**` changed | Rerenders Helm templates → applies diff to cluster |
+| `apps/api/Dockerfile` changed | Full image rebuild → redeploy |
+
+### Accessing the services
+
+| Service | URL | Notes |
+|---|---|---|
+| **Web** | http://forge.localhost | via Ingress (NGINX) |
+| **Web** (direct) | http://localhost:3000 | via Tilt port-forward |
+| **API health** | http://localhost:4000/health | `{"status":"ok"}` |
+| **PostgreSQL** | `localhost:5432` | user: `forge` / pass: `forge_local_only` |
+| **Tilt dashboard** | http://localhost:10350 | logs, status, live_update |
+
+### Troubleshooting commands
+
+```bash
+# --- Pod status ---
+kubectl get pods -n forge                          # list all pods and their state
+kubectl get pods -n forge -w                       # watch for changes (Ctrl+C to exit)
+
+# --- Logs ---
+kubectl logs -n forge deployment/forge-api -f      # API logs (follow)
+kubectl logs -n forge deployment/forge-web -f      # Web logs (follow)
+kubectl logs -n forge statefulset/forge-postgresql  # PostgreSQL logs
+
+# --- Pod details (when a pod won't start) ---
+kubectl describe pod -n forge -l app.kubernetes.io/name=forge-api
+kubectl describe pod -n forge -l app.kubernetes.io/name=forge-web
+
+# --- Quick health checks ---
+curl http://localhost:4000/health                   # API health (via port-forward)
+curl -I http://forge.localhost                      # Web via Ingress
+
+# --- Connect to PostgreSQL (for manual queries) ---
+kubectl exec -n forge statefulset/forge-postgresql -- \
+  psql -U forge -d forge
+
+# --- Force a pod restart without full rebuild ---
+kubectl rollout restart -n forge deployment/forge-api
+kubectl rollout restart -n forge deployment/forge-web
+
+# --- Check ingress ---
+kubectl get ingress -n forge
+kubectl get pods -n ingress-nginx
+
+# --- Nuclear option: full reset ---
+tilt down && tilt up
+# Or wipe the namespace entirely (DB data will be lost):
+kubectl delete namespace forge
+tilt up
+```
+
+### Chart management
+
+```bash
+# Lint the Helm chart (all environments)
+make k8s-lint
+
+# Render templates as YAML (dry-run — useful for debugging)
+make k8s-render
+
+# Lint only
+helm lint charts/forge -f charts/forge/values-local.yaml
+```
+
+### Architecture in local mode
+
+```
+Your browser
+     │
+     ▼
+forge.localhost (port 80)
+     │  NGINX Ingress (ingress-nginx namespace)
+     ▼
+forge-web:3000  (ClusterIP)     ← Next.js
+     │
+     │ internal cluster call
+     ▼
+forge-api:4000  (ClusterIP, never exposed externally)  ← Express/TS
+     │
+     ▼
+forge-postgresql:5432 (ClusterIP)  ← PostgreSQL 16
+```
+
+The API has **no Ingress rule** — it is only reachable from within the cluster (from the web pod). This mirrors the production security model.
+
+
 
 Agents are deployed as containerized OpenClaw instances via the Helm chart in `apps/agents/helm/`.
 
