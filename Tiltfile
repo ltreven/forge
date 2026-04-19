@@ -136,7 +136,6 @@ data:
   pullPolicy: "IfNotPresent"
 """.format(image=AGENT_IMAGE)))
 
-k8s_resource('forge-agent-image', labels=['agent'])
 
 # ── 5b. Build forge-controller (Go) ─────────────────────────────────────────
 docker_build(
