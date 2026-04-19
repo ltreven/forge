@@ -10,25 +10,18 @@ import (
 )
 
 const (
-	defaultImage      = "ghcr.io/ltreven/forge-agent"
-	defaultTag        = "latest"
-	defaultPullPolicy = corev1.PullIfNotPresent
-
 	// Gateway port exposed by openclaw inside the container (loopback only).
 	gatewayPort = int32(18789)
 )
 
 // AgentDeployment builds the Deployment for a ForgeAgent CR.
 //
-// Structure mirrors apps/agents/helm/templates/deployment.yaml:
-//   - initContainer "bootstrap-forge": runs bootstrap.sh to seed the PVC on first boot
-//   - container "forge": runs `openclaw gateway run`
-//
-// All child resources carry ownerRef → ForgeAgent CR so K8s GC handles cleanup.
-// Security posture: non-root, read-only rootfs on main container, all caps dropped.
-func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference) *appsv1.Deployment {
-	image, tag, pullPolicy := resolveImage(cr)
-	fullImage := image + ":" + tag
+// agentImage is the full image reference (repo:tag) passed from the controller config.
+// pullPolicy is the ImagePullPolicy string (Always|IfNotPresent|Never).
+// If the CR spec overrides these, the CR values take precedence.
+func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, agentImage, pullPolicy string) *appsv1.Deployment {
+	image, policy := resolveImage(cr, agentImage, pullPolicy)
+	fullImage := image
 
 	// Resource defaults — overridden by CR spec if present
 	requests := corev1.ResourceList{
@@ -168,7 +161,7 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference) *
 						{
 							Name:            "bootstrap-forge",
 							Image:           fullImage,
-							ImagePullPolicy: pullPolicy,
+							ImagePullPolicy: policy,
 							Command:         []string{"sh", "/bootstrap/bootstrap.sh"},
 							Env:             initEnv,
 							VolumeMounts:    initMounts,
@@ -187,7 +180,7 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference) *
 						{
 							Name:            "forge",
 							Image:           fullImage,
-							ImagePullPolicy: pullPolicy,
+							ImagePullPolicy: policy,
 							Command:         []string{"node", "/app/dist/index.js", "gateway", "run"},
 							Ports: []corev1.ContainerPort{
 								{Name: "gateway", ContainerPort: gatewayPort},
@@ -215,20 +208,23 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference) *
 	}
 }
 
-func resolveImage(cr *forgev1alpha1.Agent) (string, string, corev1.PullPolicy) {
-	img, tag, policy := defaultImage, defaultTag, defaultPullPolicy
+func resolveImage(cr *forgev1alpha1.Agent, defaultImage, defaultPullPolicy string) (string, corev1.PullPolicy) {
+	img := defaultImage
+	policy := corev1.PullPolicy(defaultPullPolicy)
+	if policy == "" {
+		policy = corev1.PullIfNotPresent
+	}
 	if cr.Spec.Image != nil {
-		if cr.Spec.Image.Repository != "" {
+		if cr.Spec.Image.Repository != "" && cr.Spec.Image.Tag != "" {
+			img = cr.Spec.Image.Repository + ":" + cr.Spec.Image.Tag
+		} else if cr.Spec.Image.Repository != "" {
 			img = cr.Spec.Image.Repository
-		}
-		if cr.Spec.Image.Tag != "" {
-			tag = cr.Spec.Image.Tag
 		}
 		if cr.Spec.Image.PullPolicy != "" {
 			policy = corev1.PullPolicy(cr.Spec.Image.PullPolicy)
 		}
 	}
-	return img, tag, policy
+	return img, policy
 }
 
 // envFromSecret builds an EnvVar that reads from a named Secret key.

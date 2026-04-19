@@ -23,8 +23,10 @@ import (
 // AgentReconciler reconciles ForgeAgent CRs across all namespaces.
 type AgentReconciler struct {
 	client.Client
-	Scheme     *runtime.Scheme
-	APIBaseURL string // e.g. "http://forge-api:4000"
+	Scheme               *runtime.Scheme
+	APIBaseURL           string // e.g. "http://forge-api:4000"
+	AgentImage           string // full image ref: repo:tag
+	AgentImagePullPolicy string // Always | IfNotPresent | Never
 }
 
 // SetupWithManager registers the reconciler with the controller-runtime Manager.
@@ -81,7 +83,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// ── 3. Reconcile Deployment ──────────────────────────────────────────────
 	logger.Info("reconciling Deployment")
-	desiredDeploy := resources.AgentDeployment(&cr, ownerRef)
+	desiredDeploy := resources.AgentDeployment(&cr, ownerRef, r.AgentImage, r.AgentImagePullPolicy)
 	if err := r.createOrUpdateDeployment(ctx, desiredDeploy); err != nil {
 		return r.failWith(ctx, &cr, "DeploymentFailed", err)
 	}
