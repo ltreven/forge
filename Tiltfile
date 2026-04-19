@@ -24,7 +24,7 @@ HELM_CHART     = "charts/forge"
 VALUES_LOCAL   = "charts/forge/values-local.yaml"
 API_IMAGE        = settings.get("api_image",        "forge/api")
 WEB_IMAGE        = settings.get("web_image",        "forge/web")
-AGENT_IMAGE      = settings.get("agent_image",      "forge/agent")
+AGENT_IMAGE      = settings.get("agent_image",      "forge/agent:local")
 CONTROLLER_IMAGE = settings.get("controller_image", "forge/controller")
 TILT_HOST      = settings.get("host", "forge.localhost")
 
