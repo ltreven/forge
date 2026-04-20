@@ -20,7 +20,7 @@ settings = read_yaml("tilt-settings.yaml", default={})
 
 # ── Load platform credentials from .env (gitignored, never committed) ────────────
 # Copy .env.example to .env and fill in real values.
-dotenv = read_file(".env", default="").splitlines()
+dotenv = str(read_file(".env", default="")).splitlines()
 def _parse_dotenv(lines):
   env = {}
   for line in lines:
