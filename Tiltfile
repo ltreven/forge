@@ -43,6 +43,7 @@ VALUES_LOCAL   = "charts/forge/values-local.yaml"
 API_IMAGE        = settings.get("api_image",        "forge/api")
 WEB_IMAGE        = settings.get("web_image",        "forge/web")
 AGENT_IMAGE      = settings.get("agent_image",      "forge/agent:local")
+CONSUMER_IMAGE   = settings.get("consumer_image",   "forge/consumer:local")
 CONTROLLER_IMAGE = settings.get("controller_image", "forge/controller")
 TILT_HOST      = settings.get("host", "forge.localhost")
 
@@ -66,6 +67,20 @@ helm_resource(
   ],
   resource_deps=[],
   labels=['infra'],
+)
+
+# ── 1b. RabbitMQ Cluster Operator ────────────────────────────────────────────
+# Installed via the official manifest (kubectl apply) from GitHub releases.
+# This is the recommended approach from the RabbitMQ docs.
+# The Operator watches RabbitmqCluster CRs and manages the StatefulSet lifecycle.
+#
+# We use local_resource instead of helm_resource because the public Helm chart
+# URL is frequently unavailable. The manifest includes the CRD + RBAC + Deployment.
+local_resource(
+  'rabbitmq-operator',
+  cmd='kubectl apply -f "https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml"',
+  labels=['infra'],
+  deps=[],
 )
 
 # ── 2. Ensure the forge namespace exists ─────────────────────────────────────
@@ -137,22 +152,75 @@ docker_build(
 )
 
 # ── 5a. Build forge-agent image ──────────────────────────────────────────────
-# docker_build registers the image with Tilt. Tilt SUBSTITUTES the tag from
-# forge/agent:local → forge/agent:tilt-XXXX (the actual built digest) in any
-# k8s_yaml it manages that references this image.
-# The ConfigMap below carries the substituted tag. The Go controller reads it,
-# so agent pods always use the exact image Tilt has loaded into k8s containerd.
-# pullPolicy: IfNotPresent (not Never) — safe since the image is from a build.
+# Root cause of stale-image problem:
+#   `docker build` writes to containerd's "default" namespace.
+#   Docker Desktop Kubernetes reads from the "k8s.io" namespace.
+#   These are separate — plain docker build is invisible to Kubernetes.
+#
+# Tilt's docker_build *does* load images into k8s.io via its cluster connector,
+# but only for images it considers "used" in a k8s resource (container image field).
+#
+# Solution:
+#   1. docker_build so Tilt builds and loads the image into k8s.io containerd.
+#   2. A 0-replica Deployment ("preloader") with forge/agent:local — Tilt
+#      substitutes this with the tilt-tagged digest and loads it into k8s.io.
+#   3. local_resource reads the substituted tag from the preloader and patches
+#      forge-agent-image ConfigMap → controller uses the exact loaded digest.
 docker_build(
   AGENT_IMAGE,
   context='apps/agents',
   dockerfile='apps/agents/Dockerfile',
-  ignore=['*.md'],
 )
 
-# ConfigMap in forge namespace that holds the current agent image ref.
-# Tilt will substitute AGENT_IMAGE here → the exact tilt-tagged digest.
-# The Go controller reads this to build agent Deployments.
+# 1-replica preloader: forces Tilt to load forge/agent into k8s.io containerd.
+# replicas:0 makes Tilt substitute the tag but does NOT trigger k8s.io loading
+# (no pod needs to run). With replicas:1 + a trivial sleep command, Tilt sees
+# a real pod that needs the image and loads it into k8s.io.
+# pullPolicy: IfNotPresent allows Docker Desktop's bridge to serve the image
+# on first pull if k8s.io hasn't synced yet.
+k8s_yaml(blob("""
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-agent-preloader
+  namespace: forge
+  labels:
+    app.kubernetes.io/managed-by: tilt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: forge-agent-preloader
+  template:
+    metadata:
+      labels:
+        app: forge-agent-preloader
+    spec:
+      containers:
+      - name: agent-preloader
+        image: {image}
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+""".format(image=AGENT_IMAGE)))
+
+k8s_resource('forge-agent-preloader', pod_readiness='ignore', labels=['images'])
+
+# Sync the tilt-substituted image tag into the ConfigMap the controller reads.
+local_resource(
+  'forge-agent-configmap-sync',
+  cmd="""
+    IMG=$(kubectl get deployment forge-agent-preloader -n forge \\
+      -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+    if [ -z "$IMG" ]; then echo "==> preloader not ready, skipping"; exit 0; fi
+    kubectl patch configmap forge-agent-image -n forge \\
+      -p '{"data":{"image":"'"$IMG"'","pullPolicy":"IfNotPresent"}}'
+    echo "==> forge-agent-image ConfigMap => $IMG"
+  """,
+  resource_deps=['forge-agent-preloader'],
+  labels=['images'],
+)
+
+# Initial placeholder ConfigMap — value is overwritten by forge-agent-configmap-sync.
 k8s_yaml(blob("""
 apiVersion: v1
 kind: ConfigMap
@@ -165,6 +233,73 @@ data:
   image: "{image}"
   pullPolicy: "IfNotPresent"
 """.format(image=AGENT_IMAGE)))
+
+
+
+# ── 5b. Build forge-consumer image ────────────────────────────────────────────────
+docker_build(
+  CONSUMER_IMAGE,
+  context='apps/consumer',
+  dockerfile='apps/consumer/Dockerfile',
+  ignore=['node_modules', 'dist'],
+  live_update=[
+    sync('apps/consumer/src', '/app/src'),
+  ],
+)
+
+# NOTE: The forge-consumer-image ConfigMap is intentionally applied with an EMPTY
+# image value. This gives Tilt ownership of the ConfigMap (so tilt down cleans it),
+# while keeping consumerImage="" so the controller skips sidecar injection.
+#
+# To enable the sidecar (FOR-26 Phase 2), change "" to CONSUMER_IMAGE below
+# AFTER forge-rabbit is Running and the consumer build passes:
+k8s_yaml(blob("""
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forge-consumer-image
+  namespace: forge
+  labels:
+    app.kubernetes.io/managed-by: tilt
+data:
+  image: ""
+  pullPolicy: "Never"
+"""))
+
+
+# ── RabbitmqCluster CR ───────────────────────────────────────────────────────────────
+# Applied DIRECTLY here (not in Helm) because Tilt can't load CRD-backed resources
+# from helm template before the Operator installs the CRD.
+# Tilt sees this as a known resource named 'forge-rabbit' and applies it in the
+# correct order via resource_deps=['rabbitmq-operator'].
+k8s_yaml(blob("""
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: forge-rabbit
+  namespace: infra-messaging
+  labels:
+    app.kubernetes.io/managed-by: tilt
+    forge.ai/component: message-bus
+spec:
+  replicas: 1
+  persistence:
+    storage: 2Gi
+  rabbitmq:
+    additionalPlugins:
+      - rabbitmq_management
+      - rabbitmq_prometheus
+    additionalConfig: |
+      default_vhost = /
+      log.console = true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "300m"
+      memory: 256Mi
+"""))
 
 
 # ── 5b. Build forge-controller (Go) ─────────────────────────────────────────
@@ -210,7 +345,18 @@ k8s_resource(
   port_forwards=['5432:5432'],
 )
 
-# API depends on PostgreSQL being healthy
+# RabbitMQ cluster — the RabbitmqCluster CR is a non-workload CRD resource.
+# Tilt requires the objects= syntax to reference it by name.
+# Port-forwards to the management UI are done separately by targeting the
+# Service created by the Operator (forge-rabbit-management, port 15672).
+k8s_resource(
+  objects=['forge-rabbit:RabbitmqCluster:infra-messaging'],
+  new_name='forge-rabbit',
+  resource_deps=['rabbitmq-operator'],
+  labels=['infra'],
+)
+
+# API depends on PostgreSQL only at startup; RabbitMQ connection is lazy in the app
 k8s_resource(
   'forge-api',
   resource_deps=['forge-postgresql', 'db-migrate', 'ensure-namespace'],

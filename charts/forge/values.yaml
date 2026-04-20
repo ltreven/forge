@@ -186,3 +186,44 @@ controller:
     tag: "latest"
     pullPolicy: IfNotPresent
 
+  # Image the controller injects as the main agent container.
+  agentImage: "ghcr.io/ltreven/forge-agent:latest"
+  agentImagePullPolicy: "IfNotPresent"
+
+  # Image the controller injects as the forge-consumer sidecar.
+  consumerImage: "ghcr.io/ltreven/forge-consumer:latest"
+  consumerImagePullPolicy: "IfNotPresent"
+
+# ── RabbitMQ ─────────────────────────────────────────────────────────────────
+rabbitmq:
+  enabled: true
+
+  # Name of the RabbitmqCluster CR applied in infra-messaging namespace.
+  clusterName: forge-rabbit
+
+  # Replicas: 1 for local dev, 3 for UAT/prod (override in values-*.yaml).
+  replicas: 1
+
+  # Internal cluster hostname (used by API and consumer sidecar).
+  # Pattern: <clusterName>.<namespace>.svc.cluster.local
+  host: forge-rabbit.infra-messaging.svc.cluster.local
+  amqpPort: 5672
+  managementPort: 15672
+
+  # Admin credentials — set per-environment.
+  # In local dev, the password is inlined in values-local.yaml.
+  # In prod, reference an existing Secret (adminPasswordSecretRef).
+  adminUser: admin
+  adminPassword: ""    # overridden per-env
+
+  persistence:
+    storage: 10Gi
+    storageClassName: ""
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "500m"
+      memory: 512Mi

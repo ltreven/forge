@@ -24,10 +24,12 @@ import (
 // AgentReconciler reconciles ForgeAgent CRs across all namespaces.
 type AgentReconciler struct {
 	client.Client
-	Scheme               *runtime.Scheme
-	APIBaseURL           string // e.g. "http://forge-api:4000"
-	AgentImage           string // full image ref: repo:tag
-	AgentImagePullPolicy string // Always | IfNotPresent | Never
+	Scheme                    *runtime.Scheme
+	APIBaseURL                string // e.g. "http://forge-api:4000"
+	AgentImage                string // full image ref: repo:tag
+	AgentImagePullPolicy      string // Always | IfNotPresent | Never
+	ConsumerImage             string // forge-consumer sidecar image ref
+	ConsumerImagePullPolicy   string // Always | IfNotPresent | Never
 }
 
 // SetupWithManager registers the reconciler with the controller-runtime Manager.
@@ -85,7 +87,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// ── 3. Reconcile Deployment ──────────────────────────────────────────────
 	logger.Info("reconciling Deployment")
 	agentImage, pullPolicy := r.resolveAgentImage(ctx)
-	desiredDeploy := resources.AgentDeployment(&cr, ownerRef, agentImage, pullPolicy)
+	consumerImage, consumerPullPolicy := r.resolveConsumerImage(ctx)
+	desiredDeploy := resources.AgentDeployment(&cr, ownerRef, agentImage, pullPolicy, consumerImage, consumerPullPolicy)
 	if err := r.createOrUpdateDeployment(ctx, desiredDeploy); err != nil {
 		return r.failWith(ctx, &cr, "DeploymentFailed", err)
 	}
@@ -294,3 +297,33 @@ func (r *AgentReconciler) resolveAgentImage(ctx context.Context) (image, pullPol
 	}
 	return
 }
+
+// resolveConsumerImage returns the forge-consumer sidecar image ref and pull policy.
+//
+// Follows the same pattern as resolveAgentImage: in local Tilt dev, reads the
+// "forge-consumer-image" ConfigMap (managed by Tilt, contains the tilt-tagged digest).
+// In production, falls back to r.ConsumerImage / r.ConsumerImagePullPolicy flags.
+func (r *AgentReconciler) resolveConsumerImage(ctx context.Context) (image, pullPolicy string) {
+	image = r.ConsumerImage
+	pullPolicy = r.ConsumerImagePullPolicy
+	if pullPolicy == "" {
+		pullPolicy = "IfNotPresent"
+	}
+
+	var cm corev1.ConfigMap
+	err := r.Get(ctx, types.NamespacedName{
+		Namespace: "forge",
+		Name:      "forge-consumer-image",
+	}, &cm)
+	if err != nil {
+		return
+	}
+	if v := cm.Data["image"]; v != "" {
+		image = v
+	}
+	if v := cm.Data["pullPolicy"]; v != "" {
+		pullPolicy = v
+	}
+	return
+}
+

@@ -15,16 +15,22 @@ import (
 const (
 	// Gateway port exposed by openclaw inside the container (loopback only).
 	gatewayPort = int32(18789)
+	// Consumer sidecar send API port (loopback only, used by openclaw for agent-to-agent dispatch).
+	sendAPIPort = int32(18780)
 )
 
 // AgentDeployment builds the Deployment for a ForgeAgent CR.
 //
 // agentImage is the full image reference (repo:tag) passed from the controller config.
 // pullPolicy is the ImagePullPolicy string (Always|IfNotPresent|Never).
-// If the CR spec overrides these, the CR values take precedence.
-func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, agentImage, pullPolicy string) *appsv1.Deployment {
+// consumerImage/consumerPolicy identify the forge-consumer sidecar image.
+// If the CR spec overrides agent image, the CR values take precedence.
+func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, agentImage, pullPolicy, consumerImage, consumerPolicy string) *appsv1.Deployment {
 	image, policy := resolveImage(cr, agentImage, pullPolicy)
 	fullImage := image
+	if consumerPolicy == "" {
+		consumerPolicy = "IfNotPresent"
+	}
 
 	// Resource defaults — overridden by CR spec if present
 	requests := corev1.ResourceList{
@@ -72,6 +78,8 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 		{Name: "AGENT_NAME", Value: cr.Spec.AgentName},
 		{Name: "AGENT_OPERATOR_NAME", Value: cr.Spec.OperatorName},
 		{Name: "TEAM_NAME", Value: cr.Spec.TeamName},
+		// AGENT_ID is needed by the consumer sidecar to bind the correct queue.
+		{Name: "AGENT_ID", Value: cr.Name},
 	}
 
 	// Secret-sourced env vars from credentialsSecretRef
@@ -87,6 +95,23 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 		envFromSecret("GITHUB_ENABLED", secretRef, "GITHUB_ENABLED"),
 		envFromSecret("GITHUB_AUTH_MODE", secretRef, "GITHUB_AUTH_MODE"),
 	}
+
+	// RabbitMQ env vars for the consumer sidecar — sourced from the workspace-scoped Secret.
+	// The Secret "rabbitmq-credentials" is created by the Forge API when the first agent
+	// in the workspace is provisioned (provisioner.applyRabbitMQCredentialsSecret).
+	const rabbitSecret = "rabbitmq-credentials"
+	rabbitEnv := []corev1.EnvVar{
+		envFromSecret("RABBITMQ_HOST", rabbitSecret, "RABBITMQ_HOST"),
+		envFromSecret("RABBITMQ_AMQP_PORT", rabbitSecret, "RABBITMQ_AMQP_PORT"),
+		envFromSecret("RABBITMQ_VHOST", rabbitSecret, "RABBITMQ_VHOST"),
+		envFromSecret("RABBITMQ_USERNAME", rabbitSecret, "RABBITMQ_USERNAME"),
+		envFromSecret("RABBITMQ_PASSWORD", rabbitSecret, "RABBITMQ_PASSWORD"),
+		envFromSecret("RABBITMQ_EXCHANGE", rabbitSecret, "RABBITMQ_EXCHANGE"),
+	}
+
+	// The OPENCLAW_GATEWAY_TOKEN is needed by the consumer to call the openclaw gateway.
+	rabbitEnv = append(rabbitEnv, envFromSecret("OPENCLAW_GATEWAY_TOKEN", secretRef, "OPENCLAW_GATEWAY_TOKEN"))
+	rabbitEnv = append(rabbitEnv, corev1.EnvVar{Name: "AGENT_ID", Value: cr.Name})
 
 	initEnv := append(sharedEnv, secretEnv...)
 	mainEnv := append(sharedEnv, secretEnv...)
@@ -113,6 +138,17 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 		},
 		{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		{Name: "npm-cache", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		// RabbitMQ credentials secret — workspace-scoped, shared by all agents in the namespace.
+		// Created by forge-api (provisioner.applyRabbitMQCredentialsSecret) on first agent provisioning.
+		{
+			Name: "rabbitmq-credentials",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "rabbitmq-credentials",
+					Optional:   ptr.To(true), // pod still starts even if RabbitMQ isn't provisioned yet
+				},
+			},
+		},
 	}
 
 	// Standard volume mounts
@@ -137,7 +173,7 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 
 	replicas := int32(1)
 
-	return &appsv1.Deployment{
+	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            cr.Name,
 			Namespace:       cr.Namespace,
@@ -213,7 +249,51 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 			},
 		},
 	}
+
+	// ── forge-consumer sidecar (conditional) ──────────────────────────────────
+	// Only injected when consumerImage is explicitly set.
+	// Bridges RabbitMQ↔openclaw and exposes the agent-to-agent send API (18780).
+	// Kept conditional so the core agent pod starts even if the consumer image
+	// hasn't been built yet (e.g. first Tilt boot / consumer disabled).
+	if consumerImage != "" {
+		deploy.Spec.Template.Spec.Containers = append(
+			deploy.Spec.Template.Spec.Containers,
+			corev1.Container{
+				Name:            "forge-consumer",
+				Image:           consumerImage,
+				ImagePullPolicy: corev1.PullPolicy(consumerPolicy),
+				Env:             rabbitEnv,
+				Ports: []corev1.ContainerPort{
+					{Name: "send-api", ContainerPort: sendAPIPort},
+				},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("50m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("200m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+				},
+				SecurityContext: &corev1.SecurityContext{
+					RunAsNonRoot:             ptr.To(true),
+					RunAsUser:                ptr.To(int64(1000)),
+					RunAsGroup:               ptr.To(int64(1000)),
+					AllowPrivilegeEscalation: ptr.To(false),
+					ReadOnlyRootFilesystem:   ptr.To(true),
+					Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+				},
+			},
+		)
+	}
+
+	return deploy
 }
+
+
+
+
 
 // dnsHostname converts an arbitrary agent name to a valid RFC 1123 DNS label
 // (max 63 chars, lowercase, alphanumeric and hyphens only, no leading/trailing hyphens).

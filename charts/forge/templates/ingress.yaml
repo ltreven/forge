@@ -10,12 +10,10 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
-    # Security headers
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      add_header X-Frame-Options "SAMEORIGIN" always;
-      add_header X-Content-Type-Options "nosniff" always;
-      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-      add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    # NOTE: configuration-snippet is disabled in local dev (Docker Desktop nginx).
+    # Security headers (X-Frame-Options, X-Content-Type-Options, etc.) are added
+    # in production via the ingress controller's global ConfigMap or a separate
+    # add-headers ConfigMap when allow-snippet-annotations=true is enabled.
     {{- if .Values.ingress.tls.certManager.enabled }}
     cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.certManager.clusterIssuer | quote }}
     {{- end }}

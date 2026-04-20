@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Copy manifests first for layer caching
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json* ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copy source and compile
 COPY tsconfig.json drizzle.config.ts ./
@@ -24,7 +24,7 @@ WORKDIR /app
 
 # Copy manifests and install production dependencies only
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json* ./
-RUN pnpm install --frozen-lockfile --prod
+RUN pnpm install --prod
 
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist

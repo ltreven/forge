@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { db } from "../db/client";
 import { agents, teams, workspaces } from "../db/schema";
 import { createAgentSchema, updateAgentSchema } from "../schemas/agent.schema";
@@ -10,12 +10,21 @@ import {
   ensureNamespace,
   applyCredentialsSecret,
   applyForgeAgentCR,
+  applyRabbitMQCredentialsSecret,
   deleteForgeAgentCR,
   deleteCredentialsSecret,
   rolloutRestartDeployment,
   execInAgentPod,
   getForgeAgentStatus,
 } from "../k8s/provisioner";
+import {
+  provisionTenant,
+  deprovisionTenant,
+  publishToAgent,
+  tenantVhost,
+  tenantUser,
+  tenantExchange,
+} from "../lib/rabbitmq";
 
 export const agentsRouter = Router();
 
@@ -74,6 +83,18 @@ agentsRouter.post("/", async (req: Request, res: Response, next: NextFunction) =
       await ensureNamespace(namespace);
       await applyCredentialsSecret(namespace, agent);
       await applyForgeAgentCR(namespace, agent, workspace.id, team.name);
+
+      // ── 4b. Provision RabbitMQ tenant (vhost + user + exchange) ─────────────
+      // Idempotent — safe to call on every agent creation in the same workspace.
+      // The vhost is workspace-scoped, so this is a no-op if already provisioned.
+      try {
+        const rabbitCreds = await provisionTenant(workspace.id);
+        await applyRabbitMQCredentialsSecret(namespace, rabbitCreds);
+        console.log(`[agents] RabbitMQ tenant provisioned for workspace ${workspace.id}`);
+      } catch (rabbitErr) {
+        console.error("[agents] RabbitMQ provisioning failed (non-fatal):", rabbitErr);
+        // Non-fatal: agent still works without messaging; ops can re-provision manually
+      }
 
       // Store CR name (= agent UUID) on the DB record
       await db
@@ -301,10 +322,75 @@ agentsRouter.post("/:id/telegram/approve-pairing", async (req: Request, res: Res
   }
 });
 
+// ── POST /agents/:id/command ──────────────────────────────────────────────────
+// Publishes an ad-hoc command to an agent's queue via the tenant exchange.
+// Body: { action: string; payload: Record<string, unknown>; sessionKey?: string }
+//
+// This is the machine-to-machine path (controller, other agents).
+// For human chat from the Web UI, use POST /conversations/:id/messages instead.
+
+agentsRouter.post("/:id/command", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { action, payload, sessionKey } = req.body as {
+      action?: string;
+      payload?: Record<string, unknown>;
+      sessionKey?: string;
+    };
+
+    if (!action || typeof action !== "string") {
+      res.status(400).json(failure("action is required"));
+      return;
+    }
+
+    const [agent] = await db.select().from(agents).where(eq(agents.id, String(req.params.id)));
+    if (!agent) {
+      res.status(404).json(failure("Agent not found"));
+      return;
+    }
+
+    const [team] = await db.select().from(teams).where(eq(teams.id, agent.teamId));
+    const [workspace] = team
+      ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId))
+      : [];
+
+    if (!workspace) {
+      res.status(400).json(failure("Workspace not found"));
+      return;
+    }
+
+    const messageId = randomBytes(16).toString("hex");
+    const effectiveSessionKey = sessionKey ?? `cmd-${messageId}`;
+
+    await publishToAgent(
+      {
+        host:     process.env.RABBITMQ_AMQP_HOST ?? "localhost",
+        amqpPort: Number(process.env.RABBITMQ_AMQP_PORT ?? 5672),
+        vhost:    tenantVhost(workspace.id),
+        username: tenantUser(workspace.id),
+        password: process.env.RABBITMQ_ADMIN_PASSWORD ?? "admin",   // admin can access any vhost
+        exchange: tenantExchange(workspace.id),
+      },
+      {
+        tenantId:   workspace.id,
+        agentId:    agent.id,
+        sessionKey: effectiveSessionKey,
+        messageId,
+        action,
+        payload:    payload ?? {},
+      },
+    );
+
+    res.json(success({ queued: true, messageId, agentId: agent.id, sessionKey: effectiveSessionKey }));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── DELETE /agents/:id ────────────────────────────────────────────────────────
 // 1. Deletes the ForgeAgent CR — K8s GC automatically removes Deployment, PVC, ConfigMap.
 // 2. Deletes the credentials Secret.
-// 3. Removes the agent from postgres.
+// 3. If this was the last agent in the workspace, deprovisions the RabbitMQ tenant.
+// 4. Removes the agent from postgres.
 
 agentsRouter.delete("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -335,6 +421,23 @@ agentsRouter.delete("/:id", async (req: Request, res: Response, next: NextFuncti
 
     await db.update(agents).set({ k8sStatus: "terminated" }).where(eq(agents.id, agent.id));
     await db.delete(agents).where(eq(agents.id, agent.id));
+
+    // ── RabbitMQ deprovisioning (only if no more agents in workspace) ─────────
+    if (workspace) {
+      try {
+        const [{ value: remaining }] = await db
+          .select({ value: count() })
+          .from(agents)
+          .where(eq(agents.teamId, agent.teamId));
+
+        if (remaining === 0) {
+          await deprovisionTenant(workspace.id);
+          console.log(`[agents] RabbitMQ tenant deprovisioned for workspace ${workspace.id}`);
+        }
+      } catch (rabbitErr) {
+        console.error("[agents] RabbitMQ deprovision error (non-fatal):", rabbitErr);
+      }
+    }
 
     res.status(200).json(success({ deleted: true, id: agent.id }));
   } catch (err) {

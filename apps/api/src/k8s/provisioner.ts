@@ -189,6 +189,61 @@ export async function deleteCredentialsSecret(namespace: string, agentId: string
 }
 
 /**
+ * Creates or updates the `rabbitmq-credentials` Secret in the workspace namespace.
+ *
+ * This Secret is consumed by:
+ *  - The forge-consumer sidecar (AMQP connection to workspace vhost)
+ *  - The openclaw container (optional — for environment awareness)
+ *
+ * Named `rabbitmq-credentials` (stable, not agent-scoped) because all agents
+ * in the same namespace share the same workspace vhost.
+ */
+export async function applyRabbitMQCredentialsSecret(
+  namespace: string,
+  creds: {
+    host: string;
+    amqpPort: number;
+    vhost: string;
+    username: string;
+    password: string;
+    exchange: string;
+  },
+): Promise<void> {
+  const name = "rabbitmq-credentials";
+
+  const secretBody = {
+    metadata: {
+      name,
+      namespace,
+      labels: {
+        "app.kubernetes.io/managed-by": "forge",
+        "forge.ai/component":           "message-bus",
+      },
+    },
+    stringData: {
+      RABBITMQ_HOST:     creds.host,
+      RABBITMQ_AMQP_PORT: String(creds.amqpPort),
+      RABBITMQ_VHOST:    creds.vhost,
+      RABBITMQ_USERNAME: creds.username,
+      RABBITMQ_PASSWORD: creds.password,
+      RABBITMQ_EXCHANGE: creds.exchange,
+    },
+  };
+
+  try {
+    const { body: existing } = await coreV1.readNamespacedSecret(name, namespace);
+    (secretBody.metadata as any).resourceVersion = existing.metadata?.resourceVersion;
+    await coreV1.replaceNamespacedSecret(name, namespace, secretBody);
+  } catch (err: any) {
+    if (httpStatus(err) === 404) {
+      await coreV1.createNamespacedSecret(namespace, secretBody);
+    } else {
+      throw err;
+    }
+  }
+}
+
+/**
  * Reads the live status of a ForgeAgent CR. Returns null if not found.
  */
 export async function getForgeAgentStatus(

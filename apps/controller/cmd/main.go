@@ -28,20 +28,24 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr          string
-		probeAddr            string
-		leaderElectionNS     string
-		apiBaseURL           string
-		agentImage           string
-		agentImagePullPolicy string
+		metricsAddr             string
+		probeAddr               string
+		leaderElectionNS        string
+		apiBaseURL              string
+		agentImage              string
+		agentImagePullPolicy    string
+		consumerImage           string
+		consumerImagePullPolicy string
 	)
 
-	flag.StringVar(&metricsAddr,          "metrics-bind-address",        ":8080",                            "Address for Prometheus metrics endpoint")
-	flag.StringVar(&probeAddr,            "health-probe-bind-address",   ":8081",                            "Address for health/readiness probes")
-	flag.StringVar(&leaderElectionNS,     "leader-election-namespace",   "forge",                            "Namespace for leader election Lease object")
-	flag.StringVar(&apiBaseURL,           "api-base-url",                "http://forge-api:4000",            "Internal URL of the Forge API")
-	flag.StringVar(&agentImage,           "agent-image",                 "ghcr.io/ltreven/forge-agent:latest", "Full image reference for the forge-agent (repo:tag)")
-	flag.StringVar(&agentImagePullPolicy, "agent-image-pull-policy",    "IfNotPresent",                     "ImagePullPolicy for the forge-agent containers (Always|IfNotPresent|Never)")
+	flag.StringVar(&metricsAddr,             "metrics-bind-address",        ":8080",                                "Address for Prometheus metrics endpoint")
+	flag.StringVar(&probeAddr,               "health-probe-bind-address",   ":8081",                                "Address for health/readiness probes")
+	flag.StringVar(&leaderElectionNS,        "leader-election-namespace",   "forge",                                "Namespace for leader election Lease object")
+	flag.StringVar(&apiBaseURL,              "api-base-url",                "http://forge-api:4000",                "Internal URL of the Forge API")
+	flag.StringVar(&agentImage,              "agent-image",                 "ghcr.io/ltreven/forge-agent:latest",   "Full image reference for the forge-agent (repo:tag)")
+	flag.StringVar(&agentImagePullPolicy,    "agent-image-pull-policy",     "IfNotPresent",                         "ImagePullPolicy for the forge-agent containers")
+	flag.StringVar(&consumerImage,           "consumer-image",              "ghcr.io/ltreven/forge-consumer:latest", "Full image reference for the forge-consumer sidecar")
+	flag.StringVar(&consumerImagePullPolicy, "consumer-image-pull-policy",  "IfNotPresent",                         "ImagePullPolicy for the forge-consumer sidecar")
 
 	opts := zap.Options{Development: os.Getenv("DEBUG") == "true"}
 	opts.BindFlags(flag.CommandLine)
@@ -70,11 +74,13 @@ func main() {
 	}
 
 	if err = (&controller.AgentReconciler{
-		Client:               mgr.GetClient(),
-		Scheme:               mgr.GetScheme(),
-		APIBaseURL:           apiBaseURL,
-		AgentImage:           agentImage,
-		AgentImagePullPolicy: agentImagePullPolicy,
+		Client:                  mgr.GetClient(),
+		Scheme:                  mgr.GetScheme(),
+		APIBaseURL:              apiBaseURL,
+		AgentImage:              agentImage,
+		AgentImagePullPolicy:    agentImagePullPolicy,
+		ConsumerImage:           consumerImage,
+		ConsumerImagePullPolicy: consumerImagePullPolicy,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Agent")
 		os.Exit(1)

@@ -94,6 +94,8 @@ spec:
             - --api-base-url=http://forge-api:{{ .Values.api.port }}
             - --agent-image={{ .Values.controller.agentImage | default "ghcr.io/ltreven/forge-agent:latest" }}
             - --agent-image-pull-policy={{ .Values.controller.agentImagePullPolicy | default "IfNotPresent" }}
+            - --consumer-image={{ .Values.controller.consumerImage }}
+            - --consumer-image-pull-policy={{ .Values.controller.consumerImagePullPolicy | default "IfNotPresent" }}
           env:
             - name: DEBUG
               value: "false"
