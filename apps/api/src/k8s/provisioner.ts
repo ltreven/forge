@@ -1,5 +1,7 @@
+import { PassThrough } from "stream";
+import * as k8s from "@kubernetes/client-node";
 import type { Agent } from "../db/schema";
-import { coreV1, customObjects, FORGE_AI_GROUP, FORGE_AI_VERSION, FORGE_AI_PLURAL } from "./client";
+import { kc, coreV1, appsV1, customObjects, FORGE_AI_GROUP, FORGE_AI_VERSION, FORGE_AI_PLURAL } from "./client";
 
 /**
  * Derives the deterministic Kubernetes namespace for a workspace.
@@ -200,6 +202,117 @@ export async function getForgeAgentStatus(
     if (httpStatus(err) === 404) return null;
     throw err;
   }
+}
+
+/**
+ * Triggers a rolling restart of the agent's Deployment by patching the pod
+ * template annotation `kubectl.kubernetes.io/restartedAt` with the current
+ * timestamp. Equivalent to `kubectl rollout restart deployment/<agentId>`.
+ *
+ * The new ReplicaSet causes the initContainer (bootstrap.sh) to run again on
+ * each fresh pod, which (re-)configures the Telegram channel with the updated
+ * TELEGRAM_BOT_TOKEN from the credentials Secret.
+ */
+export async function rolloutRestartDeployment(
+  namespace: string,
+  agentId: string,
+): Promise<void> {
+  const patch = {
+    spec: {
+      template: {
+        metadata: {
+          annotations: {
+            "kubectl.kubernetes.io/restartedAt": new Date().toISOString(),
+          },
+        },
+      },
+    },
+  };
+
+  await appsV1.patchNamespacedDeployment(
+    agentId,
+    namespace,
+    patch,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { headers: { "Content-Type": "application/strategic-merge-patch+json" } },
+  );
+}
+
+/**
+ * Executes a command inside the running agent pod's "forge" container.
+ * Used for operations like `openclaw pairing approve telegram <code>`.
+ *
+ * Uses the Kubernetes Exec API (WebSocket) via @kubernetes/client-node.
+ * Throws with a human-readable message if the pod is not found or the
+ * command fails.
+ */
+export async function execInAgentPod(
+  namespace: string,
+  agentId: string,
+  command: string[],
+): Promise<string> {
+  // Locate the running pod for this agent via its label
+  const { body: podList } = await coreV1.listNamespacedPod(
+    namespace,
+    undefined, undefined, undefined, undefined,
+    `forge.ai/agent-id=${agentId}`,
+  );
+
+  const pod = podList.items.find((p) => p.status?.phase === "Running");
+  if (!pod?.metadata?.name) {
+    throw new Error(`No running pod found for agent ${agentId} in namespace ${namespace}`);
+  }
+
+  const podName = pod.metadata!.name!;
+  const exec    = new k8s.Exec(kc);
+  let stdout = "";
+  let stderr = "";
+
+  await new Promise<void>((resolve, reject) => {
+    const outStream = new PassThrough();
+    const errStream = new PassThrough();
+    outStream.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    errStream.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    const wsPromise = exec.exec(
+      namespace,
+      podName,
+      "forge",
+      command,
+      outStream,
+      errStream,
+      null,
+      false,
+      (status: k8s.V1Status) => {
+        if (status.status === "Success") {
+          resolve();
+        } else {
+          reject(new Error(
+            stderr.trim() ||
+            status.message ||
+            `Command failed with status: ${status.reason ?? "Unknown"}`
+          ));
+        }
+      },
+    );
+
+    // The exec() call itself returns a Promise<WebSocket>. If the WS
+    // handshake fails (e.g. 403, 404) the promise rejects before the
+    // status callback fires — surface that as a readable error.
+    wsPromise.catch((wsErr: unknown) => {
+      const msg = wsErr instanceof Error
+        ? wsErr.message
+        : String(wsErr);
+      console.error(`[execInAgentPod] WebSocket error for ${podName}:`, msg);
+      reject(new Error(`Could not connect to pod (${msg}). Check RBAC and pod readiness.`));
+    });
+  });
+
+  return stdout.trim();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

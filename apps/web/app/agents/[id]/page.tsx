@@ -13,11 +13,10 @@ import { Input } from "@/components/ui/input";
 import { useTranslation } from "@/lib/i18n";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { ModelSelector, AVAILABLE_MODELS } from "@/components/agent/model-selector";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type HealthStatus = "online" | "warning" | "offline";
+type HealthStatus = "online" | "starting" | "offline";
 
 interface AgentMetadata {
   avatarColor?: string;
@@ -30,6 +29,8 @@ interface Agent {
   id: string; name: string; type: string;
   icon?: string; metadata?: AgentMetadata;
   teamId?: string;
+  /** Kubernetes provisioning phase — updated by the Agent Controller. */
+  k8sStatus?: "pending" | "provisioning" | "running" | "failed" | "terminated" | null;
 }
 
 interface ChatMessage {
@@ -61,22 +62,32 @@ const ROLE_LABELS: Record<string, string> = {
 
 // ── Health helpers ────────────────────────────────────────────────────────────
 
+/**
+ * Derives the front-end health status purely from the Kubernetes pod lifecycle.
+ * Integration state (Telegram, tools, etc.) is intentionally excluded here —
+ * the agent is considered Online as soon as its pod is Running.
+ */
 function computeHealth(a: Agent): HealthStatus {
-  const s = a.metadata?.telegramStatus;
-  if (!s || s === "not_configured" || s === "registering") return "warning";
-  return s === "complete" ? "online" : "warning";
+  const k8s = a.k8sStatus;
+  if (k8s === "running") return "online";
+  if (k8s === "failed" || k8s === "terminated") return "offline";
+  // pending | provisioning | null → pod is still coming up
+  return "starting";
 }
 
 function HealthDot({ status }: { status: HealthStatus }) {
   return (
     <span className={cn(
       "relative flex size-2 shrink-0 rounded-full",
-      status === "online"  && "bg-emerald-500",
-      status === "warning" && "bg-amber-400",
-      status === "offline" && "bg-red-500",
+      status === "online"   && "bg-emerald-500",
+      status === "starting" && "bg-amber-400",
+      status === "offline"  && "bg-red-500",
     )}>
       {status === "online" && (
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+      )}
+      {status === "starting" && (
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
       )}
     </span>
   );
@@ -223,11 +234,6 @@ export default function AgentPage() {
     const d = await r.json(); setAgent(d.data); return d.data as Agent;
   }, [agentId, authHeaders]);
 
-  const handleModelSave = async (model: string) => {
-    if (!agent) return;
-    await patchAgent({ metadata: { ...(agent.metadata ?? {}), model } });
-  };
-
   // Guards
   if (isLoading) return <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center"><Loader2 className="size-8 animate-spin text-primary" /></div>;
   if (!agent) return (
@@ -238,19 +244,21 @@ export default function AgentPage() {
     </div>
   );
 
-  const icon         = agent.icon ?? "🤖";
-  const color        = agent.metadata?.avatarColor ?? ROLE_COLORS[agent.type] ?? "#6366f1";
-  const health       = computeHealth(agent);
-  const currentModel = agent.metadata?.model ?? AVAILABLE_MODELS[0].model;
-  const ta           = t.agents;
-  const roleLabel    = ROLE_LABELS[agent.type] ?? agent.type;
-  const healthLabel  = health === "online" ? ta.healthOnline : health === "warning" ? ta.healthWarning : ta.healthOffline;
-  const backHref     = agent.teamId ? `/teams/${agent.teamId}` : "/teams";
+  const icon        = agent.icon ?? "🤖";
+  const color       = agent.metadata?.avatarColor ?? ROLE_COLORS[agent.type] ?? "#6366f1";
+  const health      = computeHealth(agent);
+  const currentModel = (agent.metadata as Record<string, unknown> | undefined)?.model as string | undefined ?? "auto";
+  const ta          = t.agents;
+  const roleLabel   = ROLE_LABELS[agent.type] ?? agent.type;
+  const healthLabel =
+    health === "online"   ? ta.healthOnline :
+    health === "starting" ? ta.healthStarting :
+    ta.healthOffline;
+  const backHref    = agent.teamId ? `/teams/${agent.teamId}` : "/teams";
 
   const NAV_ITEMS = [
     { href: `/agents/${agentId}/general`,   icon: <Settings    className="size-5" />, title: "General Settings",       description: "Name, avatar, and identity.",               accent: "#6366f1" },
     { href: `/agents/${agentId}/brain`,     icon: <Brain       className="size-5" />, title: "Brain",                  description: "Personality, role, and long-term memory.",  accent: "#8b5cf6" },
-    { href: `/agents/${agentId}/history`,   icon: <History     className="size-5" />, title: "History",                description: "Past conversations and threads.",            accent: "#3b82f6" },
     { href: `/agents/${agentId}/dashboard`, icon: <Gauge       className="size-5" />, title: "Dashboard",              description: "Task activity and token usage.",             accent: "#06b6d4" },
     { href: `/agents/${agentId}/tools`,     icon: <Wrench      className="size-5" />, title: "Tools",                  description: "MCP servers, APIs, code execution.",         accent: "#f59e0b" },
     { href: `/agents/${agentId}/security`,  icon: <ShieldCheck className="size-5" />, title: "Security",               description: "Approval policies and guardrails.",          accent: "#ef4444" },
@@ -283,14 +291,10 @@ export default function AgentPage() {
             <div className="flex items-center gap-1.5">
               <HealthDot status={health} />
               <span className={cn("text-xs font-medium",
-                health === "online"  && "text-emerald-600 dark:text-emerald-400",
-                health === "warning" && "text-amber-600 dark:text-amber-400",
-                health === "offline" && "text-red-600 dark:text-red-400"
+                health === "online"   && "text-emerald-600 dark:text-emerald-400",
+                health === "starting" && "text-amber-600 dark:text-amber-400",
+                health === "offline"  && "text-red-600 dark:text-red-400"
               )}>{healthLabel}</span>
-            </div>
-            {/* Model selector — inline next to identity */}
-            <div className="relative">
-              <ModelSelector currentModel={currentModel} onSave={handleModelSave} t={tp.model} />
             </div>
           </div>
         </div>
@@ -303,9 +307,20 @@ export default function AgentPage() {
         <div className="lg:col-span-2">
           <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
             <div className="border-b border-border px-5 py-3.5">
-              <div className="flex items-center gap-2">
-                <Zap className="size-4 text-primary" />
-                <p className="text-sm font-semibold text-foreground">Chat</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap className="size-4 text-primary" />
+                  <p className="text-sm font-semibold text-foreground">Chat</p>
+                </div>
+                <Link
+                  href={`/agents/${agentId}/history`}
+                  id="chat-history-btn"
+                  title="View conversation history"
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <History className="size-3.5" />
+                  <span className="hidden sm:inline">History</span>
+                </Link>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">Send a message directly to this agent.</p>
             </div>
@@ -353,9 +368,9 @@ export default function AgentPage() {
             <div className="flex justify-between">
               <span className="font-medium">Status</span>
               <span className={cn("font-bold",
-                health === "online"  && "text-emerald-600",
-                health === "warning" && "text-amber-600",
-                health === "offline" && "text-red-600"
+                health === "online"   && "text-emerald-600",
+                health === "starting" && "text-amber-600",
+                health === "offline"  && "text-red-600"
               )}>{healthLabel}</span>
             </div>
           </div>

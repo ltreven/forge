@@ -12,6 +12,8 @@ import {
   applyForgeAgentCR,
   deleteForgeAgentCR,
   deleteCredentialsSecret,
+  rolloutRestartDeployment,
+  execInAgentPod,
   getForgeAgentStatus,
 } from "../k8s/provisioner";
 
@@ -146,8 +148,13 @@ agentsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction)
       }
     }
 
-    // Strip server-side secrets before sending to the client
-    const { gatewayToken: _gt, metadata: _meta, ...safeAgent } = agent as any;
+    // Sanitize metadata: strip telegramBotToken, expose hasTelegramToken boolean.
+    // All other metadata fields are safe and returned as-is.
+    const { gatewayToken: _gt, ...safeAgent } = agent as any;
+    if (safeAgent.metadata) {
+      const { telegramBotToken: _tok, ...safeMeta } = safeAgent.metadata as Record<string, unknown>;
+      safeAgent.metadata = { ...safeMeta, hasTelegramToken: Boolean(_tok) };
+    }
     res.json(success({ ...safeAgent, k8sLiveStatus: liveStatus }));
   } catch (err) {
     next(err);
@@ -155,14 +162,38 @@ agentsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction)
 });
 
 // ── PUT /agents/:id ───────────────────────────────────────────────────────────
+// Updates the DB record. If metadata.telegramBotToken changed, also:
+//   1. Upserts the K8s credentials Secret (so the pod env gets the new token).
+//   2. Triggers a rolling Deployment restart (initContainer re-runs bootstrap.sh,
+//      which reconfigures the Telegram channel with the new token).
 
 agentsRouter.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = updateAgentSchema.parse(req.body);
 
+    // ── Fetch current record to compare telegramBotToken ─────────────────────
+    const [existing] = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, String(req.params.id)));
+
+    if (!existing) {
+      res.status(404).json(failure("Agent not found"));
+      return;
+    }
+
     const [updated] = await db
       .update(agents)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        ...input,
+        // Merge metadata server-side to prevent partial-update data loss.
+        // The frontend may send a subset of fields (e.g. only telegramBotToken),
+        // which would otherwise silently wipe personality, avatarColor, etc.
+        metadata: input.metadata
+          ? { ...((existing.metadata as Record<string, unknown>) ?? {}), ...(input.metadata as Record<string, unknown>) }
+          : existing.metadata,
+        updatedAt: new Date(),
+      })
       .where(eq(agents.id, String(req.params.id)))
       .returning();
 
@@ -171,7 +202,100 @@ agentsRouter.put("/:id", async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
+    // ── Sync K8s Secret + rollout restart if telegram token changed ───────────
+    const oldToken = (existing.metadata as Record<string, unknown> | null)?.telegramBotToken;
+    const newToken = (updated.metadata  as Record<string, unknown> | null)?.telegramBotToken;
+
+    // Trigger K8s sync whenever the token changes — including removal (disconnect).
+    if (newToken !== oldToken) {
+      await db
+        .update(agents)
+        .set({
+          metadata: {
+            ...((updated.metadata as Record<string, unknown>) ?? {}),
+            telegramStatus: "pending_pairing",
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(agents.id, updated.id));
+
+      try {
+        // Resolve the workspace namespace for this agent
+        const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId));
+        const [workspace] = team
+          ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId))
+          : [];
+
+        if (workspace?.k8sNamespace) {
+          // 1. Upsert credentials Secret with new token
+          await applyCredentialsSecret(workspace.k8sNamespace, updated);
+          // 2. Rolling restart so initContainer picks up TELEGRAM_BOT_TOKEN
+          await rolloutRestartDeployment(workspace.k8sNamespace, updated.id);
+          console.log(`[agents] Telegram token updated — rollout restart triggered for ${updated.id}`);
+        }
+      } catch (k8sErr) {
+        // Non-fatal: DB is already updated, log for ops visibility
+        console.error("[agents] K8s Secret/restart after telegram token change failed:", k8sErr);
+      }
+    }
+
     res.json(success(updated));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /agents/:id/telegram/approve-pairing ───────────────────────────────────────
+// Receives the one-shot pairing code from the user, executes
+//   openclaw pairing approve telegram <code>
+// inside the agent pod, then marks telegramStatus = 'complete' in the DB.
+
+agentsRouter.post("/:id/telegram/approve-pairing", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.body as { code?: string };
+    if (!code || typeof code !== "string" || !code.trim()) {
+      res.status(400).json(failure("Pairing code is required"));
+      return;
+    }
+
+    const [agent] = await db.select().from(agents).where(eq(agents.id, String(req.params.id)));
+    if (!agent) {
+      res.status(404).json(failure("Agent not found"));
+      return;
+    }
+
+    const [team] = await db.select().from(teams).where(eq(teams.id, agent.teamId));
+    const [workspace] = team
+      ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId))
+      : [];
+
+    if (!workspace?.k8sNamespace) {
+      res.status(400).json(failure("Agent not provisioned in cluster"));
+      return;
+    }
+
+    // Execute the pairing approval inside the live pod
+    const output = await execInAgentPod(
+      workspace.k8sNamespace,
+      agent.id,
+      ["openclaw", "pairing", "approve", "telegram", code.trim()],
+    );
+    console.log(`[agents] Telegram pairing approved for ${agent.id}:`, output);
+
+    // Mark integration as complete in DB
+    const [updated] = await db
+      .update(agents)
+      .set({
+        metadata: {
+          ...((agent.metadata as Record<string, unknown>) ?? {}),
+          telegramStatus: "complete",
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(agents.id, agent.id))
+      .returning();
+
+    res.json(success({ message: "Telegram pairing approved.", telegramStatus: "complete", agent: updated }));
   } catch (err) {
     next(err);
   }

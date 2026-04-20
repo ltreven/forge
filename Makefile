@@ -1,5 +1,5 @@
 .PHONY: help web web-install web-kill web-build api api-install db-migrate db-seed docker-db agents-test \
-        tilt-up tilt-down k8s-lint k8s-render k8s-namespace clean
+        tilt-up tilt-down k8s-lint k8s-render k8s-namespace clean-k8s clean
 
 # Default target
 help:
@@ -32,6 +32,7 @@ help:
 	@echo "  make k8s-lint       Lint the Helm chart (all environments)"
 	@echo "  make k8s-render     Render Helm templates for local (dry-run)"
 	@echo "  make k8s-namespace  Create the forge namespace (one-time setup)"
+	@echo "  make clean-k8s     ⚠ Delete forge + all forge-ws-* namespaces (dev reset)"
 	@echo ""
 	@echo "  Utilities"
 	@echo "  ─────────────────────────────────────"
@@ -108,6 +109,26 @@ k8s-render:
 ## Create the forge namespace (idempotent — safe to run multiple times)
 k8s-namespace:
 	kubectl create namespace forge --dry-run=client -o yaml | kubectl apply -f -
+
+## Delete the forge namespace AND all forge-ws-* workspace namespaces.
+## ⚠  DESTRUCTIVE: wipes all agent PVCs, Secrets, and state for every workspace.
+## Use only during local dev to start fresh. Never run against production.
+clean-k8s:
+	@echo ""
+	@echo "  ⚠  WARNING: This will permanently delete:"
+	@echo "     • namespace/forge  (API, Web, Controller, PostgreSQL, all data)"
+	@echo "     • all forge-ws-* namespaces (agent pods, PVCs, Secrets)"
+	@echo ""
+	@printf "  Type 'yes' to confirm: "; read CONFIRM; \
+	if [ "$$CONFIRM" = "yes" ]; then \
+		echo "→ Deleting namespace/forge..."; \
+		kubectl delete namespace forge --ignore-not-found; \
+		echo "→ Deleting forge-ws-* namespaces..."; \
+		kubectl get namespace -o name | grep 'namespace/forge-ws-' | xargs -r kubectl delete --ignore-not-found; \
+		echo "✓ Done. Run 'make tilt-up' to start fresh."; \
+	else \
+		echo "Aborted."; \
+	fi
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
