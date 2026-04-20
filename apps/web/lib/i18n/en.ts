@@ -329,8 +329,7 @@ export const en = {
     cancelEdit: "Cancel",
     changeAvatar: "Change avatar",
     healthOnline: "Online",
-    healthProvisioning: "Provisioning",
-    healthWarning: "Needs Setup",
+    healthStarting: "Starting",
     healthOffline: "Offline",
     roleLabels: {
       team_lead: "Team Lead",
