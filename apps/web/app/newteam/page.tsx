@@ -123,7 +123,7 @@ export default function NewTeamPage() {
   const [step, setStep]                   = useState(1);
   const [selected, setSelected]           = useState<Template | null>(null);
   const [teamName, setTeamName]           = useState("");
-  const [teamLeadName, setTeamLeadName]   = useState("Forge Team Lead");
+  const [teamLeadName, setTeamLeadName]   = useState("Team Lead");
   const [isCreating, setIsCreating]       = useState(false);
 
   // Engineering squad state
@@ -149,11 +149,11 @@ export default function NewTeamPage() {
 
   const buildAgents = () => {
     if (selected === "starter") {
-      return [{ name: teamLeadName || "Forge Team Lead", type: "team_lead" }];
+      return [{ name: teamLeadName || "Team Lead", type: "team_lead" }];
     }
     // Engineering
     const result: { name: string; type: string }[] = [
-      { name: teamLeadName || "Forge Team Lead", type: "team_lead" },
+      { name: teamLeadName || "Team Lead", type: "team_lead" },
     ];
     (["engineer", "architect", "pm"] as RoleKey[]).forEach((role) => {
       for (let i = 0; i < quantities[role]; i++) {
@@ -298,12 +298,12 @@ export default function NewTeamPage() {
                   autoFocus />
               </div>
 
-              {/* Forge Team Lead */}
+              {/* Team Lead */}
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <span className="text-xl">🤖</span>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Forge Team Lead</p>
+                    <p className="text-sm font-semibold text-foreground">Team Lead</p>
                     <p className="text-xs text-muted-foreground">Coordinates the team and owns delivery.</p>
                   </div>
                   <span className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-xs font-semibold text-primary">
@@ -312,7 +312,7 @@ export default function NewTeamPage() {
                 </div>
                 <Input id="newteam-lead-name" value={teamLeadName}
                   onChange={(e) => setTeamLeadName(e.target.value)}
-                  placeholder="Forge Team Lead" className="h-8 text-sm" />
+                  placeholder="Team Lead" className="h-8 text-sm" />
               </div>
 
               <div className="flex gap-2 mt-1">
@@ -346,12 +346,12 @@ export default function NewTeamPage() {
               <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
                 <span className="text-xl">🤖</span>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-foreground">{teamLeadName || "Forge Team Lead"}</p>
+                  <p className="text-sm font-semibold text-foreground">{teamLeadName || "Team Lead"}</p>
                   <p className="text-xs text-muted-foreground">Team Lead · always included</p>
                 </div>
                 <span className="text-xs font-bold text-primary">×1</span>
               </div>
-
+``
               {/* Role pickers */}
               <div className="flex flex-col gap-3">
                 {ROLES.map((role) => {

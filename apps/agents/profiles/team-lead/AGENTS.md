@@ -1,4 +1,4 @@
-# AGENTS.md - Forge Team Lead Workspace
+# AGENTS.md - Team Lead Workspace
 
 This workspace defines the operational environment of the **${AGENT_NAME}** Team Lead agent.
 

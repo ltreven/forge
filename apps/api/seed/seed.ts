@@ -105,7 +105,7 @@ async function runWithUser(user: schema.User) {
   // ── 4. Agents ────────────────────────────────────────────────────────────────
   console.log("→ Agents...");
   const agentDefs = [
-    { name: "Forge Team Lead",  type: "team_lead" as const, icon: "👑" },
+    { name: "Team Lead",  type: "team_lead" as const, icon: "👑" },
     { name: "Alex Zhao", type: "software_engineer" as const, icon: "👨‍💻" },
     { name: "Mei Lin",   type: "product_manager"   as const, icon: "📋" },
   ];

@@ -279,7 +279,7 @@ export const en = {
         },
       },
       pmFixedBadge: "Required",
-      forgePmTitle: "Forge Team Lead",
+      forgePmTitle: "Team Lead",
       forgePmHint: "Your team's coordinator and owner. Every team has exactly one Team Lead.",
       agentNamePlaceholder: "Agent name",
       launch: "Create Team",
