@@ -184,7 +184,16 @@ agentsRouter.put("/:id", async (req: Request, res: Response, next: NextFunction)
 
     const [updated] = await db
       .update(agents)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        ...input,
+        // Merge metadata server-side to prevent partial-update data loss.
+        // The frontend may send a subset of fields (e.g. only telegramBotToken),
+        // which would otherwise silently wipe personality, avatarColor, etc.
+        metadata: input.metadata
+          ? { ...((existing.metadata as Record<string, unknown>) ?? {}), ...(input.metadata as Record<string, unknown>) }
+          : existing.metadata,
+        updatedAt: new Date(),
+      })
       .where(eq(agents.id, String(req.params.id)))
       .returning();
 
@@ -197,8 +206,8 @@ agentsRouter.put("/:id", async (req: Request, res: Response, next: NextFunction)
     const oldToken = (existing.metadata as Record<string, unknown> | null)?.telegramBotToken;
     const newToken = (updated.metadata  as Record<string, unknown> | null)?.telegramBotToken;
 
-    if (newToken && newToken !== oldToken) {
-      // Also mark status as pending_pairing so UI shows the pairing step
+    // Trigger K8s sync whenever the token changes — including removal (disconnect).
+    if (newToken !== oldToken) {
       await db
         .update(agents)
         .set({
