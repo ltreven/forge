@@ -2,6 +2,7 @@ package sync
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 // PatchAgentStatus notifies the Forge API to update the agent's k8sStatus in postgres.
 // Called by the reconciler after every successful status change.
 // The API's /internal route is protected by NetworkPolicy — only reachable from within the cluster.
-func PatchAgentStatus(apiBaseURL, agentID, phase string) error {
+func PatchAgentStatus(ctx context.Context, apiBaseURL, agentID, phase string) error {
 	url := strings.TrimRight(apiBaseURL, "/") + "/internal/agents/" + agentID + "/k8s-status"
 
 	body, err := json.Marshal(map[string]string{"phase": phase})
@@ -20,10 +21,16 @@ func PatchAgentStatus(apiBaseURL, agentID, phase string) error {
 		return fmt.Errorf("marshal phase body: %w", err)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("POST %s: %w", url, err)
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("PATCH %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 

@@ -192,7 +192,7 @@ export async function getForgeAgentStatus(
   agentId: string,
 ): Promise<{ phase: string; podName?: string; conditions?: unknown[] } | null> {
   try {
-    const cr = await customObjects.getNamespacedCustomObject(
+    const { body: cr } = await customObjects.getNamespacedCustomObject(
       FORGE_AI_GROUP, FORGE_AI_VERSION, namespace, FORGE_AI_PLURAL, agentId,
     ) as any;
     return cr?.status ?? { phase: "Pending" };

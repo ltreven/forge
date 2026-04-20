@@ -99,7 +99,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// ── 5. Sync phase back to postgres via Forge API ─────────────────────────
 	apiPhase := strings.ToLower(string(phase))
-	if err := sync.PatchAgentStatus(r.APIBaseURL, cr.Name, apiPhase); err != nil {
+	if err := sync.PatchAgentStatus(ctx, r.APIBaseURL, cr.Name, apiPhase); err != nil {
 		logger.Error(err, "failed to sync status to Forge API — will retry")
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
@@ -142,6 +142,7 @@ func (r *AgentReconciler) createOrUpdatePVC(ctx context.Context, desired *corev1
 		return err
 	}
 	existing.Labels = desired.Labels
+	existing.OwnerReferences = desired.OwnerReferences
 	return r.Update(ctx, existing)
 }
 

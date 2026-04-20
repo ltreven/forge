@@ -146,7 +146,9 @@ agentsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction)
       }
     }
 
-    res.json(success({ ...agent, k8sLiveStatus: liveStatus }));
+    // Strip server-side secrets before sending to the client
+    const { gatewayToken: _gt, metadata: _meta, ...safeAgent } = agent as any;
+    res.json(success({ ...safeAgent, k8sLiveStatus: liveStatus }));
   } catch (err) {
     next(err);
   }
