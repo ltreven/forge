@@ -78,6 +78,18 @@ local_resource(
   labels=['setup'],
 )
 
+# ── 2b. Run DB migrations after PostgreSQL is ready ───────────────────────────
+# Pipes all migration SQL files into the PostgreSQL pod.
+# ON_ERROR_STOP=0 makes it idempotent ("already exists" errors are harmless).
+# Tilt re-runs this step whenever a new .sql file is added to migrations/.
+local_resource(
+  'db-migrate',
+  cmd='cat apps/api/migrations/[0-9]*.sql | kubectl exec -i -n forge forge-postgresql-0 -- psql -U forge -d forge -v ON_ERROR_STOP=0 2>&1 | grep -vE "already exists|^$" | grep -E "^(ERROR|FATAL)" || echo "✓ DB migrations applied"',
+  resource_deps=['forge-postgresql'],
+  deps=['apps/api/migrations'],
+  labels=['setup'],
+)
+
 # ── 3. Build API image with live_update ───────────────────────────────────────
 docker_build(
   API_IMAGE,
@@ -201,7 +213,7 @@ k8s_resource(
 # API depends on PostgreSQL being healthy
 k8s_resource(
   'forge-api',
-  resource_deps=['forge-postgresql', 'ensure-namespace'],
+  resource_deps=['forge-postgresql', 'db-migrate', 'ensure-namespace'],
   labels=['app'],
   port_forwards=['4000:4000'],
   links=[
