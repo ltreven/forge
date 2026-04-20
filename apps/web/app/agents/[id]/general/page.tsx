@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, Bot, Check, ChevronDown, ChevronRight, ExternalLink,
+  ArrowLeft, Bot, Check, ChevronDown, ChevronRight,
   KeyRound, Loader2, Save, Send, Wifi, WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -94,27 +94,15 @@ function AvatarPicker({ icon, color, onIconChange, onColorChange, onClose }: {
 const BOTFATHER_STEPS = [
   {
     num: 1,
-    title: "Open BotFather on Telegram",
-    description: "Search for @BotFather in Telegram and start a conversation.",
-    action: { label: "Open @BotFather", href: "https://t.me/BotFather" },
+    description: "Open Telegram, search for @BotFather and send /newbot. Choose a display name and a username ending in \"bot\".",
   },
   {
     num: 2,
-    title: "Create a new bot",
-    description: 'Send /newbot, then choose a display name and a username ending in "bot".',
-    action: null,
+    description: "BotFather will reply with an HTTP API token like 7123456789:AAF… — copy it.",
   },
   {
     num: 3,
-    title: "Copy the HTTP API token",
-    description: "BotFather will reply with a token like 7123456789:AAF… — copy it.",
-    action: null,
-  },
-  {
-    num: 4,
-    title: "Paste the token below and save",
-    description: "After saving, your agent will restart and wait for you to send it a pairing code.",
-    action: null,
+    description: "Paste the token in the field below and click Save & Connect.",
   },
 ];
 
@@ -229,23 +217,13 @@ function TelegramChannel({
               {telegramStatus === "not_configured" && (
                 <>
                   <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Setup Guide</p>
-                  <ol className="mb-5 flex flex-col gap-3">
+                  <ol className="mb-5 flex flex-col gap-2.5">
                     {BOTFATHER_STEPS.map((step) => (
                       <li key={step.num} className="flex gap-3">
                         <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
                           {step.num}
                         </span>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-foreground">{step.title}</p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{step.description}</p>
-                          {step.action && (
-                            <a href={step.action.href} target="_blank" rel="noopener noreferrer"
-                              className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20">
-                              {step.action.label}
-                              <ExternalLink className="size-3" />
-                            </a>
-                          )}
-                        </div>
+                        <p className="flex-1 text-xs text-muted-foreground pt-0.5">{step.description}</p>
                       </li>
                     ))}
                   </ol>
@@ -461,8 +439,17 @@ export default function AgentGeneralPage() {
       }),
     });
     if (!r.ok) throw new Error("Failed to save token");
-    const d = await r.json();
-    setAgent(d.data);
+    // Transition state immediately — don't wait for a re-fetch.
+    // The server also sets pending_pairing but the PUT response is
+    // the raw DB record before the second update runs.
+    setAgent((prev) => prev ? {
+      ...prev,
+      metadata: {
+        ...prev.metadata,
+        hasTelegramToken: true,
+        telegramStatus: "pending_pairing" as TelegramStatus,
+      },
+    } : prev);
     toast.success("Token saved! Agent is restarting… send it a message on Telegram to get your pairing code.", {
       duration: 6000,
     });
