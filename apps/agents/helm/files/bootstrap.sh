@@ -65,10 +65,15 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
     --workspace "$OPENCLAW_CONFIG_DIR/workspace" \
     --json
 
-  echo "==> Adding Telegram channel"
-  openclaw channels add \
-    --channel telegram \
-    --token "$TELEGRAM_BOT_TOKEN"
+  # ── Telegram channel (optional) ──────────────────────────────────────────
+  if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+    echo "==> Adding Telegram channel"
+    openclaw channels add \
+      --channel telegram \
+      --token "$TELEGRAM_BOT_TOKEN"
+  else
+    echo "==> Telegram channel not configured (TELEGRAM_BOT_TOKEN not set — skipping)"
+  fi
 
   # ── Model config ─────────────────────────────────────────────────────────
   PROVIDER="${ACTIVE_PROVIDER:-gemini}"
