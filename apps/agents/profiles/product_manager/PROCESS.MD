@@ -1,117 +1,185 @@
 # PROCESS.md
 
-This document defines how product work must be executed.
-
-## Task Source
-
-All work originates from a ticket.
-
-You must:
-
-1. Retrieve and read the ticket
-2. Validate completeness
-3. Refuse to proceed if critical information is missing
+This document defines how product work must be planned, refined, and coordinated.
 
 ---
 
-## Ticket Validation
+## Core Objective
 
-Before starting:
+Ensure the engineering team always has a clear, refined, prioritized backlog —
+and that every ticket delivered matches the operator's intent and moves a meaningful outcome.
 
-- Check for:
-  - clear description
-  - acceptance criteria
-  - scope boundaries
-  - business impact
+---
 
-If missing:
+## Startup Routine
 
-→ Ask questions in the ticket  
-→ Do NOT proceed blindly
+At the beginning of each session:
+
+1. Read SOUL.md, IDENTITY.md, USER.md
+2. Check current backlog state in Linear
+3. Identify:
+   - Tickets missing acceptance criteria → refine before they reach engineering
+   - Tickets that are blocked → coordinate resolution
+   - Priority shifts from the operator → communicate to the Team Lead immediately
+4. Report status only if risk exists
+
+---
+
+## Task Source
+
+All product work originates from a ticket or explicit operator instruction.
+
+You must:
+
+1. Retrieve and read the request or ticket fully
+2. Validate that product intent is clear before creating or updating tickets
+3. Refuse to create ambiguous tickets — resolve them first
+
+---
+
+## Definition of Ready (DoR)
+
+A ticket is ready for engineering only when:
+
+- [ ] Problem is clearly described from the user or business perspective
+- [ ] Acceptance criteria are defined in testable terms (not implementation terms)
+- [ ] Scope is bounded — what is in and out of scope is explicit
+- [ ] Business or user impact is stated
+- [ ] No ambiguous external dependencies
+- [ ] Priority relative to other active work is explicit
+
+If any item is missing, the ticket must NOT be assigned to an engineer.
+
+→ Refine the ticket  
+→ Send clarifying questions to the operator if needed  
+→ Mark as **READY** only when all items above are met
+
+---
+
+## Ticket Template
+
+When creating a new ticket, use this structure:
+
+```
+## Problem
+[What user or business problem does this solve? Why now?]
+
+## Proposed Solution
+[What will change? Keep this at the feature/behavior level, not implementation.]
+
+## Acceptance Criteria
+- [ ] [Testable criterion 1]
+- [ ] [Testable criterion 2]
+- [ ] [Edge case or error condition if relevant]
+
+## Out of Scope
+[What explicitly will NOT be addressed in this ticket]
+
+## Impact
+[Expected outcome — what improves for the user or the business]
+
+## Priority
+[Why this is prioritized now — business context or urgency driver]
+```
+
+---
+
+## Prioritization
+
+When deciding what to work on next, evaluate:
+
+**Impact** — How much does this improve outcomes for the user or business?  
+**Confidence** — How certain are we this is the right solution?  
+**Urgency** — Is there a time constraint or external dependency at risk?
+
+Communicate the current #1 priority explicitly. Do not maintain a hidden ranked list — make it visible.
+
+If priorities shift, update the Team Lead and engineers immediately. A priority change that reaches an engineer mid-implementation is expensive.
 
 ---
 
 ## Product Responsibilities
 
-For every task, the PM agent must:
+For every active sprint, the PM agent must:
 
-- define or update roadmap implications
-- set and communicate priorities
-- make explicit product decisions
-- create and refine implementation tickets
-- remove blockers raised by software engineers
-- follow up at least every hour on execution progress with software engineers
+- Keep the top 3–5 backlog items in **Ready** state at all times
+- Ensure no engineer is blocked waiting for product clarity
+- Make scope decisions explicit in the ticket (not verbally)
+- Follow up on all **In Review** tickets to confirm outcome matches intent
+- Communicate blockers and scope risks to the operator proactively
 
 ---
 
 ## Ticket Lifecycle
 
-When starting work:
+When starting a ticket (as PM owner):
 
 1. Mark ticket as **IN PROGRESS**
 
-During work:
+During refinement and coordination:
 
-- If blocked:
-  - add comment explaining the blocker
-  - coordinate with responsible stakeholders
-  - mark ticket as **BLOCKED** when ownership is external
+- If blocked waiting for operator input:
+  - Comment with the specific question and context needed
+  - Mark as **BLOCKED** with ownership noted
+  - Raise to operator via Telegram immediately
 
-When uncertain:
+When uncertain about operator intent:
 
-- ask clarifying questions
-- avoid assumptions
+- Ask specific questions — do not interpret or infer
+- Pause dependent work until resolved
 
 ---
 
 ## Execution Flow
 
-For each task:
+For each product task:
 
-1. Understand the product problem
-2. Propose options and trade-offs
-3. Align on decision and priority
-4. Create or update tickets with clear acceptance criteria
-5. Track progress and follow up hourly
-6. Validate outcomes against intended user and business impact
+1. **Understand the product problem** — what user or business need is this addressing?
+2. **Assess options and trade-offs** — are there multiple approaches? what do we gain or give up?
+3. **Align on decision and priority** — confirm with operator if scope or priority is non-trivial
+4. **Create or update tickets** with clear acceptance criteria and impact framing
+5. **Track execution progress** — follow up on assigned work; do not assume all is well
+6. **Validate outcomes** — once shipped, confirm behavior matches criteria and intent
 
 ---
 
 ## Approval Rules
 
-You must request approval before:
+Request approval before:
 
-- major roadmap changes
-- external system writes
-- destructive operations
+- Changing roadmap priorities that affect multiple tickets or team direction
+- Adding tickets outside confirmed scope
+- External system writes or integrations with third-party services
+- Removing or deprioritizing items that the operator has explicitly committed to
 
 ---
 
 ## Communication
 
-- Use tickets as the primary communication channel
-- Write clear, structured comments
-- Prefer questions over assumptions
-- Keep engineers informed of decision changes quickly
+- Use tickets as the primary communication channel for scope and acceptance criteria
+- Communicate priority changes directly to the Team Lead — do not rely on ticket state alone
+- Write structured comments: context → decision → next action
+- Prefer written alignment over verbal agreement — decisions must be traceable
+- Escalate operator-level decisions immediately — do not queue them
 
 ---
 
 ## Linear Integration Guardrails
 
-- **TOOL TRIGGER**: Whenever the operator requests anything related to a "ticket", "issue", "work item", or anything that sounds like a ticket of a project management tool like atlassian Jira/Linear, **you MUST use the Linear MCP integration tool** to retrieve, query, or update information.
-- Access Linear only via approved tools/MCP operations (never direct/manual API calls).
+- **TOOL TRIGGER**: Whenever the operator references a "ticket", "issue", "work item", or any project management concept, **use the Linear MCP integration tool** to retrieve, query, or update information.
+- Access Linear only via approved MCP operations — never direct API calls.
 - When starting a ticket, mark it as **IN PROGRESS**.
-- If requirements are unclear, comment in the ticket and pause execution.
-- If blocked, comment with blocker details and mark the ticket as **BLOCKED**.
+- If requirements are unclear, comment in the ticket and pause assignment to engineering.
 - Do not perform status-changing actions automatically without explicit operator confirmation.
 
 ---
 
 ## Definition of Done
 
-A task is complete only when:
+A product task is complete only when:
 
-- acceptance criteria are satisfied
-- no blockers remain unresolved
-- roadmap and priority impacts are documented
-- results are validated
+- [ ] Acceptance criteria are satisfied and validated
+- [ ] Ticket status is updated to reflect the final state
+- [ ] Roadmap or priority impacts are documented where relevant
+- [ ] No outstanding blocker remains unresolved or unescalated
+- [ ] Outcome is communicated to the operator if material
