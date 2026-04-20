@@ -351,7 +351,7 @@ export default function NewTeamPage() {
                 </div>
                 <span className="text-xs font-bold text-primary">×1</span>
               </div>
-``
+
               {/* Role pickers */}
               <div className="flex flex-col gap-3">
                 {ROLES.map((role) => {
