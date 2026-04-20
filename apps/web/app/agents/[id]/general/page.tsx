@@ -134,6 +134,10 @@ function TelegramChannel({
     try {
       await onPairingApproved(pairingCode.trim());
       setPairingCode("");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to approve pairing code. Please try again."
+      );
     } finally {
       setApprovingPairing(false);
     }
@@ -500,17 +504,21 @@ export default function AgentGeneralPage() {
         {/* Name / Identity */}
         <div className="rounded-2xl border border-border bg-card px-6 py-5 shadow-sm">
           <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Identity</p>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="general-agent-name" className="text-sm font-medium text-foreground">
-              Agent name
-            </label>
-            <Input
-              id="general-agent-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Alice, Max, Forge Lead…"
-            />
-            <p className="text-xs text-muted-foreground">The name this agent will use when communicating.</p>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="general-agent-name" className="text-sm font-medium text-foreground">
+                Agent name
+              </label>
+              <Input
+                id="general-agent-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Alice, Max, Forge Lead…"
+              />
+            </div>
+            <Button id="general-save-btn" onClick={save} disabled={isSaving || !name.trim()} className="w-full font-semibold">
+              {isSaving ? <><Loader2 className="size-4 animate-spin mr-2" />Saving…</> : <><Save className="size-4 mr-2" />Save</>}
+            </Button>
           </div>
         </div>
 
@@ -556,10 +564,6 @@ export default function AgentGeneralPage() {
           </div>
         </div>
 
-        {/* Save */}
-        <Button id="general-save-btn" onClick={save} disabled={isSaving || !name.trim()} className="w-full font-semibold">
-          {isSaving ? <><Loader2 className="size-4 animate-spin mr-2" />Saving…</> : <><Save className="size-4 mr-2" />Save Changes</>}
-        </Button>
       </div>
     </div>
   );
