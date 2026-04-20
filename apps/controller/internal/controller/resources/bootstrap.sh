@@ -65,15 +65,7 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
     --workspace "$OPENCLAW_CONFIG_DIR/workspace" \
     --json
 
-  # ── Telegram channel (optional) ──────────────────────────────────────────
-  if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
-    echo "==> Adding Telegram channel"
-    openclaw channels add \
-      --channel telegram \
-      --token "$TELEGRAM_BOT_TOKEN"
-  else
-    echo "==> Telegram channel not configured (TELEGRAM_BOT_TOKEN not set — skipping)"
-  fi
+  # (Telegram channel configured after first-boot gate — see below)
 
   # ── Model config ─────────────────────────────────────────────────────────
   PROVIDER="${ACTIVE_PROVIDER:-gemini}"
@@ -217,4 +209,23 @@ EOF
   echo "==> Bootstrap complete"
 else
   echo "==> Already bootstrapped — skipping (PVC state preserved)"
+fi
+
+# ── Telegram channel (runs every boot) ───────────────────────────────────────────
+#
+# Runs outside the .bootstrapped gate so a new TELEGRAM_BOT_TOKEN (updated
+# via the Forge UI and injected into the K8s Secret) is picked up on every
+# pod start without requiring PVC manipulation.
+#
+# `openclaw channels add` is idempotent: calling it again with the same or a
+# new token simply reconfigures the channel. The `|| true` ensures the script
+# does not abort if the command exits non-zero (e.g. token not yet valid).
+
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+  echo "==> Configuring Telegram channel (token present)"
+  openclaw channels add \
+    --channel telegram \
+    --token "$TELEGRAM_BOT_TOKEN" || true
+else
+  echo "==> Telegram channel not configured (TELEGRAM_BOT_TOKEN not set)"
 fi

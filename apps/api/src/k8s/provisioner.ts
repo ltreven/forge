@@ -1,5 +1,5 @@
 import type { Agent } from "../db/schema";
-import { coreV1, customObjects, FORGE_AI_GROUP, FORGE_AI_VERSION, FORGE_AI_PLURAL } from "./client";
+import { coreV1, appsV1, customObjects, FORGE_AI_GROUP, FORGE_AI_VERSION, FORGE_AI_PLURAL } from "./client";
 
 /**
  * Derives the deterministic Kubernetes namespace for a workspace.
@@ -200,6 +200,44 @@ export async function getForgeAgentStatus(
     if (httpStatus(err) === 404) return null;
     throw err;
   }
+}
+
+/**
+ * Triggers a rolling restart of the agent's Deployment by patching the pod
+ * template annotation `kubectl.kubernetes.io/restartedAt` with the current
+ * timestamp. Equivalent to `kubectl rollout restart deployment/<agentId>`.
+ *
+ * The new ReplicaSet causes the initContainer (bootstrap.sh) to run again on
+ * each fresh pod, which (re-)configures the Telegram channel with the updated
+ * TELEGRAM_BOT_TOKEN from the credentials Secret.
+ */
+export async function rolloutRestartDeployment(
+  namespace: string,
+  agentId: string,
+): Promise<void> {
+  const patch = {
+    spec: {
+      template: {
+        metadata: {
+          annotations: {
+            "kubectl.kubernetes.io/restartedAt": new Date().toISOString(),
+          },
+        },
+      },
+    },
+  };
+
+  await appsV1.patchNamespacedDeployment(
+    agentId,
+    namespace,
+    patch,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { headers: { "Content-Type": "application/strategic-merge-patch+json" } },
+  );
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

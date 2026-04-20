@@ -12,6 +12,9 @@ kc.loadFromDefault();
 /** Core V1 API — Namespaces, Secrets, ConfigMaps */
 export const coreV1 = kc.makeApiClient(k8s.CoreV1Api);
 
+/** Apps V1 API — Deployments */
+export const appsV1 = kc.makeApiClient(k8s.AppsV1Api);
+
 /** Custom Objects API — ForgeAgent CRs */
 export const customObjects = kc.makeApiClient(k8s.CustomObjectsApi);
 

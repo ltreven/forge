@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { useTranslation } from "@/lib/i18n";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { ModelSelector, AVAILABLE_MODELS } from "@/components/agent/model-selector";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -223,11 +222,6 @@ export default function AgentPage() {
     const d = await r.json(); setAgent(d.data); return d.data as Agent;
   }, [agentId, authHeaders]);
 
-  const handleModelSave = async (model: string) => {
-    if (!agent) return;
-    await patchAgent({ metadata: { ...(agent.metadata ?? {}), model } });
-  };
-
   // Guards
   if (isLoading) return <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center"><Loader2 className="size-8 animate-spin text-primary" /></div>;
   if (!agent) return (
@@ -238,19 +232,18 @@ export default function AgentPage() {
     </div>
   );
 
-  const icon         = agent.icon ?? "🤖";
-  const color        = agent.metadata?.avatarColor ?? ROLE_COLORS[agent.type] ?? "#6366f1";
-  const health       = computeHealth(agent);
-  const currentModel = agent.metadata?.model ?? AVAILABLE_MODELS[0].model;
-  const ta           = t.agents;
-  const roleLabel    = ROLE_LABELS[agent.type] ?? agent.type;
-  const healthLabel  = health === "online" ? ta.healthOnline : health === "warning" ? ta.healthWarning : ta.healthOffline;
-  const backHref     = agent.teamId ? `/teams/${agent.teamId}` : "/teams";
+  const icon        = agent.icon ?? "🤖";
+  const color       = agent.metadata?.avatarColor ?? ROLE_COLORS[agent.type] ?? "#6366f1";
+  const health      = computeHealth(agent);
+  const currentModel = (agent.metadata as Record<string, unknown> | undefined)?.model as string | undefined ?? "auto";
+  const ta          = t.agents;
+  const roleLabel   = ROLE_LABELS[agent.type] ?? agent.type;
+  const healthLabel = health === "online" ? ta.healthOnline : health === "warning" ? ta.healthWarning : ta.healthOffline;
+  const backHref    = agent.teamId ? `/teams/${agent.teamId}` : "/teams";
 
   const NAV_ITEMS = [
     { href: `/agents/${agentId}/general`,   icon: <Settings    className="size-5" />, title: "General Settings",       description: "Name, avatar, and identity.",               accent: "#6366f1" },
     { href: `/agents/${agentId}/brain`,     icon: <Brain       className="size-5" />, title: "Brain",                  description: "Personality, role, and long-term memory.",  accent: "#8b5cf6" },
-    { href: `/agents/${agentId}/history`,   icon: <History     className="size-5" />, title: "History",                description: "Past conversations and threads.",            accent: "#3b82f6" },
     { href: `/agents/${agentId}/dashboard`, icon: <Gauge       className="size-5" />, title: "Dashboard",              description: "Task activity and token usage.",             accent: "#06b6d4" },
     { href: `/agents/${agentId}/tools`,     icon: <Wrench      className="size-5" />, title: "Tools",                  description: "MCP servers, APIs, code execution.",         accent: "#f59e0b" },
     { href: `/agents/${agentId}/security`,  icon: <ShieldCheck className="size-5" />, title: "Security",               description: "Approval policies and guardrails.",          accent: "#ef4444" },
@@ -288,10 +281,6 @@ export default function AgentPage() {
                 health === "offline" && "text-red-600 dark:text-red-400"
               )}>{healthLabel}</span>
             </div>
-            {/* Model selector — inline next to identity */}
-            <div className="relative">
-              <ModelSelector currentModel={currentModel} onSave={handleModelSave} t={tp.model} />
-            </div>
           </div>
         </div>
       </div>
@@ -303,9 +292,20 @@ export default function AgentPage() {
         <div className="lg:col-span-2">
           <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
             <div className="border-b border-border px-5 py-3.5">
-              <div className="flex items-center gap-2">
-                <Zap className="size-4 text-primary" />
-                <p className="text-sm font-semibold text-foreground">Chat</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap className="size-4 text-primary" />
+                  <p className="text-sm font-semibold text-foreground">Chat</p>
+                </div>
+                <Link
+                  href={`/agents/${agentId}/history`}
+                  id="chat-history-btn"
+                  title="View conversation history"
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <History className="size-3.5" />
+                  <span className="hidden sm:inline">History</span>
+                </Link>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">Send a message directly to this agent.</p>
             </div>

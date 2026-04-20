@@ -12,6 +12,7 @@ import {
   applyForgeAgentCR,
   deleteForgeAgentCR,
   deleteCredentialsSecret,
+  rolloutRestartDeployment,
   getForgeAgentStatus,
 } from "../k8s/provisioner";
 
@@ -155,10 +156,25 @@ agentsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction)
 });
 
 // ── PUT /agents/:id ───────────────────────────────────────────────────────────
+// Updates the DB record. If metadata.telegramBotToken changed, also:
+//   1. Upserts the K8s credentials Secret (so the pod env gets the new token).
+//   2. Triggers a rolling Deployment restart (initContainer re-runs bootstrap.sh,
+//      which reconfigures the Telegram channel with the new token).
 
 agentsRouter.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = updateAgentSchema.parse(req.body);
+
+    // ── Fetch current record to compare telegramBotToken ─────────────────────
+    const [existing] = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, String(req.params.id)));
+
+    if (!existing) {
+      res.status(404).json(failure("Agent not found"));
+      return;
+    }
 
     const [updated] = await db
       .update(agents)
@@ -169,6 +185,31 @@ agentsRouter.put("/:id", async (req: Request, res: Response, next: NextFunction)
     if (!updated) {
       res.status(404).json(failure("Agent not found"));
       return;
+    }
+
+    // ── Sync K8s Secret + rollout restart if telegram token changed ───────────
+    const oldToken = (existing.metadata as Record<string, unknown> | null)?.telegramBotToken;
+    const newToken = (updated.metadata  as Record<string, unknown> | null)?.telegramBotToken;
+
+    if (newToken && newToken !== oldToken) {
+      try {
+        // Resolve the workspace namespace for this agent
+        const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId));
+        const [workspace] = team
+          ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId))
+          : [];
+
+        if (workspace?.k8sNamespace) {
+          // 1. Upsert credentials Secret with new token
+          await applyCredentialsSecret(workspace.k8sNamespace, updated);
+          // 2. Rolling restart so initContainer picks up TELEGRAM_BOT_TOKEN
+          await rolloutRestartDeployment(workspace.k8sNamespace, updated.id);
+          console.log(`[agents] Telegram token updated — rollout restart triggered for ${updated.id}`);
+        }
+      } catch (k8sErr) {
+        // Non-fatal: DB is already updated, log for ops visibility
+        console.error("[agents] K8s Secret/restart after telegram token change failed:", k8sErr);
+      }
     }
 
     res.json(success(updated));
