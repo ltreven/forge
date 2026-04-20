@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
@@ -52,11 +53,16 @@ agentsRouter.post("/", async (req: Request, res: Response, next: NextFunction) =
         .where(eq(workspaces.id, workspace.id));
     }
 
-    // ── 3. Insert agent with pending k8s status ───────────────────────────────
+    // ── 3. Insert agent with gateway token + pending k8s status ──────────────
+    // gatewayToken is generated once here and never changed — the same token
+    // persists across pod restarts since openclaw stores its state on the PVC.
+    const gatewayToken = randomBytes(32).toString("base64url");
+
     const [agent] = await db
       .insert(agents)
       .values({
         ...input,
+        gatewayToken,
         k8sStatus: "pending",
       })
       .returning();
