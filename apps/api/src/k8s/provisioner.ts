@@ -80,8 +80,9 @@ export async function applyCredentialsSecret(
   };
 
   try {
-    await coreV1.readNamespacedSecret(name, namespace);
-    // Exists — replace
+    const { body: existingSecret } = await coreV1.readNamespacedSecret(name, namespace);
+    // Exists — carry resourceVersion for optimistic concurrency control (required by k8s PUT)
+    (secretBody.metadata as any).resourceVersion = existingSecret.metadata?.resourceVersion;
     await coreV1.replaceNamespacedSecret(name, namespace, secretBody);
   } catch (err: any) {
     if (httpStatus(err) === 404) {
@@ -144,7 +145,7 @@ export async function applyForgeAgentCR(
   } catch (err: any) {
     if (httpStatus(err) === 409) {
       // Already exists — replace (requires current resourceVersion for optimistic lock)
-      const existing = await customObjects.getNamespacedCustomObject(
+      const { body: existing } = await customObjects.getNamespacedCustomObject(
         FORGE_AI_GROUP, FORGE_AI_VERSION, namespace, FORGE_AI_PLURAL, name,
       ) as any;
       (crBody.metadata as any).resourceVersion = existing.metadata?.resourceVersion;

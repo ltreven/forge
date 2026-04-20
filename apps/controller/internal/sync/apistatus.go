@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // PatchAgentStatus notifies the Forge API to update the agent's k8sStatus in postgres.
@@ -19,7 +20,8 @@ func PatchAgentStatus(apiBaseURL, agentID, phase string) error {
 		return fmt.Errorf("marshal phase body: %w", err)
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", url, err)
 	}
