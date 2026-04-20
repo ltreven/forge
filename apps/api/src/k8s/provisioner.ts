@@ -49,6 +49,10 @@ export async function applyCredentialsSecret(
   const metadata = (agent.metadata ?? {}) as Record<string, unknown>;
   const name = `${agent.id}-creds`;
 
+  // Platform-level fallbacks — set in forge-api env via PLATFORM_* vars from .env
+  const platformOpenAIKey = process.env.PLATFORM_OPENAI_API_KEY;
+  const platformGeminiKey = process.env.PLATFORM_GEMINI_API_KEY;
+
   const stringData: Record<string, string> = {};
   if (agent.gatewayToken)                    stringData.OPENCLAW_GATEWAY_TOKEN  = agent.gatewayToken;
   if (metadata.telegramBotToken)             stringData.TELEGRAM_BOT_TOKEN      = String(metadata.telegramBotToken);
@@ -57,8 +61,11 @@ export async function applyCredentialsSecret(
   if (metadata.githubToken)                  stringData.GITHUB_PERSONAL_ACCESS_TOKEN = String(metadata.githubToken);
   if (metadata.githubEnabled)                stringData.GITHUB_ENABLED            = String(metadata.githubEnabled);
   if (metadata.githubAuthMode)               stringData.GITHUB_AUTH_MODE          = String(metadata.githubAuthMode);
-  if (metadata.openaiApiKey)                 stringData.OPENAI_API_KEY            = String(metadata.openaiApiKey);
-  if (metadata.geminiApiKey)                 stringData.GEMINI_API_KEY            = String(metadata.geminiApiKey);
+  // Agent-specific key takes priority; fall back to platform key
+  const openaiKey = metadata.openaiApiKey ? String(metadata.openaiApiKey) : platformOpenAIKey;
+  if (openaiKey)                             stringData.OPENAI_API_KEY            = openaiKey;
+  const geminiKey = metadata.geminiApiKey ? String(metadata.geminiApiKey) : platformGeminiKey;
+  if (geminiKey)                             stringData.GEMINI_API_KEY            = geminiKey;
 
   const secretBody = {
     metadata: {
@@ -119,8 +126,8 @@ export async function applyForgeAgentCR(
       operatorName:         String(metadata.operatorName ?? ""),
       credentialsSecretRef: `${agent.id}-creds`,
       model: {
-        provider: String(metadata.modelProvider ?? "openai"),
-        name:     String(metadata.modelName ?? "gpt-4.1"),
+        provider: String(metadata.modelProvider ?? process.env.PLATFORM_MODEL_PROVIDER ?? "openai"),
+        name:     String(metadata.modelName     ?? process.env.PLATFORM_MODEL_NAME     ?? "gpt-4o-mini"),
       },
       resources: {
         requests: { cpu: "250m",  memory: "512Mi" },
