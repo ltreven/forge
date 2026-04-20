@@ -102,7 +102,7 @@ export default function SignupPage() {
   const [starterTeamLead, setStarterTeamLead] = useState("");
 
   // Step 4 — Engineering config
-  const [forgeTeamLeadName, setForgeTeamLeadName] = useState("Forge Team Lead");
+  const [forgeTeamLeadName, setForgeTeamLeadName] = useState("Team Lead");
   const [quantities, setQuantities] = useState<Record<RoleKey, number>>({ engineer: 1, architect: 0, pm: 0 });
   const [agentNames, setAgentNames] = useState<Record<RoleKey, string[]>>({ engineer: ["Alice"], architect: [], pm: [] });
 
@@ -121,7 +121,7 @@ export default function SignupPage() {
   };
 
   const buildEngineeringAgents = () => {
-    const result: { name: string; type: string }[] = [{ name: forgeTeamLeadName || "Forge Team Lead", type: "team_lead" }];
+    const result: { name: string; type: string }[] = [{ name: forgeTeamLeadName || "Team Lead", type: "team_lead" }];
     roles.forEach((role) => {
       for (let i = 0; i < quantities[role]; i++) {
         result.push({ name: agentNames[role][i] || `${t.signup.step4Engineering.roles[role].title} ${i + 1}`, type: AGENT_TYPE_MAP[role] });
@@ -387,7 +387,7 @@ export default function SignupPage() {
                 <p className="mt-1 text-sm text-muted-foreground">{t.signup.step4Engineering.subtitle}</p>
               </div>
 
-              {/* Fixed Forge Team Lead */}
+              {/* Fixed Team Lead */}
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <span className="text-xl">🤖</span>

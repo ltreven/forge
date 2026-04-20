@@ -9,6 +9,18 @@ export const agentTypeEnum = pgEnum("agent_type", [
   "software_architect",
 ]);
 
+/**
+ * Tracks the Kubernetes provisioning state of an agent workload.
+ * Updated by the Agent Controller via PATCH /internal/agents/:id/k8s-status.
+ */
+export const agentK8sStatusEnum = pgEnum("agent_k8s_status", [
+  "pending",       // CR not yet applied to cluster
+  "provisioning", // CR applied, controller reconciling
+  "running",      // Deployment Available
+  "failed",       // Reconciliation error
+  "terminated",   // CR deleted, resources being GC'd
+]);
+
 export const integrationProviderEnum = pgEnum("integration_provider", [
   "linear",
   "jira",
@@ -46,6 +58,12 @@ export const workspaces = pgTable("workspaces", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   waysOfWorking: text("ways_of_working"),
+  /**
+   * Kubernetes namespace for this workspace's agents.
+   * Derived deterministically: forge-ws-{id[:8]}
+   * Set on workspace creation; never changes.
+   */
+  k8sNamespace: text("k8s_namespace").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -85,6 +103,17 @@ export const agents = pgTable("agents", {
   icon: text("icon"),
   /** JSON bag for avatarColor, telegramBotToken, telegramPairingCode, etc. */
   metadata: jsonb("metadata"),
+  /**
+   * Openclaw gateway authentication token.
+   * Generated once on agent creation (crypto.randomBytes(32).toString('base64url')).
+   * Passed to the pod as OPENCLAW_GATEWAY_TOKEN via the credentials Secret.
+   * Never regenerated — same token persists across pod restarts (PVC state).
+   */
+  gatewayToken: text("gateway_token"),
+  /** Current Kubernetes provisioning phase, updated by the Agent Controller. */
+  k8sStatus: agentK8sStatusEnum("k8s_status").default("pending"),
+  /** Name of the ForgeAgent CR in the cluster (equals agent UUID). */
+  k8sResourceName: text("k8s_resource_name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -1,10 +1,12 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
+import { randomBytes } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { teams, agents, workspaces } from "../db/schema";
 import { createTeamSchema, updateTeamSchema } from "../schemas/team.schema";
 import { success, failure } from "../lib/response";
 import { authMiddleware } from "../middleware/authMiddleware";
+import { applyCredentialsSecret, applyForgeAgentCR } from "../k8s/provisioner";
 
 export const teamsRouter = Router();
 
@@ -88,13 +90,43 @@ teamsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: 
       // Create agents provided by the caller, or fall back to a default team lead.
       const agentInputs =
         input.agents && input.agents.length > 0
-          ? input.agents.map((a) => ({ teamId: team.id, name: a.name, type: a.type, icon: a.icon }))
-          : [{ teamId: team.id, name: "Forge Team Lead", type: "team_lead" as const }];
+          ? input.agents.map((a) => ({
+              teamId: team.id,
+              name: a.name,
+              type: a.type,
+              icon: a.icon,
+              gatewayToken: randomBytes(32).toString("base64url"),
+            }))
+          : [{ teamId: team.id, name: "Team Lead", type: "team_lead" as const, gatewayToken: randomBytes(32).toString("base64url") }];
 
       const createdAgents = await tx.insert(agents).values(agentInputs).returning();
 
       return { team, agents: createdAgents };
     });
+
+    // ── K8s provisioning (best-effort — DB is source of truth) ───────────────
+    const [workspace] = await db
+      .select({ k8sNamespace: workspaces.k8sNamespace })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId!));
+
+    if (workspace?.k8sNamespace) {
+      const namespace = workspace.k8sNamespace;
+      for (const agent of result.agents) {
+        try {
+          await applyCredentialsSecret(namespace, agent);
+          await applyForgeAgentCR(namespace, agent, workspaceId!);
+          await db
+            .update(agents)
+            .set({ k8sStatus: "provisioning", k8sResourceName: agent.id })
+            .where(eq(agents.id, agent.id));
+        } catch (err) {
+          console.error(`[teams] Failed to provision agent ${agent.id}:`, err);
+        }
+      }
+    } else {
+      console.warn(`[teams] No k8s namespace for workspace ${workspaceId} — skipping provisioning`);
+    }
 
     res.status(201).json(success(result));
   } catch (err) {

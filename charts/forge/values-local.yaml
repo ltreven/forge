@@ -66,3 +66,16 @@ postgresql:
 networkPolicy:
   # Disable NetworkPolicy locally — Docker Desktop doesn't enforce them well
   enabled: false
+
+controller:
+  enabled: true
+  replicaCount: 1   # single replica locally (no need for HA)
+  image:
+    repository: forge/controller
+    tag: local
+    pullPolicy: Never
+  # Image the controller will use for agent Pods.
+  # In local dev: built by Tilt with pullPolicy=Never.
+  # In prod: override with the published ghcr.io reference.
+  agentImage: "forge/agent:local"
+  agentImagePullPolicy: "Never"

@@ -18,12 +18,32 @@
 # ── Load local developer settings (optional, gitignored) ─────────────────────
 settings = read_yaml("tilt-settings.yaml", default={})
 
+# ── Load platform credentials from .env (gitignored, never committed) ────────────
+# Copy .env.example to .env and fill in real values.
+dotenv = str(read_file(".env", default="")).splitlines()
+def _parse_dotenv(lines):
+  env = {}
+  for line in lines:
+    line = line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+      continue
+    k, _, v = line.partition("=")
+    env[k.strip()] = v.strip()
+  return env
+_env = _parse_dotenv(dotenv)
+
+PLATFORM_OPENAI_KEY    = _env.get("PLATFORM_OPENAI_API_KEY",  "")
+PLATFORM_MODEL_PROVIDER = _env.get("PLATFORM_MODEL_PROVIDER", "openai")
+PLATFORM_MODEL_NAME     = _env.get("PLATFORM_MODEL_NAME",    "gpt-4o-mini")
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 NAMESPACE      = "forge"
 HELM_CHART     = "charts/forge"
 VALUES_LOCAL   = "charts/forge/values-local.yaml"
-API_IMAGE      = settings.get("api_image", "forge/api")
-WEB_IMAGE      = settings.get("web_image", "forge/web")
+API_IMAGE        = settings.get("api_image",        "forge/api")
+WEB_IMAGE        = settings.get("web_image",        "forge/web")
+AGENT_IMAGE      = settings.get("agent_image",      "forge/agent:local")
+CONTROLLER_IMAGE = settings.get("controller_image", "forge/controller")
 TILT_HOST      = settings.get("host", "forge.localhost")
 
 # ── 1. Install ingress-nginx via Helm (only if not already present) ────────────
@@ -104,7 +124,49 @@ docker_build(
   # Tilt will trigger a rebuild automatically when files in apps/web/ change.
 )
 
+# ── 5a. Build forge-agent image ──────────────────────────────────────────────
+# docker_build registers the image with Tilt. Tilt SUBSTITUTES the tag from
+# forge/agent:local → forge/agent:tilt-XXXX (the actual built digest) in any
+# k8s_yaml it manages that references this image.
+# The ConfigMap below carries the substituted tag. The Go controller reads it,
+# so agent pods always use the exact image Tilt has loaded into k8s containerd.
+# pullPolicy: IfNotPresent (not Never) — safe since the image is from a build.
+docker_build(
+  AGENT_IMAGE,
+  context='apps/agents',
+  dockerfile='apps/agents/Dockerfile',
+  ignore=['*.md'],
+)
+
+# ConfigMap in forge namespace that holds the current agent image ref.
+# Tilt will substitute AGENT_IMAGE here → the exact tilt-tagged digest.
+# The Go controller reads this to build agent Deployments.
+k8s_yaml(blob("""
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forge-agent-image
+  namespace: forge
+  labels:
+    app.kubernetes.io/managed-by: tilt
+data:
+  image: "{image}"
+  pullPolicy: "IfNotPresent"
+""".format(image=AGENT_IMAGE)))
+
+
+# ── 5b. Build forge-controller (Go) ─────────────────────────────────────────
+docker_build(
+  CONTROLLER_IMAGE,
+  context='apps/controller',
+  dockerfile='apps/controller/Dockerfile',
+  ignore=['vendor'],
+)
+
 # ── 5. Deploy the forge Helm chart ────────────────────────────────────────────
+# Note: Tilt passes --include-crds to helm template automatically, so CRDs in
+# charts/forge/crds/ (ForgeAgent CRD) are applied as part of this step.
+# No separate kubectl apply step is needed, even on a zero-km cluster.
 k8s_yaml(
   helm(
     HELM_CHART,
@@ -116,7 +178,13 @@ k8s_yaml(
       'api.image.tag=local',
       'web.image.repository=' + WEB_IMAGE,
       'web.image.tag=local',
+      'controller.image.repository=' + CONTROLLER_IMAGE,
+      'controller.image.tag=local',
       'ingress.host=' + TILT_HOST,
+      # Platform AI credentials — read from .env (gitignored)
+      'api.env.PLATFORM_OPENAI_API_KEY=' + PLATFORM_OPENAI_KEY,
+      'api.env.PLATFORM_MODEL_PROVIDER=' + PLATFORM_MODEL_PROVIDER,
+      'api.env.PLATFORM_MODEL_NAME=' + PLATFORM_MODEL_NAME,
     ],
   )
 )
