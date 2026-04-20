@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type HealthStatus = "online" | "warning" | "offline";
+type HealthStatus = "online" | "provisioning" | "warning" | "offline";
 
 interface AgentMetadata {
   avatarColor?: string;
@@ -29,6 +29,8 @@ interface Agent {
   id: string; name: string; type: string;
   icon?: string; metadata?: AgentMetadata;
   teamId?: string;
+  /** Kubernetes provisioning phase — updated by the Agent Controller. */
+  k8sStatus?: "pending" | "provisioning" | "running" | "failed" | "terminated" | null;
 }
 
 interface ChatMessage {
@@ -60,22 +62,42 @@ const ROLE_LABELS: Record<string, string> = {
 
 // ── Health helpers ────────────────────────────────────────────────────────────
 
+/**
+ * Maps cluster k8sStatus + telegramStatus to a front-end HealthStatus.
+ *
+ * Priority:
+ *  1. k8sStatus drives the primary state (pod lifecycle).
+ *  2. If the pod is running, a secondary check on telegramStatus surfaces
+ *     whether the communication channel is also wired up.
+ */
 function computeHealth(a: Agent): HealthStatus {
-  const s = a.metadata?.telegramStatus;
-  if (!s || s === "not_configured" || s === "registering") return "warning";
-  return s === "complete" ? "online" : "warning";
+  const k8s = a.k8sStatus;
+
+  if (!k8s || k8s === "pending" || k8s === "provisioning") return "provisioning";
+  if (k8s === "failed" || k8s === "terminated") return "offline";
+
+  // k8sStatus === "running" — pod is up. Now check channel readiness.
+  const telegram = a.metadata?.telegramStatus;
+  if (telegram === "complete") return "online";
+
+  // Pod running but no channel connected yet — amber warning.
+  return "warning";
 }
 
 function HealthDot({ status }: { status: HealthStatus }) {
   return (
     <span className={cn(
       "relative flex size-2 shrink-0 rounded-full",
-      status === "online"  && "bg-emerald-500",
-      status === "warning" && "bg-amber-400",
-      status === "offline" && "bg-red-500",
+      status === "online"       && "bg-emerald-500",
+      status === "provisioning" && "bg-amber-400",
+      status === "warning"      && "bg-amber-400",
+      status === "offline"      && "bg-red-500",
     )}>
       {status === "online" && (
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+      )}
+      {status === "provisioning" && (
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
       )}
     </span>
   );
@@ -238,7 +260,11 @@ export default function AgentPage() {
   const currentModel = (agent.metadata as Record<string, unknown> | undefined)?.model as string | undefined ?? "auto";
   const ta          = t.agents;
   const roleLabel   = ROLE_LABELS[agent.type] ?? agent.type;
-  const healthLabel = health === "online" ? ta.healthOnline : health === "warning" ? ta.healthWarning : ta.healthOffline;
+  const healthLabel =
+    health === "online"       ? ta.healthOnline :
+    health === "provisioning" ? (ta.healthProvisioning ?? "Provisioning") :
+    health === "warning"      ? ta.healthWarning :
+    ta.healthOffline;
   const backHref    = agent.teamId ? `/teams/${agent.teamId}` : "/teams";
 
   const NAV_ITEMS = [
@@ -276,9 +302,10 @@ export default function AgentPage() {
             <div className="flex items-center gap-1.5">
               <HealthDot status={health} />
               <span className={cn("text-xs font-medium",
-                health === "online"  && "text-emerald-600 dark:text-emerald-400",
-                health === "warning" && "text-amber-600 dark:text-amber-400",
-                health === "offline" && "text-red-600 dark:text-red-400"
+                health === "online"       && "text-emerald-600 dark:text-emerald-400",
+                health === "provisioning" && "text-amber-600 dark:text-amber-400",
+                health === "warning"      && "text-amber-600 dark:text-amber-400",
+                health === "offline"      && "text-red-600 dark:text-red-400"
               )}>{healthLabel}</span>
             </div>
           </div>
@@ -353,9 +380,10 @@ export default function AgentPage() {
             <div className="flex justify-between">
               <span className="font-medium">Status</span>
               <span className={cn("font-bold",
-                health === "online"  && "text-emerald-600",
-                health === "warning" && "text-amber-600",
-                health === "offline" && "text-red-600"
+                health === "online"       && "text-emerald-600",
+                health === "provisioning" && "text-amber-600",
+                health === "warning"      && "text-amber-600",
+                health === "offline"      && "text-red-600"
               )}>{healthLabel}</span>
             </div>
           </div>
