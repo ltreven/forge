@@ -331,6 +331,7 @@ export const zh: Dictionary = {
     cancelEdit: "取消",
     changeAvatar: "更换头像",
     healthOnline: "在线",
+    healthProvisioning: "部署中",
     healthWarning: "需要配置",
     healthOffline: "离线",
     roleLabels: {

@@ -1,13 +1,23 @@
+import { existsSync } from "fs";
 import * as k8s from "@kubernetes/client-node";
 
 /**
  * Singleton Kubernetes client configured from the environment.
- * - Inside the cluster: reads the mounted ServiceAccount token automatically.
+ * - Inside the cluster: reads the mounted ServiceAccount token via loadFromCluster().
+ *   We check for the SA token file explicitly because loadFromDefault() inside
+ *   a Tilt-managed pod loads the injected kubeconfig (no user token), which
+ *   works for REST calls but causes 403 on WebSocket Exec requests.
  * - Outside the cluster (local dev / Tilt): reads ~/.kube/config.
  */
 
+const SA_TOKEN_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/token";
+
 const kc = new k8s.KubeConfig();
-kc.loadFromDefault();
+if (existsSync(SA_TOKEN_FILE)) {
+  kc.loadFromCluster();
+} else {
+  kc.loadFromDefault();
+}
 
 export { kc };
 
