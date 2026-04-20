@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Bot, Check, ChevronDown, ChevronRight, ExternalLink,
-  Loader2, Save, Send,
+  KeyRound, Loader2, Save, Send, Wifi, WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -33,10 +33,17 @@ const ROLE_LABELS: Record<string, string> = {
   product_manager:    "Product Manager",
 };
 
+// Telegram integration lifecycle:
+//   not_configured  → token not saved yet
+//   pending_pairing → token saved, waiting for pairing code OTP
+//   complete        → pairing approved, bot online
+type TelegramStatus = "not_configured" | "pending_pairing" | "complete";
+
 interface AgentMetadata {
   avatarColor?: string;
-  telegramStatus?: string;
-  telegramBotToken?: string;
+  // hasTelegramToken is returned by the API instead of the raw token (security)
+  hasTelegramToken?: boolean;
+  telegramStatus?: TelegramStatus;
   personality?: string; identity?: string; longTermMemory?: string; model?: string;
 }
 
@@ -82,175 +89,304 @@ function AvatarPicker({ icon, color, onIconChange, onColorChange, onClose }: {
   );
 }
 
-// ── TelegramSetup ─────────────────────────────────────────────────────────────
+// ── TelegramChannel ───────────────────────────────────────────────────────────
 
 const BOTFATHER_STEPS = [
   {
     num: 1,
     title: "Open BotFather on Telegram",
-    description: "Search for @BotFather in Telegram and start a chat.",
+    description: "Search for @BotFather in Telegram and start a conversation.",
     action: { label: "Open @BotFather", href: "https://t.me/BotFather" },
   },
   {
     num: 2,
     title: "Create a new bot",
-    description: 'Send the command /newbot, then choose a name and username for your bot (must end in "bot").',
+    description: 'Send /newbot, then choose a display name and a username ending in "bot".',
     action: null,
   },
   {
     num: 3,
     title: "Copy the HTTP API token",
-    description: "BotFather will reply with a token like 7123456789:AAF... — copy it.",
+    description: "BotFather will reply with a token like 7123456789:AAF… — copy it.",
     action: null,
   },
   {
     num: 4,
-    title: "Paste the token below",
-    description: "Paste the token and click Save & Connect. We'll configure your agent automatically.",
+    title: "Paste the token below and save",
+    description: "After saving, your agent will restart and wait for you to send it a pairing code.",
     action: null,
   },
 ];
 
-function TelegramSetup({
-  initialToken,
-  onSave,
-  isSaving,
+function TelegramChannel({
+  agentId,
+  hasTelegramToken,
+  telegramStatus,
+  onTokenSaved,
+  onPairingApproved,
 }: {
-  initialToken: string;
-  onSave: (token: string) => void;
-  isSaving: boolean;
+  agentId: string;
+  hasTelegramToken: boolean;
+  telegramStatus: TelegramStatus;
+  onTokenSaved: (token: string) => Promise<void>;
+  onPairingApproved: (code: string) => Promise<void>;
 }) {
-  const [token, setToken] = useState(initialToken);
-  const isConnected = Boolean(initialToken);
+  const [open, setOpen] = useState(telegramStatus !== "not_configured");
+  const [token, setToken] = useState("");
+  const [pairingCode, setPairingCode] = useState("");
+  const [savingToken, setSavingToken] = useState(false);
+  const [approvingPairing, setApprovingPairing] = useState(false);
+
+  // Sync open state if parent status changes
+  useEffect(() => {
+    if (telegramStatus !== "not_configured") setOpen(true);
+  }, [telegramStatus]);
+
+  const handleSaveToken = async () => {
+    if (!token.trim()) return;
+    setSavingToken(true);
+    try {
+      await onTokenSaved(token.trim());
+      setToken(""); // clear after save — next load will show hasTelegramToken=true
+    } finally {
+      setSavingToken(false);
+    }
+  };
+
+  const handleApprovepairing = async () => {
+    if (!pairingCode.trim()) return;
+    setApprovingPairing(true);
+    try {
+      await onPairingApproved(pairingCode.trim());
+      setPairingCode("");
+    } finally {
+      setApprovingPairing(false);
+    }
+  };
+
+  // ── Status badge ─────────────────────────────────────────────────────────────
+  const StatusBadge = () => {
+    if (telegramStatus === "complete") return (
+      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+        <Wifi className="size-3" /> Online
+      </span>
+    );
+    if (telegramStatus === "pending_pairing") return (
+      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+        <span className="size-1.5 animate-pulse rounded-full bg-amber-500" /> Awaiting Pairing
+      </span>
+    );
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <WifiOff className="size-3" /> Not configured
+      </span>
+    );
+  };
 
   return (
-    <div className="mt-4 rounded-xl border border-border/60 bg-muted/30 p-4">
-      {/* Step-by-step guide */}
-      <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Setup Guide</p>
-      <ol className="mb-5 flex flex-col gap-3">
-        {BOTFATHER_STEPS.map((step) => (
-          <li key={step.num} className="flex gap-3">
-            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
-              {step.num}
-            </span>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-foreground">{step.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{step.description}</p>
-              {step.action && (
-                <a
-                  href={step.action.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
-                >
-                  {step.action.label}
-                  <ExternalLink className="size-3" />
-                </a>
-              )}
-            </div>
-          </li>
-        ))}
-      </ol>
-
-      {/* Token input */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="telegram-bot-token" className="text-sm font-medium text-foreground">
-          Bot Token
-        </label>
-        <div className="flex gap-2">
-          <Input
-            id="telegram-bot-token"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="7123456789:AAF_your_telegram_bot_token_here"
-            className="flex-1 font-mono text-xs"
-            type="password"
-            autoComplete="off"
-          />
-          <Button
-            id="telegram-save-btn"
-            onClick={() => onSave(token.trim())}
-            disabled={isSaving || !token.trim() || token.trim() === initialToken}
-            size="sm"
-            className="shrink-0 gap-1.5"
-          >
-            {isSaving ? (
-              <><Loader2 className="size-3.5 animate-spin" />Connecting…</>
-            ) : isConnected && token.trim() === initialToken ? (
-              <><Check className="size-3.5" />Connected</>
-            ) : (
-              <><Send className="size-3.5" />Save & Connect</>
+    <div>
+      {/* Row header */}
+      <div className="flex items-center justify-between py-3">
+        <div className="flex items-center gap-3">
+          <span className="text-xl">✈️</span>
+          <div>
+            <p className="text-sm font-medium text-foreground">Telegram</p>
+            <StatusBadge />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Toggle */}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            id="channel-toggle-telegram"
+            className={cn(
+              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+              (open || telegramStatus !== "not_configured") ? "bg-primary" : "bg-muted-foreground/30"
             )}
-          </Button>
-        </div>
-        {isConnected && token.trim() === initialToken && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-            <Check className="size-3" />
-            Telegram bot is configured. Paste a new token to update.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── ChannelRow ────────────────────────────────────────────────────────────────
-
-function ChannelRow({
-  icon,
-  name,
-  enabled,
-  comingSoon,
-  active,
-  onToggle,
-}: {
-  icon: string;
-  name: string;
-  enabled: boolean;
-  comingSoon?: boolean;
-  active?: boolean;
-  onToggle?: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between py-2.5">
-      <div className="flex items-center gap-3">
-        <span className="text-xl">{icon}</span>
-        <div>
-          <p className="text-sm font-medium text-foreground">{name}</p>
-          {comingSoon && (
-            <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">Coming Soon</p>
-          )}
-        </div>
-      </div>
-
-      {comingSoon ? (
-        <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
-          Soon
-        </span>
-      ) : (
-        <button
-          type="button"
-          onClick={onToggle}
-          id={`channel-toggle-${name.toLowerCase()}`}
-          className={cn(
-            "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
-            enabled ? "bg-primary" : "bg-muted-foreground/30"
-          )}
-          role="switch"
-          aria-checked={enabled}
-        >
-          <span className={cn(
-            "pointer-events-none inline-block size-4 rounded-full bg-white shadow transition-transform",
-            enabled ? "translate-x-4" : "translate-x-0"
+            role="switch"
+            aria-checked={open || telegramStatus !== "not_configured"}
+          >
+            <span className={cn(
+              "pointer-events-none inline-block size-4 rounded-full bg-white shadow transition-transform",
+              (open || telegramStatus !== "not_configured") ? "translate-x-4" : "translate-x-0"
+            )} />
+          </button>
+          <ChevronRight className={cn(
+            "size-3.5 text-muted-foreground/50 transition-transform duration-200",
+            open && "rotate-90"
           )} />
-        </button>
-      )}
+        </div>
+      </div>
 
-      {!comingSoon && (
-        <ChevronDown className={cn(
-          "ml-2 size-3.5 text-muted-foreground/50 transition-transform",
-          active && "rotate-180"
-        )} />
+      {/* Expandable body */}
+      {open && (
+        <div className="mb-4 rounded-xl border border-border/60 bg-muted/30 p-4">
+
+          {/* ── STATE: not_configured or changing token ─────────────────────── */}
+          {(telegramStatus === "not_configured" || telegramStatus === "complete") && (
+            <>
+              {telegramStatus === "not_configured" && (
+                <>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Setup Guide</p>
+                  <ol className="mb-5 flex flex-col gap-3">
+                    {BOTFATHER_STEPS.map((step) => (
+                      <li key={step.num} className="flex gap-3">
+                        <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+                          {step.num}
+                        </span>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-foreground">{step.title}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{step.description}</p>
+                          {step.action && (
+                            <a href={step.action.href} target="_blank" rel="noopener noreferrer"
+                              className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20">
+                              {step.action.label}
+                              <ExternalLink className="size-3" />
+                            </a>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
+
+              {/* Token input */}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="telegram-bot-token" className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <KeyRound className="size-3.5 text-muted-foreground" />
+                  {hasTelegramToken && telegramStatus === "complete" ? "Update Bot Token" : "Bot Token"}
+                </label>
+                {hasTelegramToken && telegramStatus === "complete" && (
+                  <p className="text-xs text-muted-foreground">
+                    A token is already saved. Paste a new one below to replace it. This will restart the agent.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    id="telegram-bot-token"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder={hasTelegramToken ? "Paste new token to update…" : "7123456789:AAF_your_token_here"}
+                    className="flex-1 font-mono text-xs"
+                    type="password"
+                    autoComplete="off"
+                  />
+                  <Button
+                    id="telegram-save-btn"
+                    onClick={handleSaveToken}
+                    disabled={savingToken || !token.trim()}
+                    size="sm"
+                    className="shrink-0 gap-1.5"
+                  >
+                    {savingToken
+                      ? <><Loader2 className="size-3.5 animate-spin" />Saving…</>
+                      : <><Send className="size-3.5" />{hasTelegramToken ? "Update" : "Save & Connect"}</>
+                    }
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── STATE: pending_pairing ─────────────────────────────────────── */}
+          {telegramStatus === "pending_pairing" && (
+            <div className="flex flex-col gap-4">
+              {/* Status banner */}
+              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/40 dark:bg-amber-900/20">
+                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-500">
+                  <span className="size-2 animate-pulse rounded-full bg-amber-500" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Awaiting Pairing Code</p>
+                  <p className="mt-0.5 text-xs text-amber-600/80 dark:text-amber-300/70">
+                    Your agent is restarting with the new Telegram token. As soon as it&apos;s ready,
+                    send any message to the bot on Telegram — it will reply with a pairing code.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step instructions */}
+              <ol className="flex flex-col gap-2">
+                <li className="flex gap-3">
+                  <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">1</span>
+                  <p className="text-xs text-muted-foreground pt-0.5">Open Telegram and send any message to your bot (e.g. <code className="rounded bg-muted px-1">hello</code>)</p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">2</span>
+                  <p className="text-xs text-muted-foreground pt-0.5">The bot will reply with a one-time pairing code — copy it.</p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">3</span>
+                  <p className="text-xs text-muted-foreground pt-0.5">Paste the code below and click <strong>Approve</strong>.</p>
+                </li>
+              </ol>
+
+              {/* Pairing code input */}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="telegram-pairing-code" className="text-sm font-medium text-foreground">
+                  Pairing Code
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    id="telegram-pairing-code"
+                    value={pairingCode}
+                    onChange={(e) => setPairingCode(e.target.value)}
+                    placeholder="Paste the code your bot sent you…"
+                    className="flex-1 font-mono text-sm tracking-widest"
+                    autoComplete="off"
+                    autoFocus
+                  />
+                  <Button
+                    id="telegram-pairing-approve-btn"
+                    onClick={handleApprovepairing}
+                    disabled={approvingPairing || !pairingCode.trim()}
+                    size="sm"
+                    className="shrink-0 gap-1.5"
+                  >
+                    {approvingPairing
+                      ? <><Loader2 className="size-3.5 animate-spin" />Approving…</>
+                      : <><Check className="size-3.5" />Approve</>
+                    }
+                  </Button>
+                </div>
+              </div>
+
+              {/* Allow token change even in pending state */}
+              <details className="group">
+                <summary className="cursor-pointer text-xs text-muted-foreground/60 hover:text-muted-foreground select-none list-none flex items-center gap-1">
+                  <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
+                  Wrong token? Change it
+                </summary>
+                <div className="mt-3 flex flex-col gap-1.5">
+                  <div className="flex gap-2">
+                    <Input
+                      id="telegram-bot-token-update"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder="Paste new bot token to replace…"
+                      className="flex-1 font-mono text-xs"
+                      type="password"
+                      autoComplete="off"
+                    />
+                    <Button
+                      id="telegram-token-update-btn"
+                      onClick={handleSaveToken}
+                      disabled={savingToken || !token.trim()}
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 gap-1.5"
+                    >
+                      {savingToken ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                      Update
+                    </Button>
+                  </div>
+                </div>
+              </details>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -266,9 +402,7 @@ export default function AgentGeneralPage() {
   const [agent, setAgent]         = useState<Agent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving]   = useState(false);
-  const [isSavingTelegram, setIsSavingTelegram] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
-  const [telegramOpen, setTelegramOpen] = useState(false);
 
   // local editable state
   const [name, setName]   = useState("");
@@ -289,8 +423,6 @@ export default function AgentGeneralPage() {
         setName(a.name);
         setIcon(a.icon ?? "🤖");
         setColor(a.metadata?.avatarColor ?? "#6366f1");
-        // Auto-expand Telegram if already configured
-        if (a.metadata?.telegramBotToken) setTelegramOpen(true);
       })
       .catch(() => toast.error("Failed to load agent."))
       .finally(() => setIsLoading(false));
@@ -319,24 +451,36 @@ export default function AgentGeneralPage() {
 
   const saveTelegramToken = async (newToken: string) => {
     if (!agent) return;
-    setIsSavingTelegram(true);
-    try {
-      const r = await fetch(`${API_BASE}/agents/${agentId}`, {
-        method: "PUT", headers: authHeaders(),
-        body: JSON.stringify({
-          metadata: {
-            ...(agent.metadata ?? {}),
-            telegramBotToken: newToken,
-          },
-        }),
-      });
-      if (!r.ok) throw new Error();
-      const d = await r.json();
-      setAgent(d.data);
-      toast.success("Telegram bot connected! Agent is restarting to apply the new token…", { duration: 5000 });
-    } catch {
-      toast.error("Failed to save Telegram token.");
-    } finally { setIsSavingTelegram(false); }
+    const r = await fetch(`${API_BASE}/agents/${agentId}`, {
+      method: "PUT", headers: authHeaders(),
+      body: JSON.stringify({
+        metadata: {
+          ...(agent.metadata ?? {}),
+          telegramBotToken: newToken,
+        },
+      }),
+    });
+    if (!r.ok) throw new Error("Failed to save token");
+    const d = await r.json();
+    setAgent(d.data);
+    toast.success("Token saved! Agent is restarting… send it a message on Telegram to get your pairing code.", {
+      duration: 6000,
+    });
+  };
+
+  const approveTelegramPairing = async (code: string) => {
+    const r = await fetch(`${API_BASE}/agents/${agentId}/telegram/approve-pairing`, {
+      method: "POST", headers: authHeaders(),
+      body: JSON.stringify({ code }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err?.message ?? "Failed to approve pairing");
+    }
+    const d = await r.json();
+    setAgent((prev) => prev ? { ...prev, metadata: { ...prev.metadata, telegramStatus: "complete" } } : prev);
+    toast.success("🎉 Telegram connected! Your agent is now online.", { duration: 5000 });
+    return d;
   };
 
   if (isLoading) return <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center"><Loader2 className="size-8 animate-spin text-primary" /></div>;
@@ -348,7 +492,8 @@ export default function AgentGeneralPage() {
   );
 
   const backHref = `/agents/${agentId}`;
-  const hasTelegramToken = Boolean(agent.metadata?.telegramBotToken);
+  const hasTelegramToken = Boolean(agent.metadata?.hasTelegramToken);
+  const telegramStatus: TelegramStatus = agent.metadata?.telegramStatus ?? (hasTelegramToken ? "pending_pairing" : "not_configured");
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
@@ -417,57 +562,14 @@ export default function AgentGeneralPage() {
           </div>
 
           <div className="mt-4 divide-y divide-border/60">
-            {/* Telegram — enabled */}
-            <div>
-              <div className="flex items-center justify-between py-2.5">
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">✈️</span>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Telegram</p>
-                    {hasTelegramToken ? (
-                      <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wide flex items-center gap-0.5">
-                        <Check className="size-2.5" /> Connected
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-muted-foreground">Not configured</p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTelegramOpen((v) => !v)}
-                    id="channel-toggle-telegram"
-                    className={cn(
-                      "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
-                      (telegramOpen || hasTelegramToken) ? "bg-primary" : "bg-muted-foreground/30"
-                    )}
-                    role="switch"
-                    aria-checked={telegramOpen || hasTelegramToken}
-                  >
-                    <span className={cn(
-                      "pointer-events-none inline-block size-4 rounded-full bg-white shadow transition-transform",
-                      (telegramOpen || hasTelegramToken) ? "translate-x-4" : "translate-x-0"
-                    )} />
-                  </button>
-                  <ChevronRight
-                    className={cn(
-                      "size-3.5 text-muted-foreground/50 transition-transform duration-200",
-                      telegramOpen && "rotate-90"
-                    )}
-                  />
-                </div>
-              </div>
-              {telegramOpen && (
-                <div className="pb-3">
-                  <TelegramSetup
-                    initialToken={agent.metadata?.telegramBotToken ?? ""}
-                    onSave={saveTelegramToken}
-                    isSaving={isSavingTelegram}
-                  />
-                </div>
-              )}
-            </div>
+            {/* Telegram */}
+            <TelegramChannel
+              agentId={agentId}
+              hasTelegramToken={hasTelegramToken}
+              telegramStatus={telegramStatus}
+              onTokenSaved={saveTelegramToken}
+              onPairingApproved={approveTelegramPairing}
+            />
 
             {/* Coming soon channels */}
             {[

@@ -1,5 +1,7 @@
+import { PassThrough } from "stream";
+import * as k8s from "@kubernetes/client-node";
 import type { Agent } from "../db/schema";
-import { coreV1, appsV1, customObjects, FORGE_AI_GROUP, FORGE_AI_VERSION, FORGE_AI_PLURAL } from "./client";
+import { kc, coreV1, appsV1, customObjects, FORGE_AI_GROUP, FORGE_AI_VERSION, FORGE_AI_PLURAL } from "./client";
 
 /**
  * Derives the deterministic Kubernetes namespace for a workspace.
@@ -238,6 +240,64 @@ export async function rolloutRestartDeployment(
     undefined,
     { headers: { "Content-Type": "application/strategic-merge-patch+json" } },
   );
+}
+
+/**
+ * Executes a command inside the running agent pod's "forge" container.
+ * Used for operations like `openclaw pairing approve telegram <code>`.
+ *
+ * Throws if no running pod is found or the command exits with a non-zero status.
+ * Returns stdout of the command.
+ */
+export async function execInAgentPod(
+  namespace: string,
+  agentId: string,
+  command: string[],
+): Promise<string> {
+  // Locate the running pod for this agent via its label
+  const { body: podList } = await coreV1.listNamespacedPod(
+    namespace,
+    undefined, undefined, undefined, undefined,
+    `forge.ai/agent-id=${agentId}`,
+  );
+
+  const pod = podList.items.find((p) => p.status?.phase === "Running");
+  if (!pod?.metadata?.name) {
+    throw new Error(`No running pod found for agent ${agentId} in namespace ${namespace}`);
+  }
+
+  const exec = new k8s.Exec(kc);
+  let stdout = "";
+  let stderr = "";
+
+  await new Promise<void>((resolve, reject) => {
+    const outStream = new PassThrough();
+    const errStream = new PassThrough();
+    outStream.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    errStream.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    exec
+      .exec(
+        namespace,
+        pod.metadata!.name!,
+        "forge",
+        command,
+        outStream,
+        errStream,
+        null,
+        false,
+        (status: k8s.V1Status) => {
+          if (status.status === "Success") {
+            resolve();
+          } else {
+            reject(new Error(stderr.trim() || status.message || "exec failed"));
+          }
+        },
+      )
+      .catch(reject);
+  });
+
+  return stdout.trim();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
