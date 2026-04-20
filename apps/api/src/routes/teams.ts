@@ -89,7 +89,7 @@ teamsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: 
       const agentInputs =
         input.agents && input.agents.length > 0
           ? input.agents.map((a) => ({ teamId: team.id, name: a.name, type: a.type, icon: a.icon }))
-          : [{ teamId: team.id, name: "Forge Team Lead", type: "team_lead" as const }];
+          : [{ teamId: team.id, name: "Team Lead", type: "team_lead" as const }];
 
       const createdAgents = await tx.insert(agents).values(agentInputs).returning();
 
