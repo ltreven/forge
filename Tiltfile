@@ -18,6 +18,24 @@
 # ── Load local developer settings (optional, gitignored) ─────────────────────
 settings = read_yaml("tilt-settings.yaml", default={})
 
+# ── Load platform credentials from .env (gitignored, never committed) ────────────
+# Copy .env.example to .env and fill in real values.
+dotenv = read_file(".env", default="").splitlines()
+def _parse_dotenv(lines):
+  env = {}
+  for line in lines:
+    line = line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+      continue
+    k, _, v = line.partition("=")
+    env[k.strip()] = v.strip()
+  return env
+_env = _parse_dotenv(dotenv)
+
+PLATFORM_OPENAI_KEY    = _env.get("PLATFORM_OPENAI_API_KEY",  "")
+PLATFORM_MODEL_PROVIDER = _env.get("PLATFORM_MODEL_PROVIDER", "openai")
+PLATFORM_MODEL_NAME     = _env.get("PLATFORM_MODEL_NAME",    "gpt-4o-mini")
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 NAMESPACE      = "forge"
 HELM_CHART     = "charts/forge"
@@ -163,6 +181,10 @@ k8s_yaml(
       'controller.image.repository=' + CONTROLLER_IMAGE,
       'controller.image.tag=local',
       'ingress.host=' + TILT_HOST,
+      # Platform AI credentials — read from .env (gitignored)
+      'api.env.PLATFORM_OPENAI_API_KEY=' + PLATFORM_OPENAI_KEY,
+      'api.env.PLATFORM_MODEL_PROVIDER=' + PLATFORM_MODEL_PROVIDER,
+      'api.env.PLATFORM_MODEL_NAME=' + PLATFORM_MODEL_NAME,
     ],
   )
 )
