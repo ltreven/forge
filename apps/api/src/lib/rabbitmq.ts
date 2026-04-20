@@ -248,7 +248,7 @@ export async function waitForReply(
 
       ch.consume(
         replyQueue,
-        (msg) => {
+        (msg: amqp.ConsumeMessage | null) => {
           if (!msg) return;
           clearTimeout(timer);
           ch.ack(msg);
