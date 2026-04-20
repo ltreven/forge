@@ -91,20 +91,7 @@ function AvatarPicker({ icon, color, onIconChange, onColorChange, onClose }: {
 
 // ── TelegramChannel ───────────────────────────────────────────────────────────
 
-const BOTFATHER_STEPS = [
-  {
-    num: 1,
-    description: "Open Telegram, search for @BotFather and send /newbot. Choose a display name and a username ending in \"bot\".",
-  },
-  {
-    num: 2,
-    description: "BotFather will reply with an HTTP API token like 7123456789:AAF… — copy it.",
-  },
-  {
-    num: 3,
-    description: "Paste the token in the field below and click Save & Connect.",
-  },
-];
+const BOTFATHER_GUIDE = 'Open Telegram, search for @BotFather and send /newbot. Choose a display name and a username ending in "bot". BotFather will reply with a token — paste it below.';
 
 function TelegramChannel({
   agentId,
@@ -215,19 +202,10 @@ function TelegramChannel({
           {(telegramStatus === "not_configured" || telegramStatus === "complete") && (
             <>
               {telegramStatus === "not_configured" && (
-                <>
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Setup Guide</p>
-                  <ol className="mb-5 flex flex-col gap-2.5">
-                    {BOTFATHER_STEPS.map((step) => (
-                      <li key={step.num} className="flex gap-3">
-                        <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
-                          {step.num}
-                        </span>
-                        <p className="flex-1 text-xs text-muted-foreground pt-0.5">{step.description}</p>
-                      </li>
-                    ))}
-                  </ol>
-                </>
+                <div className="mb-4">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Setup Guide</p>
+                  <p className="text-xs text-muted-foreground">{BOTFATHER_GUIDE}</p>
+                </div>
               )}
 
               {/* Token input */}
@@ -246,7 +224,7 @@ function TelegramChannel({
                     id="telegram-bot-token"
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
-                    placeholder={hasTelegramToken ? "Paste new token to update…" : "7123456789:AAF_your_token_here"}
+                    placeholder={hasTelegramToken ? "Paste new token to update…" : "Paste your bot token here…"}
                     className="flex-1 font-mono text-xs"
                     type="password"
                     autoComplete="off"
