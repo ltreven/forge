@@ -39,12 +39,14 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "create", "update", "patch", "delete"]
   # Pod listing + exec — required for execInAgentPod() (pairing approve)
+  # 'get' is needed for WebSocket exec (HTTP GET upgrade).
+  # 'create' is needed for SPDY exec (HTTP POST).
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
   - apiGroups: [""]
     resources: ["pods/exec"]
-    verbs: ["create"]
+    verbs: ["get", "create"]
   # Deployment patch — required for rolloutRestartDeployment()
   - apiGroups: ["apps"]
     resources: ["deployments"]
