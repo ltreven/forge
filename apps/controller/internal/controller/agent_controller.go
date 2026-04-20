@@ -239,7 +239,7 @@ func (r *AgentReconciler) failWith(
 	logger.Error(err, "reconciliation error", "reason", reason)
 
 	_ = r.patchStatus(ctx, cr, forgev1alpha1.AgentPhaseFailed, "")
-	_ = sync.PatchAgentStatus(r.APIBaseURL, cr.Name, "failed")
+	_ = sync.PatchAgentStatus(ctx, r.APIBaseURL, cr.Name, "failed")
 
 	return ctrl.Result{}, fmt.Errorf("%s: %w", reason, err)
 }
