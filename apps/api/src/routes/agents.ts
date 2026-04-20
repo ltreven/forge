@@ -73,7 +73,7 @@ agentsRouter.post("/", async (req: Request, res: Response, next: NextFunction) =
     try {
       await ensureNamespace(namespace);
       await applyCredentialsSecret(namespace, agent);
-      await applyForgeAgentCR(namespace, agent, workspace.id);
+      await applyForgeAgentCR(namespace, agent, workspace.id, team.name);
 
       // Store CR name (= agent UUID) on the DB record
       await db

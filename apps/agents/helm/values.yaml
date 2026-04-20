@@ -9,6 +9,7 @@ profile:
   agentName: ""
   type: ""
   operatorName: ""
+  teamName: ""
   configMapName: ""
 
 model:

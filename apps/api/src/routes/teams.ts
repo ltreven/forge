@@ -115,7 +115,7 @@ teamsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: 
       for (const agent of result.agents) {
         try {
           await applyCredentialsSecret(namespace, agent);
-          await applyForgeAgentCR(namespace, agent, workspaceId!);
+          await applyForgeAgentCR(namespace, agent, workspaceId!, result.team.name);
           await db
             .update(agents)
             .set({ k8sStatus: "provisioning", k8sResourceName: agent.id })

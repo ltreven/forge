@@ -71,6 +71,7 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 		{Name: "AGENT_PROFILE", Value: cr.Spec.Profile},
 		{Name: "AGENT_NAME", Value: cr.Spec.AgentName},
 		{Name: "AGENT_OPERATOR_NAME", Value: cr.Spec.OperatorName},
+		{Name: "TEAM_NAME", Value: cr.Spec.TeamName},
 	}
 
 	// Secret-sourced env vars from credentialsSecretRef

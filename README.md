@@ -73,53 +73,44 @@ Every team requires at least a **Team Lead** — the ownership and coordination 
 
 ## Running locally
 
-You need **3 terminals** running in parallel.
+The entire stack (Web, API, PostgreSQL) runs inside local Kubernetes via **Tilt**. One command starts everything.
 
 ### Prerequisites
 
-- Node.js ≥ 20
-- npm ≥ 10 (web) · pnpm ≥ 9 (api)
-- Docker (for local PostgreSQL)
+- Docker Desktop with Kubernetes enabled *(Settings → Kubernetes → Enable Kubernetes)*
+- [Tilt](https://tilt.dev): `brew install tilt`
+- Helm v3+: `brew install helm`
 
 ### First-time setup
 
 ```bash
-# 1. Clone and install dependencies
-make web-install
-make api-install
-
-# 2. Configure the API environment
+# 1. Configure the API environment
 cp apps/api/.env.example apps/api/.env
-# Add your JWT secret (required for auth):
-echo "JWT_SECRET=your-local-dev-secret-here" >> apps/api/.env
+# Edit apps/api/.env and set JWT_SECRET to any local secret
 ```
 
 ### Start the stack
 
-**Terminal 1 — PostgreSQL**
 ```bash
-make docker-db
-# Starts postgres://forge:forge@localhost:5432/forge
+# Switch context to Docker Desktop if you use multiple clusters
+kubectl config use-context docker-desktop
+
+# Start everything — builds images, deploys to local k8s, watches for changes
+tilt up
 ```
 
-**Terminal 2 — API** (http://localhost:4000)
-```bash
-make db-migrate   # run once after first setup or after new migrations
-make api
-```
+The Tilt dashboard opens automatically at **http://localhost:10350**. Wait for all resources to go green.
 
-**Terminal 3 — Web** (http://localhost:3000)
+When done:
 ```bash
-make web
+tilt down
 ```
-
-Verify: `curl http://localhost:4000/health` → `{"status":"ok"}`
 
 ---
 
 ## Testing the onboarding flow
 
-Once all three services are running:
+Once the stack is running:
 
 1. **`/signup`** — Create an account (3 steps):
    - Step 1: Full name + work email + password
@@ -235,6 +226,27 @@ tilt down
 ```
 
 > **Context tip:** Docker Desktop persists the `docker-desktop` Kubernetes context permanently. You only need `kubectl config use-context docker-desktop` if you've been working with another cluster (e.g., a cloud cluster) and need to switch back.
+
+### Navigating the database (Drizzle Studio)
+
+Drizzle ships a local web GUI — **Drizzle Studio** — that lets you browse tables, run queries, and inspect data without needing a SQL client.
+
+```bash
+# Open Drizzle Studio (runs against the local k8s PostgreSQL via port-forward)
+cd apps/api
+pnpm drizzle-kit studio
+```
+
+This starts the studio at **https://local.drizzle.studio** and opens it in your browser automatically.
+
+> **Note:** The `DATABASE_URL` in `apps/api/.env` must point to the running database. When using Tilt, PostgreSQL is port-forwarded to `localhost:5432` automatically, so no changes are needed.
+
+Alternatively, connect to the database directly via `psql`:
+
+```bash
+# Interactive psql session inside the running pod
+kubectl exec -n forge statefulset/forge-postgresql -- psql -U forge -d forge
+```
 
 ### What Tilt does automatically
 

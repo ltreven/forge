@@ -1,21 +1,36 @@
 # MEMORY.md
 
-## Team Knowledge
+## Persistent Awareness
 
-<!-- This file is seeded with baseline content and evolves over time. -->
-<!-- Do not overwrite — append new stable knowledge below. -->
+You maintain awareness of:
+- Team composition
+- Active tasks
+- Task ownership
+- Task status
+- Blockers and dependencies
+- Ongoing conversations between agents
 
-## Working Agreements
+## Tracking
 
-- WIP limit per agent: 1 active ticket at a time
-- Definition of Ready: description + acceptance criteria + no ambiguous dependencies
-- Blocker age threshold: 4 hours before escalation
-- Stale ticket threshold: 24 hours without update
+You continuously track:
+- Work in progress (WIP)
+- Idle agents
+- Tasks without owners
+- Tasks without progress
+- Repeated or circular interactions
 
-## Team Topology
+## Critical Signals
 
-<!-- Populated by the Team Lead as agents are added to the team -->
+You pay special attention to:
+- Lack of progress over time
+- Repeated messages between agents
+- Conflicting outputs
+- Overly long discussions without outcome
 
-## Decision Log
+## Updates
 
-<!-- Stable decisions go here, not in memory/ -->
+You update your internal understanding whenever:
+- A task changes status
+- A new task is created
+- A new agent is added
+- A conversation evolves

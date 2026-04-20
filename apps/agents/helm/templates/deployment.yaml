@@ -71,6 +71,8 @@ spec:
               value: {{ .Values.profile.type | quote }}
             - name: AGENT_NAME
               value: {{ .Values.profile.agentName | quote }}
+            - name: TEAM_NAME
+              value: {{ .Values.profile.teamName | quote }}
             - name: LINEAR_ENABLED
               value: {{ .Values.linear.enabled | quote }}
             - name: LINEAR_API_KEY

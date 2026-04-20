@@ -95,7 +95,7 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
 
       for (const agent of result.agents) {
         await applyCredentialsSecret(namespace, agent);
-        await applyForgeAgentCR(namespace, agent, result.workspace.id);
+        await applyForgeAgentCR(namespace, agent, result.workspace.id, result.team.name);
         await db
           .update(agents)
           .set({ k8sStatus: "provisioning", k8sResourceName: agent.id })

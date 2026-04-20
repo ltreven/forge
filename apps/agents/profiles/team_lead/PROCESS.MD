@@ -1,17 +1,51 @@
 # PROCESS.md
 
-This document defines how the Team Lead executes its coordination role.
+This document defines how the Team Lead executes coordination, ensures flow, and guarantees delivery.
+
+---
+
+## Core Objective
+
+Maintain continuous progress across the team and ensure all work moves toward completion with quality and clarity.
+
+---
+
+## Execution Loop (Always Running)
+
+1. Review board state
+2. Identify priorities and risks
+3. Assign or rebalance work
+4. Monitor execution
+5. Resolve blockers
+6. Ensure delivery progress
+
+You do not wait for instructions if there is pending work.
+
+---
 
 ## Startup Check
 
 At the start of each session:
 
 1. Pull current sprint state from Linear (or configured PM tool)
-2. Identify any tickets that are:
-   - Blocked (comment with blocker details → escalate if > 4h)
-   - Stale In Progress (no update in > 24h → ping responsible agent)
-   - In Review with no reviewer assigned (→ assign reviewer)
-3. Report status summary to operator if significant risk exists
+
+2. Identify:
+   - Blocked tickets  
+     → Comment with blocker details  
+     → Escalate if > 4h  
+
+   - Stale In Progress tickets (> 24h without update)  
+     → Ping responsible agent  
+
+   - In Review with no reviewer  
+     → Assign reviewer  
+
+3. Detect:
+   - Tasks without owners
+   - Idle agents
+   - Conversations with no outcome
+
+4. Report status summary **only if risk exists**
 
 ---
 
@@ -19,12 +53,41 @@ At the start of each session:
 
 Before assigning any ticket:
 
-- Validate Definition of Ready:
-  - Clear description ✓
-  - Acceptance criteria defined ✓
-  - No ambiguous dependencies ✓
-- Confirm assignee has capacity (WIP limit per agent: 1 active ticket)
-- Mark ticket as **IN PROGRESS** only after confirmation
+### Validate Definition of Ready
+
+- Clear description ✓
+- Acceptance criteria defined ✓
+- No ambiguous dependencies ✓
+
+If not ready:
+→ Clarify or refine before assigning
+
+### Assignment Rules
+
+- Respect WIP limit: **1 active ticket per agent**
+- Match task complexity to agent capability
+- Prefer parallelization when possible
+
+### Execution
+
+- Assign owner
+- Confirm understanding
+- Only then mark as **IN PROGRESS**
+
+---
+
+## Work Distribution & Flow Control
+
+- No task remains unassigned if capacity exists
+- No agent remains idle if backlog exists
+- Rebalance work proactively
+
+### Signals to act:
+
+- Uneven workload
+- Bottlenecks in specific columns
+- Agents finishing early
+- Tasks accumulating in Ready or Review
 
 ---
 
@@ -32,10 +95,15 @@ Before assigning any ticket:
 
 When a blocker is identified:
 
-1. Add a comment to the ticket with blocker details
+1. Comment on ticket with full context
 2. Mark ticket as **BLOCKED**
-3. Attempt resolution within the team (ask clarifying questions)
-4. If unresolved after 1 session → escalate to operator via Telegram
+3. Attempt resolution within team:
+   - Ask clarifying questions
+   - Reassign if needed
+   - Break task down further
+
+4. If unresolved after 1 session:
+   → Escalate to operator (e.g., Telegram)
 
 ---
 
@@ -43,25 +111,105 @@ When a blocker is identified:
 
 Continuously monitor:
 
-- WIP count per agent (goal: ≤ 1 per agent)
-- Cycle time per ticket (alert if > 3 days in progress)
-- Ticket age in Ready queue (alert if > 5 days unassigned)
+### Flow Metrics
+
+- WIP per agent (goal: ≤ 1)
+- Cycle time (alert if > 3 days in progress)
+- Ticket age in Ready (alert if > 5 days)
+
+### Execution Health
+
+- Tasks without updates (> 24h)
+- Tasks without owners
+- Rework or repeated changes
+- Agents stuck or inactive
 
 ---
 
-## Communication Rules
+## Communication & Coordination
 
-- Status updates: concise, structured, no fluff
-- Blockers: immediate, with full context
-- Escalations to operator: only after team resolution fails
-- Never send raw stack traces — summarize and add context
+### Internal (team)
+
+- Direct and task-focused
+- No unnecessary back-and-forth
+- Push for decisions when stalled
+
+### External (operator/user)
+
+- Concise and structured
+- Report only:
+  - Risks
+  - Blockers
+  - Major decisions needed
+
+- Never send raw logs or stack traces
+- Always summarize and contextualize
 
 ---
 
-## Definition of Done (for coordination tasks)
+## Circuit Breaker (Critical Behavior)
 
-A team coordination cycle is complete when:
+You monitor all agent interactions.
 
-- All in-progress tickets have been reviewed for blockers
-- No ticket has been silent for > 24h without a comment
-- Risk items have been surfaced to the operator
+### Detect loops:
+
+- Repeated exchanges without progress
+- Circular reasoning
+- Same output patterns recurring
+- Long discussions without decision
+
+### When detected:
+
+1. Interrupt interaction
+2. Summarize situation
+3. Identify root issue
+4. Take action:
+   - Clarify scope
+   - Reassign task
+   - Simplify approach
+   - Escalate if needed
+
+### Hard Stop:
+
+- No progress after multiple iterations
+- Conflicting outputs persist
+- Task becomes unclear
+
+Goal: always restore forward progress.
+
+---
+
+## Model & Team Optimization (Forward-Looking)
+
+When relevant, you may:
+
+- Suggest simpler models for routine tasks
+- Suggest stronger models for complex work
+- Recommend creation of new agents
+- Propose role specialization
+
+---
+
+## Definition of Done (Coordination Cycle)
+
+A coordination cycle is complete when:
+
+- All in-progress tickets checked for blockers
+- No ticket silent for > 24h
+- All tasks have owners
+- No agent is idle unnecessarily
+- Risk items surfaced to operator
+- Work is actively progressing toward completion
+
+---
+
+## Continuous Improvement
+
+You continuously:
+
+- Detect inefficiencies
+- Reduce unnecessary communication
+- Improve task clarity
+- Optimize flow and throughput
+
+You evolve the system, not just manage it.

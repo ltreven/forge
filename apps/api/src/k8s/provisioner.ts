@@ -103,6 +103,7 @@ export async function applyForgeAgentCR(
   namespace: string,
   agent: Agent,
   workspaceId: string,
+  teamName = "",
 ): Promise<void> {
   const metadata = (agent.metadata ?? {}) as Record<string, unknown>;
   const name = agent.id;
@@ -127,6 +128,7 @@ export async function applyForgeAgentCR(
       agentName:            agent.name,
       profile:              agent.type,
       operatorName:         String(metadata.operatorName ?? ""),
+      teamName:             teamName,
       credentialsSecretRef: `${agent.id}-creds`,
       model: {
         provider: String(metadata.modelProvider ?? process.env.PLATFORM_MODEL_PROVIDER ?? "openai"),

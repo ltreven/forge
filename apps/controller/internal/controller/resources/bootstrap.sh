@@ -42,11 +42,13 @@ render_profile_file() {
   safe_operator="$(escape_sed_replacement "${AGENT_OPERATOR_NAME:-}")"
   safe_profile="$(escape_sed_replacement "${AGENT_PROFILE:-}")"
   safe_agent="$(escape_sed_replacement "${AGENT_NAME:-}")"
+  safe_team="$(escape_sed_replacement "${TEAM_NAME:-}")"
 
   sed \
     -e "s|\${AGENT_OPERATOR_NAME}|${safe_operator}|g" \
     -e "s|\${AGENT_PROFILE}|${safe_profile}|g" \
     -e "s|\${AGENT_NAME}|${safe_agent}|g" \
+    -e "s|\${TEAM_NAME}|${safe_team}|g" \
     "$src_file" >"$dst_file"
 }
 
@@ -186,7 +188,7 @@ SKILL_EOF
   PROFILE_SRC="/opt/forge/profiles/${AGENT_PROFILE:-}"
   if [ -d "$PROFILE_SRC" ]; then
     echo "==> Seeding profile files from $PROFILE_SRC (first boot only)"
-    for f in AGENTS.md IDENTITY.md SOUL.md USER.md PROCESS.MD MEMORY.md HEARTBEAT.md; do
+    for f in AGENTS.md IDENTITY.md SOUL.md USER.md PROCESS.MD MEMORY.md HEARTBEAT.md SAFETY.md TOOLS.md; do
       if [ -f "$PROFILE_SRC/$f" ]; then
         render_profile_file "$PROFILE_SRC/$f" "$OPENCLAW_CONFIG_DIR/workspace/$f"
       fi
