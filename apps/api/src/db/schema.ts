@@ -103,6 +103,13 @@ export const agents = pgTable("agents", {
   icon: text("icon"),
   /** JSON bag for avatarColor, telegramBotToken, telegramPairingCode, etc. */
   metadata: jsonb("metadata"),
+  /**
+   * Openclaw gateway authentication token.
+   * Generated once on agent creation (crypto.randomBytes(32).toString('base64url')).
+   * Passed to the pod as OPENCLAW_GATEWAY_TOKEN via the credentials Secret.
+   * Never regenerated — same token persists across pod restarts (PVC state).
+   */
+  gatewayToken: text("gateway_token"),
   /** Current Kubernetes provisioning phase, updated by the Agent Controller. */
   k8sStatus: agentK8sStatusEnum("k8s_status").default("pending"),
   /** Name of the ForgeAgent CR in the cluster (equals agent UUID). */

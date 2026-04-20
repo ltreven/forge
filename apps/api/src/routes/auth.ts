@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import { eq, desc } from "drizzle-orm";
@@ -62,15 +63,17 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
 
       // 4. Create agents — always include the Forge Team Lead.
       // The caller may pass additional agents; if none, only the team lead is created.
+      // Each agent gets a unique gatewayToken generated here (never regenerated).
       const agentInputs =
         input.agents && input.agents.length > 0
           ? input.agents.map((a) => ({
               teamId: team.id,
               name: a.name,
               type: a.type,
+              gatewayToken: randomBytes(32).toString("base64url"),
               k8sStatus: "pending" as const,
             }))
-          : [{ teamId: team.id, name: "Forge Team Lead", type: "team_lead" as const, k8sStatus: "pending" as const }];
+          : [{ teamId: team.id, name: "Forge Team Lead", type: "team_lead" as const, gatewayToken: randomBytes(32).toString("base64url"), k8sStatus: "pending" as const }];
 
       const createdAgents = await tx.insert(agents).values(agentInputs).returning();
 

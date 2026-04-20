@@ -50,15 +50,15 @@ export async function applyCredentialsSecret(
   const name = `${agent.id}-creds`;
 
   const stringData: Record<string, string> = {};
-  if (metadata.telegramBotToken)           stringData.TELEGRAM_BOT_TOKEN    = String(metadata.telegramBotToken);
-  if (metadata.linearApiKey)               stringData.LINEAR_API_KEY         = String(metadata.linearApiKey);
-  if (metadata.linearEnabled)              stringData.LINEAR_ENABLED          = String(metadata.linearEnabled);
-  if (metadata.githubToken)                stringData.GITHUB_PERSONAL_ACCESS_TOKEN = String(metadata.githubToken);
-  if (metadata.githubEnabled)              stringData.GITHUB_ENABLED          = String(metadata.githubEnabled);
-  if (metadata.githubAuthMode)             stringData.GITHUB_AUTH_MODE        = String(metadata.githubAuthMode);
-  if (metadata.openaiApiKey)               stringData.OPENAI_API_KEY          = String(metadata.openaiApiKey);
-  if (metadata.geminiApiKey)               stringData.GEMINI_API_KEY          = String(metadata.geminiApiKey);
-  if (metadata.gatewayToken)               stringData.OPENCLAW_GATEWAY_TOKEN  = String(metadata.gatewayToken);
+  if (agent.gatewayToken)                    stringData.OPENCLAW_GATEWAY_TOKEN  = agent.gatewayToken;
+  if (metadata.telegramBotToken)             stringData.TELEGRAM_BOT_TOKEN      = String(metadata.telegramBotToken);
+  if (metadata.linearApiKey)                 stringData.LINEAR_API_KEY           = String(metadata.linearApiKey);
+  if (metadata.linearEnabled)                stringData.LINEAR_ENABLED            = String(metadata.linearEnabled);
+  if (metadata.githubToken)                  stringData.GITHUB_PERSONAL_ACCESS_TOKEN = String(metadata.githubToken);
+  if (metadata.githubEnabled)                stringData.GITHUB_ENABLED            = String(metadata.githubEnabled);
+  if (metadata.githubAuthMode)               stringData.GITHUB_AUTH_MODE          = String(metadata.githubAuthMode);
+  if (metadata.openaiApiKey)                 stringData.OPENAI_API_KEY            = String(metadata.openaiApiKey);
+  if (metadata.geminiApiKey)                 stringData.GEMINI_API_KEY            = String(metadata.geminiApiKey);
 
   const secretBody = {
     metadata: {
