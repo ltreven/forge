@@ -1,6 +1,9 @@
 package resources
 
 import (
+	"regexp"
+	"strings"
+
 	forgev1alpha1 "github.com/ltreven/forge/controller/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -150,6 +153,9 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 					Labels: agentLabels(cr),
 				},
 				Spec: corev1.PodSpec{
+					// Set a friendly hostname so openclaw's mDNS uses the agent name
+					// instead of the full pod name (UUID + hash, >63 bytes → DNS label crash).
+					Hostname:                     dnsHostname(cr.Spec.AgentName),
 					AutomountServiceAccountToken: ptr.To(false),
 					SecurityContext: &corev1.PodSecurityContext{
 						FSGroup: ptr.To(int64(1000)),
@@ -208,6 +214,25 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 	}
 }
 
+// dnsHostname converts an arbitrary agent name to a valid RFC 1123 DNS label
+// (max 63 chars, lowercase, alphanumeric and hyphens only, no leading/trailing hyphens).
+// This is used as spec.hostname in the pod to give openclaw's mDNS a short, friendly name
+// instead of the full pod name (UUID + hash suffix, which exceeds the 63-byte limit).
+var nonDNS = regexp.MustCompile(`[^a-z0-9-]+`)
+
+func dnsHostname(name string) string {
+	s := strings.ToLower(name)
+	s = nonDNS.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if len(s) > 63 {
+		s = s[:63]
+		s = strings.TrimRight(s, "-")
+	}
+	if s == "" {
+		return "agent"
+	}
+	return s
+}
 func resolveImage(cr *forgev1alpha1.Agent, defaultImage, defaultPullPolicy string) (string, corev1.PullPolicy) {
 	img := defaultImage
 	policy := corev1.PullPolicy(defaultPullPolicy)
