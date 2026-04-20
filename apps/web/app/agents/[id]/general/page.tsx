@@ -202,10 +202,7 @@ function TelegramChannel({
           {(telegramStatus === "not_configured" || telegramStatus === "complete") && (
             <>
               {telegramStatus === "not_configured" && (
-                <div className="mb-4">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Setup Guide</p>
-                  <p className="text-xs text-muted-foreground">{BOTFATHER_GUIDE}</p>
-                </div>
+                <p className="mb-4 text-xs text-muted-foreground">{BOTFATHER_GUIDE}</p>
               )}
 
               {/* Token input */}
