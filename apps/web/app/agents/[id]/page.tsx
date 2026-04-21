@@ -129,13 +129,24 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
         const nc: Conversation = (await r.json()).data;
         setConv(nc); cid = nc.id;
       }
-      await fetch(`${API_BASE}/conversations/${cid}/messages`, { method: "POST", headers: headers(), body: JSON.stringify({ role: "user", content: text }) });
-      await new Promise((r) => setTimeout(r, 700));
-      const aMsg: ChatMessage = { id: `a-${Date.now()}`, role: "assistant", content: "I received your message. Agent runtime integration coming soon.", createdAt: new Date().toISOString() };
-      setMessages((p) => [...p, aMsg]);
-      await fetch(`${API_BASE}/conversations/${cid}/messages`, { method: "POST", headers: headers(), body: JSON.stringify({ role: "assistant", content: aMsg.content }) });
-    } catch {
-      toast.error("Failed to send message.");
+      const res = await fetch(`${API_BASE}/conversations/${cid}/messages`, { method: "POST", headers: headers(), body: JSON.stringify({ role: "user", content: text }) });
+      if (!res.ok) {
+        let errStr = "Failed to send message.";
+        try { const errObj = await res.json(); errStr = errObj.message || errObj.error || errStr; } catch {}
+        throw new Error(errStr);
+      }
+      const resultObj = await res.json();
+      if (resultObj.data?.agentMessage) {
+        const amMsg: ChatMessage = {
+          id: resultObj.data.agentMessage.id || `a-${Date.now()}`,
+          role: "assistant",
+          content: resultObj.data.agentMessage.content,
+          createdAt: resultObj.data.agentMessage.createdAt || new Date().toISOString()
+        };
+        setMessages((p) => [...p, amMsg]);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send message.");
       setMessages((p) => p.filter((m) => m.id !== userMsg.id));
     } finally { setSending(false); }
   };

@@ -137,7 +137,7 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 			},
 		},
 		{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-		{Name: "npm-cache", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		{Name: "node-home", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 		// RabbitMQ credentials secret — workspace-scoped, shared by all agents in the namespace.
 		// Created by forge-api (provisioner.applyRabbitMQCredentialsSecret) on first agent provisioning.
 		{
@@ -153,9 +153,9 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 
 	// Standard volume mounts
 	stateMounts := []corev1.VolumeMount{
+		{Name: "node-home", MountPath: "/home/node"},
 		{Name: "openclaw-home", MountPath: "/home/node/.openclaw"},
 		{Name: "tmp", MountPath: "/tmp"},
-		{Name: "npm-cache", MountPath: "/home/node/.npm"},
 	}
 
 	initMounts := append(stateMounts,

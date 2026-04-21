@@ -133,7 +133,7 @@ export async function provisionTenant(workspaceId: string): Promise<RabbitMQCred
     throw new Error(`RabbitMQ: failed to create user ${username}: ${userRes.status} ${userRes.text}`);
   }
 
-  // 3. Set full permissions on the vhost
+  // 3. Set full permissions on the vhost for the tenant user
   const permRes = await mgmtRequest(
     "PUT",
     `permissions/${encodeURIComponent(vhost)}/${encodeURIComponent(username)}`,
@@ -141,6 +141,19 @@ export async function provisionTenant(workspaceId: string): Promise<RabbitMQCred
   );
   if (!permRes.ok && permRes.status !== 204) {
     throw new Error(`RabbitMQ: failed to set permissions: ${permRes.status} ${permRes.text}`);
+  }
+
+  // 3b. Also grant full permissions to the admin user on this vhost.
+  //     The forge-api uses the admin user credentials to publish messages (publishToAgent,
+  //     waitForReply). Without this the admin gets 403 ACCESS_REFUSED on the tenant vhost.
+  const adminPermRes = await mgmtRequest(
+    "PUT",
+    `permissions/${encodeURIComponent(vhost)}/${encodeURIComponent(ADMIN_USER)}`,
+    { configure: ".*", write: ".*", read: ".*" },
+  );
+  if (!adminPermRes.ok && adminPermRes.status !== 204) {
+    // Non-fatal: log and continue — tenant user still works for the sidecar
+    console.warn(`[rabbitmq] Failed to set admin permissions on ${vhost}: ${adminPermRes.status}`);
   }
 
   // 4. Declare the topic exchange via AMQP (idempotent)
@@ -193,9 +206,10 @@ export async function publishToAgent(
 ): Promise<void> {
   const url  = buildAmqpUrl(creds);
   const conn = await amqp.connect(url);
+  const ch   = await conn.createConfirmChannel();
   try {
-    const ch = await conn.createChannel();
-    const ok = ch.publish(
+    console.log(`[rabbitmq] Publishing to exchange: ${creds.exchange}, routingKey: agent.${command.agentId}`);
+    ch.publish(
       creds.exchange,
       agentRoutingKey(command.agentId),
       Buffer.from(JSON.stringify(command)),
@@ -206,14 +220,15 @@ export async function publishToAgent(
         replyTo:       `reply.${command.sessionKey}`,
       },
     );
-    if (!ok) {
-      throw new Error("RabbitMQ: publish returned false (backpressure)");
-    }
-    await ch.close();
+    await ch.waitForConfirms();
+    console.log(`[rabbitmq] publish synchronous result: confirmed`);
   } finally {
-    await conn.close();
+    // We can safely close now that confirms have arrived.
+    await ch.close().catch(() => { /* ignore */ });
+    setTimeout(() => conn.close().catch(() => { /* ignore */ }), 200);
   }
 }
+
 
 /**
  * Waits for a reply message on the reply queue for a given sessionKey.
@@ -232,6 +247,11 @@ export async function waitForReply(
   const url  = buildAmqpUrl(creds);
   const conn = await amqp.connect(url);
 
+  const closeConn = () => {
+    // Fire-and-forget — amqplib 0.10.x conn.close() can block indefinitely.
+    setTimeout(() => conn.close().catch(() => { /* ignore */ }), 200);
+  };
+
   try {
     const ch = await conn.createChannel();
 
@@ -241,8 +261,9 @@ export async function waitForReply(
     await ch.bindQueue(replyQueue, creds.exchange, replyRoutingKey(sessionKey));
 
     return await new Promise<string | null>((resolve) => {
-      const timer = setTimeout(async () => {
-        await ch.close();
+      const timer = setTimeout(() => {
+        ch.close().catch(() => {});
+        closeConn();
         resolve(null);
       }, timeoutMs);
 
@@ -254,14 +275,17 @@ export async function waitForReply(
           ch.ack(msg);
           resolve(msg.content.toString());
           ch.close().catch(() => {});
+          closeConn();
         },
         { noAck: false },
       );
     });
-  } finally {
-    await conn.close();
+  } catch (err) {
+    closeConn();
+    throw err;
   }
 }
+
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -275,14 +299,13 @@ async function declareExchange(
   const creds = { host: AMQP_HOST, amqpPort: AMQP_PORT, vhost, username, password, exchange };
   const url   = buildAmqpUrl(creds);
   const conn  = await amqp.connect(url);
-  try {
-    const ch = await conn.createChannel();
-    await ch.assertExchange(exchange, "topic", { durable: true });
-    await ch.close();
-  } finally {
-    await conn.close();
-  }
+  const ch    = await conn.createChannel();
+  await ch.assertExchange(exchange, "topic", { durable: true });
+  ch.close().catch(() => {});
+  // Fire-and-forget — amqplib 0.10.x conn.close() can block indefinitely.
+  setTimeout(() => conn.close().catch(() => {}), 200);
 }
+
 
 /** Builds the AMQP connection URL from credentials. */
 function buildAmqpUrl(

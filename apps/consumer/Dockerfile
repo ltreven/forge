@@ -21,8 +21,8 @@ RUN npm install --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
-# Non-root user (matches openclaw container UID 1000)
-RUN addgroup -g 1000 forge && adduser -u 1000 -G forge -s /bin/sh -D forge
-USER forge
+# node:22-alpine already ships with user 'node' (UID/GID 1000).
+# Reuse it — matches the openclaw container UID and avoids group conflicts.
+USER node
 
 CMD ["node", "dist/index.js"]

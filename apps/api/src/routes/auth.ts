@@ -13,7 +13,9 @@ import {
   ensureNamespace,
   applyCredentialsSecret,
   applyForgeAgentCR,
+  applyRabbitMQCredentialsSecret,
 } from "../k8s/provisioner";
+import { provisionTenant } from "../lib/rabbitmq";
 
 export const authRouter = Router();
 
@@ -92,6 +94,14 @@ authRouter.post("/signup", async (req: Request, res: Response, next: NextFunctio
         .update(workspaces)
         .set({ k8sNamespace: namespace })
         .where(eq(workspaces.id, result.workspace.id));
+
+      // Provision RabbitMQ tenant (vhost + user + exchange)
+      try {
+        const rabbitCreds = await provisionTenant(result.workspace.id);
+        await applyRabbitMQCredentialsSecret(namespace, rabbitCreds);
+      } catch (rabbitErr) {
+        console.error("[signup] RabbitMQ provisioning failed (non-fatal):", rabbitErr);
+      }
 
       for (const agent of result.agents) {
         await applyCredentialsSecret(namespace, agent);

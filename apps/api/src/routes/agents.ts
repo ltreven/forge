@@ -366,8 +366,10 @@ agentsRouter.post("/:id/command", async (req: Request, res: Response, next: Next
         host:     process.env.RABBITMQ_AMQP_HOST ?? "localhost",
         amqpPort: Number(process.env.RABBITMQ_AMQP_PORT ?? 5672),
         vhost:    tenantVhost(workspace.id),
-        username: tenantUser(workspace.id),
-        password: process.env.RABBITMQ_ADMIN_PASSWORD ?? "admin",   // admin can access any vhost
+        // Use admin credentials — the admin user has full access to all vhosts.
+        // The tenant-user credentials are only for the consumer sidecar in the agent pod.
+        username: process.env.RABBITMQ_ADMIN_USER ?? "admin",
+        password: process.env.RABBITMQ_ADMIN_PASSWORD ?? "admin",
         exchange: tenantExchange(workspace.id),
       },
       {

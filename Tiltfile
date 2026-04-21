@@ -105,7 +105,7 @@ local_resource(
   labels=['setup'],
 )
 
-# ── 3. Build API image with live_update ───────────────────────────────────────
+# ── 3. Build API image ────────────────────────────────────────────────────────
 docker_build(
   API_IMAGE,
   context='apps/api',
@@ -117,15 +117,8 @@ docker_build(
     '.env',
     '*.md',
   ],
-  live_update=[
-    # Sync source code changes directly into the running container
-    sync('apps/api/src', '/app/src'),
-    # After syncing, recompile TypeScript and restart (only changed files)
-    run(
-      'cd /app && npx tsc --outDir dist --noEmit false 2>/dev/null || true && echo "TS compiled"',
-      trigger=['apps/api/src'],
-    ),
-  ],
+  # Note: live_update is disabled — the container runs as non-root (forge user)
+  # which cannot write to /app/src. Tilt does a fast Docker layer-cache rebuild instead.
 )
 
 # ── 4. Build Web image with live_update ──────────────────────────────────────
@@ -237,22 +230,63 @@ data:
 
 
 # ── 5b. Build forge-consumer image ────────────────────────────────────────────────
+# The same pattern as forge-agent: a 1-replica preloader Deployment forces Tilt
+# to build and load the image into k8s.io containerd (Docker Desktop Kubernetes).
+# Tilt only builds images it sees in a k8s container spec — a ConfigMap value alone
+# is not enough. The preloader is a stub pod that keeps the image reference alive.
 docker_build(
   CONSUMER_IMAGE,
   context='apps/consumer',
   dockerfile='apps/consumer/Dockerfile',
   ignore=['node_modules', 'dist'],
-  live_update=[
-    sync('apps/consumer/src', '/app/src'),
-  ],
 )
 
-# NOTE: The forge-consumer-image ConfigMap is intentionally applied with an EMPTY
-# image value. This gives Tilt ownership of the ConfigMap (so tilt down cleans it),
-# while keeping consumerImage="" so the controller skips sidecar injection.
-#
-# To enable the sidecar (FOR-26 Phase 2), change "" to CONSUMER_IMAGE below
-# AFTER forge-rabbit is Running and the consumer build passes:
+# Preloader: forces Tilt to load forge/consumer:local into k8s.io containerd.
+k8s_yaml(blob("""
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-consumer-preloader
+  namespace: forge
+  labels:
+    app.kubernetes.io/managed-by: tilt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: forge-consumer-preloader
+  template:
+    metadata:
+      labels:
+        app: forge-consumer-preloader
+    spec:
+      containers:
+      - name: consumer-preloader
+        image: {image}
+        imagePullPolicy: Never
+        command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+""".format(image=CONSUMER_IMAGE)))
+
+k8s_resource('forge-consumer-preloader', pod_readiness='ignore', labels=['images'])
+
+local_resource(
+  'forge-consumer-configmap-sync',
+  cmd="""
+    IMG=$(kubectl get deployment forge-consumer-preloader -n forge \\
+      -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+    if [ -z "$IMG" ]; then echo "==> preloader not ready, skipping"; exit 0; fi
+    kubectl patch configmap forge-consumer-image -n forge \\
+      -p '{"data":{"image":"'"$IMG"'","pullPolicy":"IfNotPresent"}}'
+    echo "==> forge-consumer-image ConfigMap => $IMG"
+  """,
+  resource_deps=['forge-consumer-preloader'],
+  labels=['images'],
+)
+
+# forge-consumer-image ConfigMap — enables the RabbitMQ↔openclaw sidecar.
+# image is set to CONSUMER_IMAGE to activate sidecar injection in agent pods.
+# The controller reads this ConfigMap and attaches the sidecar container to each
+# ForgeAgent pod when provisioning. Set image: "" to disable sidecar injection.
 k8s_yaml(blob("""
 apiVersion: v1
 kind: ConfigMap
@@ -262,9 +296,9 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: tilt
 data:
-  image: ""
+  image: "{image}"
   pullPolicy: "Never"
-"""))
+""".format(image=CONSUMER_IMAGE)))
 
 
 # ── RabbitmqCluster CR ───────────────────────────────────────────────────────────────
@@ -292,13 +326,43 @@ spec:
     additionalConfig: |
       default_vhost = /
       log.console = true
+      default_user = admin
+      default_pass = forge_rabbit_local
+  # Pin to a stable management image — avoids EOF errors when pulling bleeding-edge tags.
+  # The management plugin tag is required for the HTTP API used by forge-api.
+  image: rabbitmq:3.13-management
   resources:
     requests:
       cpu: 100m
-      memory: 128Mi
+      memory: 256Mi
     limits:
       cpu: "300m"
-      memory: 256Mi
+      memory: 1Gi
+  override:
+    statefulSet:
+      spec:
+        template:
+          spec:
+            containers:
+              - name: rabbitmq
+                startupProbe:
+                  exec:
+                    command:
+                      - /bin/bash
+                      - "-c"
+                      - "rabbitmqctl eval 'rabbit_nodes:reached_target_cluster_size().' | grep -q '^true$'"
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  timeoutSeconds: 15
+                  failureThreshold: 60
+                  successThreshold: 1
+                readinessProbe:
+                  tcpSocket:
+                    port: amqp
+                  initialDelaySeconds: 20
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 6
 """))
 
 
