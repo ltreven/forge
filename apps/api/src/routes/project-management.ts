@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import {
-  teams,
+  agents,
   projects,
   projectUpdates,
   projectIssues,
@@ -21,10 +21,17 @@ import {
   updateTaskSchema,
 } from "../schemas/project-management.schema";
 import { failure, success } from "../lib/response";
-import { authMiddleware } from "../middleware/authMiddleware";
+import { agentAuthMiddleware } from "../middleware/agentAuthMiddleware";
 
 export const projectManagementRouter = Router();
-projectManagementRouter.use(authMiddleware);
+
+// All project-management routes require agent authentication.
+// req.agent.teamId is the authoritative scope — callers cannot override it.
+projectManagementRouter.use(agentAuthMiddleware);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 type ActivityEntityType = "project" | "issue" | "update";
 type ActivityAction = "created" | "updated" | "deleted";
@@ -36,7 +43,7 @@ async function trackActivity(params: {
   entityId: string;
   action: ActivityAction;
   payload?: Record<string, unknown>;
-}) {
+}): Promise<void> {
   await db.insert(projectActivities).values({
     teamId: params.teamId,
     projectId: params.projectId,
@@ -47,20 +54,53 @@ async function trackActivity(params: {
   });
 }
 
+/**
+ * Validates that an agent UUID belongs to the authenticated agent's team.
+ * Used for lead_id and assigned_to_id fields to prevent cross-team references.
+ */
+async function assertAgentBelongsToTeam(
+  agentId: string,
+  teamId: string,
+  res: Response,
+  fieldName: string,
+): Promise<boolean> {
+  const [member] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.teamId, teamId)))
+    .limit(1);
+
+  if (!member) {
+    res.status(400).json(failure(`${fieldName} must be an agent belonging to your team`));
+    return false;
+  }
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Projects
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /project-management/projects
+ * Creates a project scoped to the authenticated agent's team.
+ * The teamId from the token is used — any teamId in the request body is ignored.
+ */
 projectManagementRouter.post("/projects", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = createProjectSchema.parse(req.body);
+    // Inject teamId from token so the schema validation passes
+    const input = createProjectSchema.parse({ ...req.body, teamId: req.agent!.teamId });
 
-    const [team] = await db.select().from(teams).where(eq(teams.id, input.teamId));
-    if (!team) {
-      res.status(404).json(failure("Team not found"));
-      return;
+    // Validate leadId belongs to the same team
+    if (input.leadId) {
+      const ok = await assertAgentBelongsToTeam(input.leadId, req.agent!.teamId, res, "leadId");
+      if (!ok) return;
     }
 
     const [project] = await db
       .insert(projects)
       .values({
-        teamId: input.teamId,
+        teamId: req.agent!.teamId,
         title: input.title,
         shortSummary: input.shortSummary,
         descriptionMarkdown: input.descriptionMarkdown,
@@ -77,12 +117,11 @@ projectManagementRouter.post("/projects", async (req: Request, res: Response, ne
       .returning();
 
     await trackActivity({
-      teamId: input.teamId,
+      teamId: req.agent!.teamId,
       projectId: project.id,
       entityType: "project",
       entityId: project.id,
       action: "created",
-      payload: { title: project.title },
     });
 
     res.status(201).json(success(project));
@@ -91,12 +130,16 @@ projectManagementRouter.post("/projects", async (req: Request, res: Response, ne
   }
 });
 
-projectManagementRouter.get("/teams/:teamId/projects", async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * GET /project-management/projects
+ * Lists all projects for the authenticated agent's team.
+ */
+projectManagementRouter.get("/projects", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await db
       .select()
       .from(projects)
-      .where(eq(projects.teamId, String(req.params.teamId)))
+      .where(eq(projects.teamId, req.agent!.teamId))
       .orderBy(desc(projects.updatedAt));
 
     res.json(success(rows));
@@ -105,9 +148,16 @@ projectManagementRouter.get("/teams/:teamId/projects", async (req: Request, res:
   }
 });
 
+/**
+ * GET /project-management/projects/:id
+ * Returns a project, enforcing team ownership.
+ */
 projectManagementRouter.get("/projects/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const [project] = await db.select().from(projects).where(eq(projects.id, String(req.params.id)));
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, String(req.params.id)), eq(projects.teamId, req.agent!.teamId)));
 
     if (!project) {
       res.status(404).json(failure("Project not found"));
@@ -120,35 +170,39 @@ projectManagementRouter.get("/projects/:id", async (req: Request, res: Response,
   }
 });
 
+/**
+ * PUT /project-management/projects/:id
+ */
 projectManagementRouter.put("/projects/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = updateProjectSchema.parse(req.body);
-    const [existing] = await db.select().from(projects).where(eq(projects.id, String(req.params.id)));
+    const [existing] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, String(req.params.id)), eq(projects.teamId, req.agent!.teamId)));
 
     if (!existing) {
       res.status(404).json(failure("Project not found"));
       return;
     }
 
-    const { startAt, endAt, ...rest } = input;
+    const input = updateProjectSchema.parse(req.body);
+
+    if (input.leadId) {
+      const ok = await assertAgentBelongsToTeam(input.leadId, req.agent!.teamId, res, "leadId");
+      if (!ok) return;
+    }
+
     const [project] = await db
       .update(projects)
-      .set({
-        ...rest,
-        startDateKind: startAt?.kind,
-        startDateValue: startAt?.value,
-        endDateKind: endAt?.kind,
-        endDateValue: endAt?.value,
-        updatedAt: new Date(),
-      })
+      .set({ ...input, updatedAt: new Date() })
       .where(eq(projects.id, existing.id))
       .returning();
 
     await trackActivity({
-      teamId: existing.teamId,
-      projectId: existing.id,
+      teamId: req.agent!.teamId,
+      projectId: project.id,
       entityType: "project",
-      entityId: existing.id,
+      entityId: project.id,
       action: "updated",
       payload: { updatedFields: Object.keys(input) },
     });
@@ -159,61 +213,78 @@ projectManagementRouter.put("/projects/:id", async (req: Request, res: Response,
   }
 });
 
+/**
+ * DELETE /project-management/projects/:id
+ */
 projectManagementRouter.delete("/projects/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const [deleted] = await db.delete(projects).where(eq(projects.id, String(req.params.id))).returning();
+    const [existing] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, String(req.params.id)), eq(projects.teamId, req.agent!.teamId)));
 
-    if (!deleted) {
+    if (!existing) {
       res.status(404).json(failure("Project not found"));
       return;
     }
 
+    // Activity is cascade-deleted with the project; record before deletion for audit.
     await trackActivity({
-      teamId: deleted.teamId,
-      projectId: deleted.id,
+      teamId: req.agent!.teamId,
+      projectId: existing.id,
       entityType: "project",
-      entityId: deleted.id,
+      entityId: existing.id,
       action: "deleted",
     });
 
-    res.json(success({ deleted: true, id: deleted.id }));
+    await db.delete(projects).where(eq(projects.id, existing.id));
+
+    res.json(success({ deleted: true, id: existing.id }));
   } catch (err) {
     next(err);
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Project Updates (health updates)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /project-management/projects/:id/updates
+ */
 projectManagementRouter.post("/projects/:id/updates", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = createProjectUpdateSchema.parse({ ...req.body, projectId: req.params.id });
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, String(req.params.id)), eq(projects.teamId, req.agent!.teamId)));
 
-    const [project] = await db.select().from(projects).where(eq(projects.id, body.projectId));
     if (!project) {
       res.status(404).json(failure("Project not found"));
       return;
     }
 
-    const [update] = await db.transaction(async (tx) => {
-      const [newUpdate] = await tx
-        .insert(projectUpdates)
-        .values({
-          projectId: body.projectId,
-          happenedAt: body.happenedAt ?? new Date(),
-          oldHealth: project.health,
-          newHealth: body.newHealth,
-          reason: body.reason,
-        })
-        .returning();
+    const input = createProjectUpdateSchema.parse({ ...req.body, projectId: project.id });
 
-      await tx
-        .update(projects)
-        .set({ health: body.newHealth as ProjectHealth, updatedAt: new Date() })
-        .where(eq(projects.id, project.id));
+    const [update] = await db
+      .insert(projectUpdates)
+      .values({
+        projectId: project.id,
+        happenedAt: input.happenedAt ?? new Date(),
+        oldHealth: project.health as ProjectHealth,
+        newHealth: input.newHealth as ProjectHealth,
+        reason: input.reason,
+      })
+      .returning();
 
-      return [newUpdate];
-    });
+    // Reflect the new health on the project itself
+    await db
+      .update(projects)
+      .set({ health: input.newHealth as ProjectHealth, updatedAt: new Date() })
+      .where(eq(projects.id, project.id));
 
     await trackActivity({
-      teamId: project.teamId,
+      teamId: req.agent!.teamId,
       projectId: project.id,
       entityType: "update",
       entityId: update.id,
@@ -227,12 +298,26 @@ projectManagementRouter.post("/projects/:id/updates", async (req: Request, res: 
   }
 });
 
+/**
+ * GET /project-management/projects/:id/updates
+ */
 projectManagementRouter.get("/projects/:id/updates", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Verify team ownership before returning updates
+    const [project] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, String(req.params.id)), eq(projects.teamId, req.agent!.teamId)));
+
+    if (!project) {
+      res.status(404).json(failure("Project not found"));
+      return;
+    }
+
     const rows = await db
       .select()
       .from(projectUpdates)
-      .where(eq(projectUpdates.projectId, String(req.params.id)))
+      .where(eq(projectUpdates.projectId, project.id))
       .orderBy(desc(projectUpdates.happenedAt));
 
     res.json(success(rows));
@@ -241,47 +326,39 @@ projectManagementRouter.get("/projects/:id/updates", async (req: Request, res: R
   }
 });
 
+/**
+ * PUT /project-management/updates/:id
+ */
 projectManagementRouter.put("/updates/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = updateProjectUpdateSchema.parse(req.body);
-    const [existing] = await db.select().from(projectUpdates).where(eq(projectUpdates.id, String(req.params.id)));
+    // Join with project to enforce team ownership
+    const [existing] = await db
+      .select({ u: projectUpdates, teamId: projects.teamId })
+      .from(projectUpdates)
+      .innerJoin(projects, eq(projects.id, projectUpdates.projectId))
+      .where(eq(projectUpdates.id, String(req.params.id)));
 
-    if (!existing) {
-      res.status(404).json(failure("Update not found"));
+    if (!existing || existing.teamId !== req.agent!.teamId) {
+      res.status(404).json(failure("Project update not found"));
       return;
     }
 
-    const [updated] = await db.transaction(async (tx) => {
-      const [res] = await tx
-        .update(projectUpdates)
-        .set({
-          happenedAt: input.happenedAt ?? existing.happenedAt,
-          newHealth: input.newHealth ?? existing.newHealth,
-          reason: input.reason ?? existing.reason,
-        })
-        .where(eq(projectUpdates.id, existing.id))
-        .returning();
+    const input = updateProjectUpdateSchema.parse(req.body);
 
-      if (input.newHealth) {
-        await tx
-          .update(projects)
-          .set({ health: input.newHealth as ProjectHealth, updatedAt: new Date() })
-          .where(eq(projects.id, existing.projectId));
-      }
+    const [updated] = await db
+      .update(projectUpdates)
+      .set({ ...input })
+      .where(eq(projectUpdates.id, existing.u.id))
+      .returning();
 
-      return [res];
+    await trackActivity({
+      teamId: req.agent!.teamId,
+      projectId: existing.u.projectId,
+      entityType: "update",
+      entityId: updated.id,
+      action: "updated",
+      payload: { updatedFields: Object.keys(input) },
     });
-
-    const [project] = await db.select().from(projects).where(eq(projects.id, existing.projectId));
-    if (project) {
-      await trackActivity({
-        teamId: project.teamId,
-        projectId: project.id,
-        entityType: "update",
-        entityId: updated.id,
-        action: "updated",
-      });
-    }
 
     res.json(success(updated));
   } catch (err) {
@@ -289,47 +366,64 @@ projectManagementRouter.put("/updates/:id", async (req: Request, res: Response, 
   }
 });
 
+/**
+ * DELETE /project-management/updates/:id
+ */
 projectManagementRouter.delete("/updates/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const [deleted] = await db.delete(projectUpdates).where(eq(projectUpdates.id, String(req.params.id))).returning();
+    const [existing] = await db
+      .select({ u: projectUpdates, teamId: projects.teamId })
+      .from(projectUpdates)
+      .innerJoin(projects, eq(projects.id, projectUpdates.projectId))
+      .where(eq(projectUpdates.id, String(req.params.id)));
 
-    if (!deleted) {
-      res.status(404).json(failure("Update not found"));
+    if (!existing || existing.teamId !== req.agent!.teamId) {
+      res.status(404).json(failure("Project update not found"));
       return;
     }
 
-    const [project] = await db.select().from(projects).where(eq(projects.id, deleted.projectId));
-    if (project) {
-      await trackActivity({
-        teamId: project.teamId,
-        projectId: project.id,
-        entityType: "update",
-        entityId: deleted.id,
-        action: "deleted",
-      });
-    }
+    await db.delete(projectUpdates).where(eq(projectUpdates.id, existing.u.id));
 
-    res.json(success({ deleted: true, id: deleted.id }));
+    await trackActivity({
+      teamId: req.agent!.teamId,
+      projectId: existing.u.projectId,
+      entityType: "update",
+      entityId: existing.u.id,
+      action: "deleted",
+    });
+
+    res.json(success({ deleted: true, id: existing.u.id }));
   } catch (err) {
     next(err);
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Project Issues
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /project-management/projects/:id/issues
+ */
 projectManagementRouter.post("/projects/:id/issues", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = createIssueSchema.parse({ ...req.body, projectId: req.params.id });
-    const [project] = await db.select().from(projects).where(eq(projects.id, input.projectId));
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, String(req.params.id)), eq(projects.teamId, req.agent!.teamId)));
 
     if (!project) {
       res.status(404).json(failure("Project not found"));
       return;
     }
 
+    const input = createIssueSchema.parse({ ...req.body, projectId: project.id });
+
     if (input.parentIssueId) {
       const [parentIssue] = await db
         .select()
         .from(projectIssues)
-        .where(and(eq(projectIssues.id, input.parentIssueId), eq(projectIssues.projectId, input.projectId)));
+        .where(and(eq(projectIssues.id, input.parentIssueId), eq(projectIssues.projectId, project.id)));
 
       if (!parentIssue) {
         res.status(400).json(failure("Parent issue must belong to the same project"));
@@ -337,10 +431,15 @@ projectManagementRouter.post("/projects/:id/issues", async (req: Request, res: R
       }
     }
 
+    if (input.assignedToId) {
+      const ok = await assertAgentBelongsToTeam(input.assignedToId, req.agent!.teamId, res, "assignedToId");
+      if (!ok) return;
+    }
+
     const [issue] = await db
       .insert(projectIssues)
       .values({
-        projectId: input.projectId,
+        projectId: project.id,
         parentIssueId: input.parentIssueId,
         title: input.title,
         shortSummary: input.shortSummary,
@@ -353,7 +452,7 @@ projectManagementRouter.post("/projects/:id/issues", async (req: Request, res: R
       .returning();
 
     await trackActivity({
-      teamId: project.teamId,
+      teamId: req.agent!.teamId,
       projectId: project.id,
       entityType: "issue",
       entityId: issue.id,
@@ -367,12 +466,25 @@ projectManagementRouter.post("/projects/:id/issues", async (req: Request, res: R
   }
 });
 
+/**
+ * GET /project-management/projects/:id/issues
+ */
 projectManagementRouter.get("/projects/:id/issues", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const [project] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, String(req.params.id)), eq(projects.teamId, req.agent!.teamId)));
+
+    if (!project) {
+      res.status(404).json(failure("Project not found"));
+      return;
+    }
+
     const rows = await db
       .select()
       .from(projectIssues)
-      .where(eq(projectIssues.projectId, String(req.params.id)))
+      .where(eq(projectIssues.projectId, project.id))
       .orderBy(desc(projectIssues.updatedAt));
 
     res.json(success(rows));
@@ -381,52 +493,82 @@ projectManagementRouter.get("/projects/:id/issues", async (req: Request, res: Re
   }
 });
 
-projectManagementRouter.put("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * GET /project-management/issues/:id
+ * Returns a single project issue, enforcing team ownership via the parent project.
+ */
+projectManagementRouter.get("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = updateIssueSchema.parse(req.body);
-    const [existing] = await db.select().from(projectIssues).where(eq(projectIssues.id, String(req.params.id)));
+    const [row] = await db
+      .select({ issue: projectIssues, teamId: projects.teamId })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projects.id, projectIssues.projectId))
+      .where(eq(projectIssues.id, String(req.params.id)));
 
-    if (!existing) {
+    if (!row || row.teamId !== req.agent!.teamId) {
       res.status(404).json(failure("Issue not found"));
       return;
     }
 
+    res.json(success(row.issue));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /project-management/issues/:id
+ */
+projectManagementRouter.put("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [row] = await db
+      .select({ issue: projectIssues, teamId: projects.teamId })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projects.id, projectIssues.projectId))
+      .where(eq(projectIssues.id, String(req.params.id)));
+
+    if (!row || row.teamId !== req.agent!.teamId) {
+      res.status(404).json(failure("Issue not found"));
+      return;
+    }
+
+    const input = updateIssueSchema.parse(req.body);
+
     if (input.parentIssueId) {
-      if (input.parentIssueId === existing.id) {
+      if (input.parentIssueId === row.issue.id) {
         res.status(400).json(failure("Issue cannot be parent of itself"));
         return;
       }
-
       const [parentIssue] = await db
         .select()
         .from(projectIssues)
-        .where(and(eq(projectIssues.id, input.parentIssueId), eq(projectIssues.projectId, existing.projectId)));
+        .where(and(eq(projectIssues.id, input.parentIssueId), eq(projectIssues.projectId, row.issue.projectId)));
+
       if (!parentIssue) {
         res.status(400).json(failure("Parent issue must belong to the same project"));
         return;
       }
     }
 
+    if (input.assignedToId) {
+      const ok = await assertAgentBelongsToTeam(input.assignedToId, req.agent!.teamId, res, "assignedToId");
+      if (!ok) return;
+    }
+
     const [issue] = await db
       .update(projectIssues)
-      .set({
-        ...input,
-        updatedAt: new Date(),
-      })
-      .where(eq(projectIssues.id, existing.id))
+      .set({ ...input, updatedAt: new Date() })
+      .where(eq(projectIssues.id, row.issue.id))
       .returning();
 
-    const [project] = await db.select().from(projects).where(eq(projects.id, issue.projectId));
-    if (project) {
-      await trackActivity({
-        teamId: project.teamId,
-        projectId: project.id,
-        entityType: "issue",
-        entityId: issue.id,
-        action: "updated",
-        payload: { updatedFields: Object.keys(input) },
-      });
-    }
+    await trackActivity({
+      teamId: req.agent!.teamId,
+      projectId: row.issue.projectId,
+      entityType: "issue",
+      entityId: issue.id,
+      action: "updated",
+      payload: { updatedFields: Object.keys(input) },
+    });
 
     res.json(success(issue));
   } catch (err) {
@@ -434,57 +576,71 @@ projectManagementRouter.put("/issues/:id", async (req: Request, res: Response, n
   }
 });
 
+/**
+ * DELETE /project-management/issues/:id
+ */
 projectManagementRouter.delete("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const [deleted] = await db.delete(projectIssues).where(eq(projectIssues.id, String(req.params.id))).returning();
+    const [row] = await db
+      .select({ issue: projectIssues, teamId: projects.teamId })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projects.id, projectIssues.projectId))
+      .where(eq(projectIssues.id, String(req.params.id)));
 
-    if (!deleted) {
+    if (!row || row.teamId !== req.agent!.teamId) {
       res.status(404).json(failure("Issue not found"));
       return;
     }
 
-    const [project] = await db.select().from(projects).where(eq(projects.id, deleted.projectId));
-    if (project) {
-      await trackActivity({
-        teamId: project.teamId,
-        projectId: project.id,
-        entityType: "issue",
-        entityId: deleted.id,
-        action: "deleted",
-      });
-    }
+    await trackActivity({
+      teamId: req.agent!.teamId,
+      projectId: row.issue.projectId,
+      entityType: "issue",
+      entityId: row.issue.id,
+      action: "deleted",
+    });
 
-    res.json(success({ deleted: true, id: deleted.id }));
+    await db.delete(projectIssues).where(eq(projectIssues.id, row.issue.id));
+
+    res.json(success({ deleted: true, id: row.issue.id }));
   } catch (err) {
     next(err);
   }
 });
 
-projectManagementRouter.post("/teams/:teamId/tasks", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const input = createTaskSchema.parse({ ...req.body, teamId: req.params.teamId });
-    const [team] = await db.select().from(teams).where(eq(teams.id, input.teamId));
+// ─────────────────────────────────────────────────────────────────────────────
+// Team Tasks (standalone kanban, not linked to projects)
+// ─────────────────────────────────────────────────────────────────────────────
 
-    if (!team) {
-      res.status(404).json(failure("Team not found"));
-      return;
-    }
+/**
+ * POST /project-management/tasks
+ * Creates a kanban task scoped to the authenticated agent's team.
+ */
+projectManagementRouter.post("/tasks", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = createTaskSchema.parse({ ...req.body, teamId: req.agent!.teamId });
 
     if (input.parentTaskId) {
       const [parentTask] = await db
         .select()
         .from(teamTasks)
-        .where(and(eq(teamTasks.id, input.parentTaskId), eq(teamTasks.teamId, input.teamId)));
+        .where(and(eq(teamTasks.id, input.parentTaskId), eq(teamTasks.teamId, req.agent!.teamId)));
+
       if (!parentTask) {
-        res.status(400).json(failure("Parent task must belong to the same team"));
+        res.status(400).json(failure("Parent task must belong to your team"));
         return;
       }
+    }
+
+    if (input.assignedToId) {
+      const ok = await assertAgentBelongsToTeam(input.assignedToId, req.agent!.teamId, res, "assignedToId");
+      if (!ok) return;
     }
 
     const [task] = await db
       .insert(teamTasks)
       .values({
-        teamId: input.teamId,
+        teamId: req.agent!.teamId,
         parentTaskId: input.parentTaskId,
         title: input.title,
         shortSummary: input.shortSummary,
@@ -502,12 +658,16 @@ projectManagementRouter.post("/teams/:teamId/tasks", async (req: Request, res: R
   }
 });
 
-projectManagementRouter.get("/teams/:teamId/tasks", async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * GET /project-management/tasks
+ * Lists all team tasks for the authenticated agent's team.
+ */
+projectManagementRouter.get("/tasks", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await db
       .select()
       .from(teamTasks)
-      .where(eq(teamTasks.teamId, String(req.params.teamId)))
+      .where(eq(teamTasks.teamId, req.agent!.teamId))
       .orderBy(desc(teamTasks.updatedAt));
 
     res.json(success(rows));
@@ -516,9 +676,16 @@ projectManagementRouter.get("/teams/:teamId/tasks", async (req: Request, res: Re
   }
 });
 
+/**
+ * GET /project-management/tasks/:id
+ */
 projectManagementRouter.get("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const [task] = await db.select().from(teamTasks).where(eq(teamTasks.id, String(req.params.id)));
+    const [task] = await db
+      .select()
+      .from(teamTasks)
+      .where(and(eq(teamTasks.id, String(req.params.id)), eq(teamTasks.teamId, req.agent!.teamId)));
+
     if (!task) {
       res.status(404).json(failure("Task not found"));
       return;
@@ -530,38 +697,47 @@ projectManagementRouter.get("/tasks/:id", async (req: Request, res: Response, ne
   }
 });
 
+/**
+ * PUT /project-management/tasks/:id
+ */
 projectManagementRouter.put("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = updateTaskSchema.parse(req.body);
-    const [existing] = await db.select().from(teamTasks).where(eq(teamTasks.id, String(req.params.id)));
+    const [existing] = await db
+      .select()
+      .from(teamTasks)
+      .where(and(eq(teamTasks.id, String(req.params.id)), eq(teamTasks.teamId, req.agent!.teamId)));
 
     if (!existing) {
       res.status(404).json(failure("Task not found"));
       return;
     }
 
+    const input = updateTaskSchema.parse(req.body);
+
     if (input.parentTaskId) {
       if (input.parentTaskId === existing.id) {
-        res.status(400).json(failure("Task cannot be parent of itself"));
+        res.status(400).json(failure("Task cannot be its own parent"));
         return;
       }
-
       const [parentTask] = await db
         .select()
         .from(teamTasks)
-        .where(and(eq(teamTasks.id, input.parentTaskId), eq(teamTasks.teamId, existing.teamId)));
+        .where(and(eq(teamTasks.id, input.parentTaskId), eq(teamTasks.teamId, req.agent!.teamId)));
+
       if (!parentTask) {
-        res.status(400).json(failure("Parent task must belong to the same team"));
+        res.status(400).json(failure("Parent task must belong to your team"));
         return;
       }
     }
 
+    if (input.assignedToId) {
+      const ok = await assertAgentBelongsToTeam(input.assignedToId, req.agent!.teamId, res, "assignedToId");
+      if (!ok) return;
+    }
+
     const [task] = await db
       .update(teamTasks)
-      .set({
-        ...input,
-        updatedAt: new Date(),
-      })
+      .set({ ...input, updatedAt: new Date() })
       .where(eq(teamTasks.id, existing.id))
       .returning();
 
@@ -571,26 +747,43 @@ projectManagementRouter.put("/tasks/:id", async (req: Request, res: Response, ne
   }
 });
 
+/**
+ * DELETE /project-management/tasks/:id
+ */
 projectManagementRouter.delete("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const [deleted] = await db.delete(teamTasks).where(eq(teamTasks.id, String(req.params.id))).returning();
-    if (!deleted) {
+    const [existing] = await db
+      .select()
+      .from(teamTasks)
+      .where(and(eq(teamTasks.id, String(req.params.id)), eq(teamTasks.teamId, req.agent!.teamId)));
+
+    if (!existing) {
       res.status(404).json(failure("Task not found"));
       return;
     }
 
-    res.json(success({ deleted: true, id: deleted.id }));
+    await db.delete(teamTasks).where(eq(teamTasks.id, existing.id));
+
+    res.json(success({ deleted: true, id: existing.id }));
   } catch (err) {
     next(err);
   }
 });
 
-projectManagementRouter.get("/teams/:teamId/activities", async (req: Request, res: Response, next: NextFunction) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Activity Feed
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /project-management/activities
+ * Returns the project activity feed for the authenticated agent's team.
+ */
+projectManagementRouter.get("/activities", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await db
       .select()
       .from(projectActivities)
-      .where(eq(projectActivities.teamId, String(req.params.teamId)))
+      .where(eq(projectActivities.teamId, req.agent!.teamId))
       .orderBy(desc(projectActivities.createdAt));
 
     res.json(success(rows));
