@@ -36,6 +36,7 @@ interface Agent {
 interface ChatMessage {
   id: string; role: "user" | "assistant";
   content: string; createdAt: string;
+  status?: "sending" | "sent" | "error";
 }
 
 interface Conversation {
@@ -140,7 +141,7 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
     const text = input.trim();
     if (!text || sending) return;
     setInput(""); setSending(true);
-    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content: text, createdAt: new Date().toISOString() };
+    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content: text, createdAt: new Date().toISOString(), status: "sending" };
     setMessages((p) => [...p, userMsg]);
     try {
       let cid = conv?.id;
@@ -157,12 +158,19 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
       
       const resultObj = await res.json().catch(() => ({}));
 
+      if (res.status === 504 || (res.status === 202 && resultObj.error)) {
+        // Timeout: the message WAS saved, but the agent is still thinking.
+        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data?.userMessage?.id || m.id, status: "sent" } : m));
+        const errStr = resultObj.error?.message || "Agent is taking too long to respond. Your message was sent.";
+        throw { isSendError: true, keepMessage: true, message: errStr };
+      }
+
       if (!res.ok) {
         let errStr = resultObj.error?.message || resultObj.message || resultObj.error || "Failed to send message.";
         
         if (resultObj.data?.userMessage) {
           // The message was saved in the db despite the error
-          setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage.id } : m));
+          setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage.id, status: "sent" } : m));
           throw { isSendError: true, keepMessage: true, message: errStr };
         }
         
@@ -176,13 +184,13 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
         };
         const errStr = errMap[resultObj.data.error] || resultObj.data.error;
         
-        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage?.id || userMsg.id } : m));
+        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage?.id || userMsg.id, status: "sent" } : m));
         throw { isSendError: true, keepMessage: true, message: errStr };
       }
 
       // Successful reply
       if (resultObj.data?.userMessage) {
-        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage.id } : m));
+        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage.id, status: "sent" } : m));
       }
 
       if (resultObj.data?.agentMessage) {
@@ -247,9 +255,12 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
               isUser ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm")}>
               {m.content}
             </div>
-            <span className="px-1 text-[9px] text-muted-foreground/60">
-              {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            <div className="flex items-center gap-1 px-1">
+              {isUser && m.status === "sending" && <Loader2 className="size-2 animate-spin text-muted-foreground" />}
+              <span className="text-[9px] text-muted-foreground/60">
+                {m.status === "sending" ? "Sending..." : new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
           </div>
         </div>
       );

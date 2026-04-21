@@ -196,10 +196,10 @@ conversationsRouter.post("/:id/messages", async (req: Request, res: Response, ne
     const replyJson = await waitForReply(rabbitCreds, sessionKey, LONG_POLL_MS);
 
     if (!replyJson) {
-      // Timeout — the agent is processing or unavailable
-      res.status(504).json({
+      // Accepted, but not yet ready — signal to the UI to keep the user message.
+      res.status(202).json({
         data: { userMessage, agentMessage: null },
-        error: { message: "Agent did not reply within 30s. Try again shortly." },
+        error: { message: "Agent is taking longer than expected to reply. Your message was received." },
         meta: { timestamp: new Date().toISOString() }
       });
       return;

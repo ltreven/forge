@@ -42,12 +42,23 @@ Always use these integer values for the `status` field in Projects, Issues, and 
 | 4     | Done        | Completed and closed              |
 | 5     | Cancelled   | Abandoned                         |
 
-## Execution Guidelines
+## HTTP Methods & Operations
+
+- **GET**: Used to list resources or fetch details. (e.g., `GET /project-management/projects`)
+- **POST**: Used to create **new** resources. Returns `201 Created`. (e.g., `POST /project-management/tasks`)
+- **PUT**: Used to update **existing** resources. **Do not use PATCH.** (e.g., `PUT /project-management/issues/{id}`)
+- **DELETE**: Used to remove resources. Returns `200 OK` with a deletion confirmation.
+
+## Execution Guidelines & Common Errors
 
 1.  **Understand the Contract**: Read `references/openapi.yaml` to identify the correct endpoint and payload structure.
-2.  **Use Examples**: Refer to `references/examples.md` for `curl` templates.
-3.  **Validate Payloads**: Ensure all required fields are present and optional fields match the expected types.
-4.  **Handle Responses**: Check for successful status codes (200, 201) and handle errors gracefully.
+2.  **Use PUT for Updates**: The API does **not** support `PATCH`. If you want to update a field, use `PUT` and include the fields you want to update in the JSON body.
+3.  **Validate Payloads**: Ensure all required fields are present and optional fields match the expected types. For example, status and priority must be integers.
+4.  **Handle Responses**: 
+    - The API always returns a wrapper JSON object: `{"success": true, "data": {...}}` or `{"success": false, "error": "..."}`.
+    - Check for `200 OK` or `201 Created` status codes.
+    - If you receive a `400 Bad Request` or `404 Not Found`, read the `"error"` field in the response before retrying.
+5.  **Use Examples**: Refer to `references/examples.md` for `curl` templates for each standard operation.
 
 ## References
 
