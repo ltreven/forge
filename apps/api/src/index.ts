@@ -103,17 +103,16 @@ app.listen(PORT, HOST, () => {
         const { eq }                          = await import("drizzle-orm");
 
         let apiReady = false;
-        for (let attempt = 1; attempt <= 6; attempt++) {
+        let attempt = 1;
+        while (!apiReady) {
           apiReady = await checkManagementApiReady();
           if (apiReady) break;
-          console.warn(`[startup] RabbitMQ Management API not ready. Retrying in 10s... (Attempt ${attempt}/6)`);
+          console.warn(`[startup] RabbitMQ Management API not ready. Retrying in 10s... (Attempt ${attempt})`);
+          attempt++;
           await new Promise(r => setTimeout(r, 10_000));
         }
 
-        if (!apiReady) {
-          console.error("[startup] RabbitMQ Management API failed to become ready. Skipping reprovision.");
-          return;
-        }
+        console.log(`[startup] RabbitMQ Management API is ready after ${attempt} attempts. Starting reprovision...`);
 
         const allWorkspaces = await db.select().from(workspaces);
         let provisioned = 0;

@@ -209,6 +209,17 @@ async function startQaBusServer(): Promise<void> {
     console.log(`[qa-bus] ${req.method} ${pathname}`);
 
     try {
+      // ── GET /health ─────────────────────────────────────────────────────
+      // Readiness probe: only returns 200 OK when RabbitMQ connection is established.
+      if (req.method === "GET" && pathname === "/health") {
+        if (globalAmqChannel) {
+          writeJson(res, 200, { status: "ok" });
+        } else {
+          writeJson(res, 503, { status: "unavailable", reason: "RabbitMQ not connected" });
+        }
+        return;
+      }
+
       // ── GET /v1/state ─────────────────────────────────────────────────────
       if (req.method === "GET" && pathname === "/v1/state") {
         writeJson(res, 200, {

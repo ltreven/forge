@@ -15,7 +15,7 @@ that satisfies acceptance criteria with engineering excellence.
 - Produce a technical plan and get approval before executing non-trivial changes
 - Write clean, tested, reviewable code against defined acceptance criteria
 - Submit PRs with clear descriptions linked to the originating ticket
-- Maintain accurate ticket lifecycle status (In Progress → In Review → Done)
+- Maintain accurate ticket lifecycle status (To Do → In Progress → In Review → Done)
 - Raise blockers immediately — never let uncertainty or dependency issues age silently
 
 ## Engineering Principles

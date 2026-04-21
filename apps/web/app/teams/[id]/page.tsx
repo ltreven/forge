@@ -103,11 +103,11 @@ const STATUS_LABELS: Record<number, string> = {
 };
 
 const PRIORITY_LABELS: Record<number, string> = {
-  0: "Low",
-  1: "Medium",
-  2: "High",
-  3: "Urgent",
-  4: "Critical",
+  0: "None",
+  1: "Low",
+  2: "Medium",
+  3: "High",
+  4: "Urgent",
 };
 
 // ── Agent Card ────────────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ function ProjectListItem({ project }: { project: Project }) {
 }
 
 function TaskListItem({ task }: { task: TeamTask }) {
-  const isHighPriority = task.priority >= 2;
+  const isHighPriority = task.priority >= 3;
   
   return (
     <div className="group flex items-center gap-3 py-2 px-3 hover:bg-muted/50 rounded-lg transition-colors cursor-pointer">
@@ -363,8 +363,8 @@ export default function TeamDetailPage() {
   const teamLead  = agents.find((a) => a.type === "team_lead");
   const otherAgents = agents.filter((a) => a.type !== "team_lead");
   
-  const activeProjects = projects.filter(p => p.status === 1 || p.status === 2);
-  const activeTasks = tasks.filter(t => t.status === 1 || t.status === 2).sort((a,b) => b.priority - a.priority);
+  const activeProjects = projects.filter(p => p.status >= 1 && p.status <= 3);
+  const activeTasks = tasks.filter(t => t.status >= 1 && t.status <= 3).sort((a,b) => b.priority - a.priority);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">

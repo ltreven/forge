@@ -220,3 +220,20 @@ EOF
 else
   echo "==> Already bootstrapped — skipping (PVC state preserved)"
 fi
+
+# ── Seed shared skills (EVERY BOOT) ──────────────────────────────────────
+# Sync new shared skills to existing workspaces without overwriting current ones
+SHARED_SKILLS_SRC="/opt/forge/profiles/shared/skills"
+if [ -d "$SHARED_SKILLS_SRC" ]; then
+  echo "==> Syncing shared skills from $SHARED_SKILLS_SRC"
+  mkdir -p "$OPENCLAW_CONFIG_DIR/workspace/skills"
+  for skill_path in "$SHARED_SKILLS_SRC"/*; do
+    if [ -d "$skill_path" ]; then
+      skill_name=$(basename "$skill_path")
+      if [ ! -d "$OPENCLAW_CONFIG_DIR/workspace/skills/$skill_name" ]; then
+        echo "    -> Adding new skill: $skill_name"
+        cp -r "$skill_path" "$OPENCLAW_CONFIG_DIR/workspace/skills/"
+      fi
+    fi
+  done
+fi

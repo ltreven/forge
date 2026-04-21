@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -17,6 +18,8 @@ const (
 	gatewayPort = int32(18789)
 	// Consumer sidecar send API port (loopback only, used by openclaw for agent-to-agent dispatch).
 	sendAPIPort = int32(18780)
+	// Consumer sidecar QA bus API port (loopback only, used by openclaw for inbound polling).
+	qaBusPort = int32(43123)
 )
 
 // AgentDeployment builds the Deployment for a ForgeAgent CR.
@@ -234,6 +237,16 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 								Requests: requests,
 								Limits:   limits,
 							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{"sh", "-c", fmt.Sprintf("wget -qO- http://127.0.0.1:%d/health", qaBusPort)},
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       10,
+								FailureThreshold:    3,
+							},
 							SecurityContext: &corev1.SecurityContext{
 								RunAsNonRoot:             nonRoot.RunAsNonRoot,
 								RunAsUser:                nonRoot.RunAsUser,
@@ -275,6 +288,16 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 						corev1.ResourceCPU:    resource.MustParse("200m"),
 						corev1.ResourceMemory: resource.MustParse("256Mi"),
 					},
+				},
+				ReadinessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						Exec: &corev1.ExecAction{
+							Command: []string{"sh", "-c", fmt.Sprintf("wget -qO- http://127.0.0.1:%d/health", qaBusPort)},
+						},
+					},
+					InitialDelaySeconds: 5,
+					PeriodSeconds:       10,
+					FailureThreshold:    3,
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot:             ptr.To(true),

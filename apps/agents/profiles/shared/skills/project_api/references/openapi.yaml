@@ -1,0 +1,162 @@
+openapi: 3.0.0
+info:
+  title: Forge Project Management API
+  version: 1.0.0
+  description: Internal API for managing projects, issues, and team tasks within the Forge ecosystem.
+
+servers:
+  - url: http://forge-api.forge.svc.cluster.local:4000
+    description: Internal cluster URL
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Project:
+      type: object
+      required: [title]
+      properties:
+        id: { type: string, format: uuid }
+        teamId: { type: string, format: uuid }
+        title: { type: string }
+        shortSummary: { type: string }
+        descriptionMarkdown: { type: string }
+        status: { type: integer, description: "0=backlog, 1=todo, 2=in_progress, 3=in_review, 4=done, 5=cancelled" }
+        priority: { type: integer, description: "0=none, 1=low, 2=medium, 3=high, 4=urgent" }
+        leadId: { type: string, format: uuid, description: "Agent ID (must be in your team)" }
+        health: { type: string, enum: [unknown, on_track, at_risk, off_track] }
+        startAt:
+          type: object
+          properties:
+            kind: { type: string }
+            value: { type: string }
+        endAt:
+          type: object
+          properties:
+            kind: { type: string }
+            value: { type: string }
+
+    ProjectIssue:
+      type: object
+      required: [title]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        parentIssueId: { type: string, format: uuid, nullable: true }
+        title: { type: string }
+        shortSummary: { type: string }
+        descriptionMarkdown: { type: string }
+        status: { type: integer, description: "0=backlog, 1=todo, 2=in_progress, 3=in_review, 4=done, 5=cancelled" }
+        priority: { type: integer, description: "0=none, 1=low, 2=medium, 3=high, 4=urgent" }
+        assignedToId: { type: string, format: uuid, description: "Agent ID (must be in your team)" }
+
+    TeamTask:
+      type: object
+      required: [title]
+      properties:
+        id: { type: string, format: uuid }
+        teamId: { type: string, format: uuid }
+        parentTaskId: { type: string, format: uuid, nullable: true }
+        title: { type: string }
+        shortSummary: { type: string }
+        descriptionMarkdown: { type: string }
+        status: { type: integer, description: "0=backlog, 1=todo, 2=in_progress, 3=in_review, 4=done, 5=cancelled" }
+        priority: { type: integer, description: "0=none, 1=low, 2=medium, 3=high, 4=urgent" }
+        assignedToId: { type: string, format: uuid, description: "Agent ID (must be in your team)" }
+
+    ProjectHealthUpdate:
+      type: object
+      required: [newHealth, reason]
+      properties:
+        newHealth: { type: string, enum: [on_track, at_risk, off_track] }
+        reason: { type: string }
+        happenedAt: { type: string, format: date-time }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /project-management/projects:
+    get:
+      summary: List team projects
+      responses:
+        200:
+          description: List of projects
+    post:
+      summary: Create a project
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Project' }
+      responses:
+        201:
+          description: Project created
+
+  /project-management/projects/{id}:
+    get:
+      summary: Get project details
+    put:
+      summary: Update a project
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Project' }
+    delete:
+      summary: Delete a project
+
+  /project-management/projects/{id}/updates:
+    get:
+      summary: List project health updates
+    post:
+      summary: Create a health update
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectHealthUpdate' }
+
+  /project-management/projects/{id}/issues:
+    get:
+      summary: List project issues
+    post:
+      summary: Create a project issue
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectIssue' }
+
+  /project-management/issues/{id}:
+    get:
+      summary: Get issue details
+    put:
+      summary: Update an issue
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectIssue' }
+    delete:
+      summary: Delete an issue
+
+  /project-management/tasks:
+    get:
+      summary: List team tasks (kanban)
+    post:
+      summary: Create a team task
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeamTask' }
+
+  /project-management/tasks/{id}:
+    get:
+      summary: Get task details
+    put:
+      summary: Update a task
+    delete:
+      summary: Delete a task
+
+  /project-management/activities:
+    get:
+      summary: Get team activity feed

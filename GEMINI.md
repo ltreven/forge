@@ -10,7 +10,7 @@ This document provides foundational mandates for Gemini CLI when operating withi
 
 ### Coding Style & Conventions
 - **Developer Workflow:**
-    - **Ticket Ingestion:** Read Linear tickets to start work.
+    - **Ticket Ingestion:** Read Linear tickets using `mcp_linear_get_issue` for IDs (e.g., FOR-70) or `mcp_linear_list_issues` for searches. Do not search the local file system for ticket content.
     - **DoR Check:** Question the Definition of Ready (Acceptance Criteria, clear descriptions).
     - **Tech Planning:** Produce documentation and seek approval before coding.
     - **Execution:** Code, test, and submit PRs.

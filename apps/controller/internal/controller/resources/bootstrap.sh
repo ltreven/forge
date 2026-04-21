@@ -213,6 +213,14 @@ Operator: ${AGENT_OPERATOR_NAME:-}
 EOF
   fi
 
+  # ── Seed shared skills (FIRST BOOT ONLY) ─────────────────────────────────
+  SHARED_SKILLS_SRC="/opt/forge/profiles/shared/skills"
+  if [ -d "$SHARED_SKILLS_SRC" ]; then
+    echo "==> Seeding shared skills from $SHARED_SKILLS_SRC (first boot only)"
+    mkdir -p "$OPENCLAW_CONFIG_DIR/workspace/skills"
+    cp -r "$SHARED_SKILLS_SRC/"* "$OPENCLAW_CONFIG_DIR/workspace/skills/"
+  fi
+
   echo "==> Creating symlink for openclaw.json"
   ln -sf "$CONFIG_FILE" "$OPENCLAW_CONFIG_DIR/workspace/openclaw.json"
 

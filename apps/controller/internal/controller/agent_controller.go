@@ -67,6 +67,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
+	logger.Info("reconciling agent", "generation", cr.Generation, "retry", "wget-v2")
+
 	// Build the ownerReference that all child resources will carry.
 	ownerRef := buildOwnerRef(&cr, r.Scheme)
 
