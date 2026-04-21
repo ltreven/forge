@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Bot, Brain, ChevronRight, Gauge,
   History, Loader2, Send, Settings, ShieldCheck, Wrench, Zap, Plus,
+  AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -141,8 +142,12 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
     const text = input.trim();
     if (!text || sending) return;
     setInput(""); setSending(true);
-    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content: text, createdAt: new Date().toISOString(), status: "sending" };
+    const tempId = `u-${Date.now()}`;
+    let messageIdInState = tempId;
+    
+    const userMsg: ChatMessage = { id: tempId, role: "user", content: text, createdAt: new Date().toISOString(), status: "sending" };
     setMessages((p) => [...p, userMsg]);
+
     try {
       let cid = conv?.id;
       if (!cid) {
@@ -150,7 +155,7 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
           method: "POST", headers: headers(),
           body: JSON.stringify({ agentId, counterpartType: "human", counterpartName: userName }),
         });
-        if (!r.ok) throw new Error();
+        if (!r.ok) throw new Error("Failed to initialize conversation.");
         const nc: Conversation = (await r.json()).data;
         setConv(nc); cid = nc.id;
       }
@@ -158,40 +163,41 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
       
       const resultObj = await res.json().catch(() => ({}));
 
+      // Update ID if server returned one
+      const serverId = resultObj.data?.userMessage?.id;
+      if (serverId && serverId !== messageIdInState) {
+        setMessages((p) => p.map(m => m.id === messageIdInState ? { ...m, id: serverId } : m));
+        messageIdInState = serverId;
+      }
+
       if (res.status === 504 || (res.status === 202 && resultObj.error)) {
         // Timeout: the message WAS saved, but the agent is still thinking.
-        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data?.userMessage?.id || m.id, status: "sent" } : m));
+        setMessages((p) => p.map(m => m.id === messageIdInState ? { ...m, status: "sent" } : m));
         const errStr = resultObj.error?.message || "Agent is taking too long to respond. Your message was sent.";
         throw { isSendError: true, keepMessage: true, message: errStr };
       }
 
       if (!res.ok) {
-        let errStr = resultObj.error?.message || resultObj.message || resultObj.error || "Failed to send message.";
-        
-        if (resultObj.data?.userMessage) {
-          // The message was saved in the db despite the error
-          setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage.id, status: "sent" } : m));
+        const errStr = resultObj.error?.message || resultObj.message || resultObj.error || "Failed to send message.";
+        if (serverId) {
+          setMessages((p) => p.map(m => m.id === messageIdInState ? { ...m, status: "sent" } : m));
           throw { isSendError: true, keepMessage: true, message: errStr };
         }
-        
         throw { isSendError: true, keepMessage: false, message: errStr };
       }
 
-      // Handle 201 OK but with error (e.g. messaging_unavailable)
+      // Handle 201 OK but with internal error (e.g. messaging_unavailable)
       if (resultObj.data?.error) {
         const errMap: Record<string, string> = {
           "messaging_unavailable": "RabbitMQ is unavailable or offline. Agent cannot receive messages."
         };
         const errStr = errMap[resultObj.data.error] || resultObj.data.error;
-        
-        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage?.id || userMsg.id, status: "sent" } : m));
+        setMessages((p) => p.map(m => m.id === messageIdInState ? { ...m, status: "sent" } : m));
         throw { isSendError: true, keepMessage: true, message: errStr };
       }
 
-      // Successful reply
-      if (resultObj.data?.userMessage) {
-        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage.id, status: "sent" } : m));
-      }
+      // Success: Finalize status
+      setMessages((p) => p.map(m => m.id === messageIdInState ? { ...m, status: "sent" } : m));
 
       if (resultObj.data?.agentMessage) {
         const amMsg: ChatMessage = {
@@ -205,8 +211,9 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
     } catch (err: any) {
       const msg = err.isSendError ? err.message : (err.message || "Failed to send message.");
       toast.error(msg);
+      // Mark as error if we didn't explicitly say to keep it as 'sent'
       if (!(err.isSendError && err.keepMessage)) {
-        setMessages((p) => p.filter((m) => m.id !== userMsg.id));
+        setMessages((p) => p.map(m => m.id === messageIdInState ? { ...m, status: "error" } : m));
       }
     } finally { setSending(false); }
   };
@@ -252,13 +259,15 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
           <div className={cn("max-w-[78%] flex flex-col gap-0.5", isUser && "items-end")}>
             <span className="px-1 text-[10px] text-muted-foreground">{isUser ? tc.you : agentName}</span>
             <div className={cn("rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-              isUser ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm")}>
+              isUser ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm",
+              m.status === "error" && "border-2 border-destructive bg-destructive/10 text-destructive-foreground")}>
               {m.content}
             </div>
             <div className="flex items-center gap-1 px-1">
               {isUser && m.status === "sending" && <Loader2 className="size-2 animate-spin text-muted-foreground" />}
-              <span className="text-[9px] text-muted-foreground/60">
-                {m.status === "sending" ? "Sending..." : new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {isUser && m.status === "error" && <AlertCircle className="size-2 text-destructive" />}
+              <span className={cn("text-[9px]", m.status === "error" ? "text-destructive font-medium" : "text-muted-foreground/60")}>
+                {m.status === "sending" ? "Sending..." : m.status === "error" ? "Error" : new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
