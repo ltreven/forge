@@ -9,6 +9,7 @@ import { conversationsRouter } from "./routes/conversations";
 import { internalRouter } from "./routes/internal";
 import { errorHandler } from "./middleware/errorHandler";
 import { projectManagementRouter } from "./routes/project-management";
+import { mcpProjectManagementRouter } from "./routes/mcp-project-management";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -37,6 +38,7 @@ app.use("/teams", teamsRouter);
 app.use("/agents", agentsRouter);
 app.use("/conversations", conversationsRouter);
 app.use("/project-management", projectManagementRouter);
+app.use("/mcp/project-management", mcpProjectManagementRouter);
 
 // Nested: /teams/:id/integrations
 app.use("/teams/:id/integrations", integrationsRouter);
