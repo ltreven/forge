@@ -13,19 +13,6 @@ import { authMiddleware } from "../middleware/authMiddleware";
 export const projectsRouter = Router();
 
 /**
- * Validates that the authenticated user has access to a team.
- */
-async function assertUserHasTeamAccess(userId: string, teamId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: teams.id })
-    .from(teams)
-    .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-    .where(and(eq(workspaces.userId, userId), eq(teams.id, teamId)))
-    .limit(1);
-  return !!row;
-}
-
-/**
  * Validates that the authenticated user has access to a project via its team/workspace.
  */
 async function assertUserHasProjectAccess(userId: string, projectId: string): Promise<boolean> {
@@ -46,22 +33,22 @@ async function assertUserHasProjectAccess(userId: string, projectId: string): Pr
  */
 projectsRouter.get("/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const projectId = req.params.id;
+    const projectId = String(req.params.id);
     const userId = req.user!.userId;
 
-    const [project] = await db
+    const [row] = await db
       .select()
       .from(projects)
       .innerJoin(teams, eq(projects.teamId, teams.id))
       .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
       .where(and(eq(workspaces.userId, userId), eq(projects.id, projectId)));
 
-    if (!project) {
+    if (!row) {
       res.status(404).json(failure("Project not found or access denied"));
       return;
     }
 
-    res.json(success(project.projects));
+    res.json(success(row.projects));
   } catch (err) {
     next(err);
   }
@@ -72,7 +59,7 @@ projectsRouter.get("/:id", authMiddleware, async (req: Request, res: Response, n
  */
 projectsRouter.put("/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const projectId = req.params.id;
+    const projectId = String(req.params.id);
     const userId = req.user!.userId;
 
     const hasAccess = await assertUserHasProjectAccess(userId, projectId);
@@ -102,7 +89,7 @@ projectsRouter.put("/:id", authMiddleware, async (req: Request, res: Response, n
  */
 projectsRouter.get("/:id/issues", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const projectId = req.params.id;
+    const projectId = String(req.params.id);
     const userId = req.user!.userId;
 
     const hasAccess = await assertUserHasProjectAccess(userId, projectId);
@@ -128,7 +115,7 @@ projectsRouter.get("/:id/issues", authMiddleware, async (req: Request, res: Resp
  */
 projectsRouter.post("/:id/issues", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const projectId = req.params.id;
+    const projectId = String(req.params.id);
     const userId = req.user!.userId;
 
     const hasAccess = await assertUserHasProjectAccess(userId, projectId);
@@ -142,15 +129,15 @@ projectsRouter.post("/:id/issues", authMiddleware, async (req: Request, res: Res
     const [issue] = await db
       .insert(projectIssues)
       .values({
-        projectId,
-        parentIssueId: input.parentIssueId,
-        title: input.title,
-        shortSummary: input.shortSummary,
-        descriptionMarkdown: input.descriptionMarkdown,
-        descriptionRichText: input.descriptionRichText,
-        status: input.status,
-        priority: input.priority,
-        assignedToId: input.assignedToId,
+        projectId: String(input.projectId),
+        parentIssueId: input.parentIssueId ? String(input.parentIssueId) : null,
+        title: String(input.title),
+        shortSummary: input.shortSummary ? String(input.shortSummary) : null,
+        descriptionMarkdown: input.descriptionMarkdown ? String(input.descriptionMarkdown) : null,
+        descriptionRichText: input.descriptionRichText ?? null,
+        status: Number(input.status ?? 0),
+        priority: Number(input.priority ?? 0),
+        assignedToId: input.assignedToId ? String(input.assignedToId) : null,
       })
       .returning();
 
@@ -167,7 +154,7 @@ projectsRouter.post("/:id/issues", authMiddleware, async (req: Request, res: Res
  */
 projectsRouter.put("/issues/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const issueId = req.params.id;
+    const issueId = String(req.params.id);
     const userId = req.user!.userId;
 
     // Join to verify ownership
