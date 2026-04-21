@@ -34,58 +34,15 @@ import {
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { Team, Project, ProjectIssue, TeamTask, Agent, AgentType, HealthStatus } from "@/lib/types";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type AgentType =
-  | "team_lead"
-  | "software_engineer" | "software_architect"
-  | "product_manager";
-
-type HealthStatus = "online" | "starting" | "offline";
-
-interface Agent {
-  id: string; name: string; type: AgentType;
-  icon?: string; metadata?: { avatarColor?: string };
-  k8sStatus?: "pending" | "provisioning" | "running" | "failed" | "terminated" | null;
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function computeHealth(a: Agent): HealthStatus {
   const k8s = a.k8sStatus;
   if (k8s === "running") return "online";
   if (k8s === "failed" || k8s === "terminated") return "offline";
   return "starting";
-}
-
-
-interface Team {
-  id: string; name: string; icon?: string; mission?: string;
-  waysOfWorking?: string; template?: string;
-  createdAt: string;
-}
-
-export interface Project {
-  id: string; title: string; shortSummary?: string | null;
-  status: number; priority: number; health: string;
-  leadId?: string | null;
-  updatedAt: string;
-}
-
-export interface ProjectIssue {
-  id: string; projectId: string; parentIssueId?: string | null;
-  title: string; shortSummary?: string | null;
-  status: number; priority: number;
-  assignedToId?: string | null;
-  updatedAt: string;
-}
-
-export interface TeamTask {
-  id: string; title: string;
-  parentTaskId?: string | null;
-  shortSummary?: string | null;
-  status: number; priority: number;
-  assignedToId?: string | null;
-  updatedAt: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────

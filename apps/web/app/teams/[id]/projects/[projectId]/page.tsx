@@ -28,13 +28,7 @@ import {
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { Project, ProjectIssue } from "../../../page"; // Import from team page
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Agent {
-  id: string; name: string; icon?: string; type: string;
-}
+import { Project, ProjectIssue, Agent } from "@/lib/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
