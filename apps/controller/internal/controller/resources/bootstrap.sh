@@ -96,6 +96,15 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
     "auth": { "mode": "token" },
     "controlUi": { "enabled": false }
   },
+  "channels": {
+    "qa-channel": {
+      "baseUrl": "http://127.0.0.1:43123",
+      "botUserId": "forge",
+      "botDisplayName": "Forge QA",
+      "allowFrom": ["*"],
+      "pollTimeoutMs": 5000
+    }
+  },
   "agents": {
     "defaults": {
       "workspace": "~/.openclaw/workspace",
