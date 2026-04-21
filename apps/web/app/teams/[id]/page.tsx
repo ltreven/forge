@@ -23,7 +23,12 @@ import {
   MoreHorizontal,
   ChevronDown,
   ChevronUp,
-  GripVertical
+  GripVertical,
+  SignalLow,
+  SignalMedium,
+  SignalHigh,
+  Flame,
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
@@ -61,12 +66,24 @@ interface Team {
 export interface Project {
   id: string; title: string; shortSummary?: string | null;
   status: number; priority: number; health: string;
+  leadId?: string | null;
+  updatedAt: string;
+}
+
+export interface ProjectIssue {
+  id: string; projectId: string; parentIssueId?: string | null;
+  title: string; shortSummary?: string | null;
+  status: number; priority: number;
+  assignedToId?: string | null;
   updatedAt: string;
 }
 
 export interface TeamTask {
-  id: string; title: string; shortSummary?: string | null;
+  id: string; title: string;
+  parentTaskId?: string | null;
+  shortSummary?: string | null;
   status: number; priority: number;
+  assignedToId?: string | null;
   updatedAt: string;
 }
 
@@ -109,6 +126,19 @@ const PRIORITY_LABELS: Record<number, string> = {
   3: "High",
   4: "Urgent",
 };
+
+// ── Priority Icon ─────────────────────────────────────────────────────────────
+
+function PriorityIcon({ priority, className }: { priority: number; className?: string }) {
+  switch (priority) {
+    case 0: return <Circle className={cn("size-3 text-muted-foreground/20", className)} />;
+    case 1: return <SignalLow className={cn("size-3 text-blue-500/70", className)} />;
+    case 2: return <SignalMedium className={cn("size-3 text-amber-500/70", className)} />;
+    case 3: return <SignalHigh className={cn("size-3 text-orange-500", className)} />;
+    case 4: return <Flame className={cn("size-3 text-red-500 animate-pulse", className)} />;
+    default: return null;
+  }
+}
 
 // ── Agent Card ────────────────────────────────────────────────────────────────
 
@@ -213,55 +243,121 @@ function getShorthandId(prefix: string, id: string) {
   return `${prefix}-${id.substring(0, 4).toUpperCase()}`;
 }
 
-function ProjectListItem({ project }: { project: Project }) {
+function ItemRow({ 
+  id, prefix, title, status, priority, updatedAt, assignedToId, 
+  level = 0, children, agents 
+}: { 
+  id: string; prefix: string; title: string; status: number; 
+  priority: number; updatedAt: string; assignedToId?: string | null;
+  level?: number; children?: React.ReactNode; agents: Agent[]
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const assignee = agents.find(a => a.id === assignedToId);
+  const hasChildren = React.Children.count(children) > 0;
+
   return (
-    <div className="group flex items-center gap-3 py-2 px-3 hover:bg-muted/50 rounded-lg transition-colors cursor-pointer">
-      <GripVertical className="size-3.5 text-muted-foreground/20 group-hover:text-muted-foreground/40 transition-colors" />
-      <span className="text-[10px] font-mono font-medium text-muted-foreground w-16 shrink-0">
-        {getShorthandId("PRJ", project.id)}
-      </span>
-      <StatusIcon status={project.status} />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">{project.title}</p>
+    <div className="flex flex-col">
+      <div 
+        className={cn(
+          "group flex items-center gap-2 py-1.5 px-3 hover:bg-muted/40 rounded-lg transition-colors cursor-pointer",
+          level > 0 && "ml-4 border-l border-border/50 pl-4"
+        )}
+        onClick={() => hasChildren && setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-1.5 shrink-0">
+          {hasChildren ? (
+            <button className="p-0.5 hover:bg-muted rounded transition-colors">
+              {isExpanded ? <ChevronDown className="size-3 text-muted-foreground" /> : <ChevronRight className="size-3 text-muted-foreground" />}
+            </button>
+          ) : (
+            <div className="size-4" />
+          )}
+          <span className="text-[9px] font-mono font-medium text-muted-foreground/50 w-14 shrink-0">
+            {getShorthandId(prefix, id)}
+          </span>
+        </div>
+
+        <StatusIcon status={status} />
+        
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <p className={cn("text-sm font-medium truncate", status === 4 ? "text-muted-foreground line-through" : "text-foreground")}>
+            {title}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <PriorityIcon priority={priority} />
+          
+          {assignee && (
+            <div className="flex size-5 items-center justify-center rounded-full bg-muted text-[10px]" title={assignee.name}>
+              {assignee.icon || ROLE_EMOJIS[assignee.type] || "🤖"}
+            </div>
+          )}
+
+          <span className="text-[9px] text-muted-foreground/40 w-10 text-right">
+            {formatDate(updatedAt)}
+          </span>
+        </div>
       </div>
-      <div className="flex items-center gap-3 shrink-0">
-        <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-          Forge
-        </span>
-        <span className="text-[10px] text-muted-foreground/60 w-12 text-right">
-          {formatDate(project.updatedAt)}
-        </span>
-        <MoreHorizontal className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-      </div>
+
+      {isExpanded && hasChildren && (
+        <div className="flex flex-col">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
 
-function TaskListItem({ task }: { task: TeamTask }) {
-  const isHighPriority = task.priority >= 3;
+function ProjectListItem({ project, issues, agents }: { project: Project, issues: ProjectIssue[], agents: Agent[] }) {
+  const projectIssues = issues.filter(i => i.projectId === project.id && !i.parentIssueId);
+  const lead = agents.find(a => a.id === project.leadId);
+
+  return (
+    <ItemRow 
+      id={project.id} prefix="PRJ" title={project.title} 
+      status={project.status} priority={project.priority} 
+      updatedAt={project.updatedAt} assignedToId={project.leadId}
+      agents={agents}
+    >
+      {projectIssues.map(issue => (
+        <IssueItem key={issue.id} issue={issue} allIssues={issues} agents={agents} level={1} />
+      ))}
+    </ItemRow>
+  );
+}
+
+function IssueItem({ issue, allIssues, agents, level }: { issue: ProjectIssue, allIssues: ProjectIssue[], agents: Agent[], level: number }) {
+  const subIssues = allIssues.filter(i => i.parentIssueId === issue.id);
   
   return (
-    <div className="group flex items-center gap-3 py-2 px-3 hover:bg-muted/50 rounded-lg transition-colors cursor-pointer">
-      <GripVertical className="size-3.5 text-muted-foreground/20 group-hover:text-muted-foreground/40 transition-colors" />
-      <span className="text-[10px] font-mono font-medium text-muted-foreground w-16 shrink-0">
-        {getShorthandId("TSK", task.id)}
-      </span>
-      <StatusIcon status={task.status} />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
-      </div>
-      <div className="flex items-center gap-3 shrink-0">
-        {isHighPriority && (
-          <span className="hidden sm:inline-block rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:text-red-400">
-            {PRIORITY_LABELS[task.priority]}
-          </span>
-        )}
-        <span className="text-[10px] text-muted-foreground/60 w-12 text-right">
-          {formatDate(task.updatedAt)}
-        </span>
-        <MoreHorizontal className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-      </div>
-    </div>
+    <ItemRow 
+      id={issue.id} prefix="ISS" title={issue.title} 
+      status={issue.status} priority={issue.priority} 
+      updatedAt={issue.updatedAt} assignedToId={issue.assignedToId}
+      level={level} agents={agents}
+    >
+      {level < 2 && subIssues.map(sub => (
+        <IssueItem key={sub.id} issue={sub} allIssues={allIssues} agents={agents} level={level + 1} />
+      ))}
+    </ItemRow>
+  );
+}
+
+function TaskListItem({ task, allTasks, agents, level = 0 }: { task: TeamTask, allTasks: TeamTask[], agents: Agent[], level?: number }) {
+  const subTasks = allTasks.filter(t => t.parentTaskId === task.id);
+
+  return (
+    <ItemRow 
+      id={task.id} prefix="TSK" title={task.title} 
+      status={task.status} priority={task.priority} 
+      updatedAt={task.updatedAt} assignedToId={task.assignedToId}
+      level={level} agents={agents}
+    >
+      {level < 2 && subTasks.map(sub => (
+        <TaskListItem key={sub.id} task={sub} allTasks={allTasks} agents={agents} level={level + 1} />
+      ))}
+    </ItemRow>
   );
 }
 
@@ -288,10 +384,14 @@ export default function TeamDetailPage() {
   const [team, setTeam]           = useState<Team | null>(null);
   const [agents, setAgents]       = useState<Agent[]>([]);
   const [projects, setProjects]   = useState<Project[]>([]);
+  const [issues, setIssues]       = useState<ProjectIssue[]>([]);
   const [tasks, setTasks]         = useState<TeamTask[]>([]);
   
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [showAllTasks, setShowAllTasks] = useState(false);
+  const [isProjectsCollapsed, setIsProjectsCollapsed] = useState(false);
+  const [isTasksCollapsed, setIsTasksCollapsed] = useState(false);
+  const [viewFilter, setViewFilter] = useState<"active" | "all">("active");
 
   // ── Load data ──────────────────────────────────────────────────────────────
 
@@ -308,9 +408,10 @@ export default function TeamDetailPage() {
       fetch(`${API_BASE}/teams/${teamId}`, { headers }),
       fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers }),
       fetch(`${API_BASE}/teams/${teamId}/projects`, { headers }),
+      fetch(`${API_BASE}/teams/${teamId}/issues`, { headers }),
       fetch(`${API_BASE}/teams/${teamId}/tasks`, { headers }),
     ])
-      .then(async ([teamRes, agentsRes, projectsRes, tasksRes]) => {
+      .then(async ([teamRes, agentsRes, projectsRes, issuesRes, tasksRes]) => {
         if (teamRes.ok) {
           const d = await teamRes.json();
           const t: Team = d.data;
@@ -333,6 +434,10 @@ export default function TeamDetailPage() {
         if (projectsRes.ok) {
           const d = await projectsRes.json();
           setProjects(d.data ?? []);
+        }
+        if (issuesRes.ok) {
+          const d = await issuesRes.json();
+          setIssues(d.data ?? []);
         }
         if (tasksRes.ok) {
           const d = await tasksRes.json();
@@ -363,8 +468,15 @@ export default function TeamDetailPage() {
   const teamLead  = agents.find((a) => a.type === "team_lead");
   const otherAgents = agents.filter((a) => a.type !== "team_lead");
   
-  const activeProjects = projects.filter(p => p.status >= 1 && p.status <= 3);
-  const activeTasks = tasks.filter(t => t.status >= 1 && t.status <= 3).sort((a,b) => b.priority - a.priority);
+  const filteredProjects = projects.filter(p => {
+    if (viewFilter === "active") return p.status >= 1 && p.status <= 4;
+    return true; // "all"
+  });
+
+  const filteredTasks = tasks.filter(t => {
+    if (viewFilter === "active") return t.status >= 1 && t.status <= 4;
+    return true; // "all"
+  }).sort((a,b) => b.priority - a.priority);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -469,34 +581,64 @@ export default function TeamDetailPage() {
       {/* ── Bottom rows: Projects & Activity ──────────────────────────── */}
       <div className="flex flex-col gap-6 mt-6">
         
-        {/* Active Work (Combined Projects & Tasks) */}
+        {/* TEAM WORK (Combined Projects & Tasks) */}
         <section id="team-projects" className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-          <div className="p-6 pb-2">
-            <SectionTitle icon={FolderKanban} label="Active Work" />
+          <div className="p-6 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <SectionTitle icon={FolderKanban} label="Team Work" />
+            
+            <div className="flex items-center bg-muted/50 p-1 rounded-xl border border-border/50 self-start sm:self-auto">
+              <button 
+                onClick={() => setViewFilter("active")}
+                className={cn(
+                  "px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
+                  viewFilter === "active" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Active
+              </button>
+              <button 
+                onClick={() => setViewFilter("all")}
+                className={cn(
+                  "px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
+                  viewFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                All Statuses
+              </button>
+            </div>
           </div>
           
           <div className="px-3 pb-6">
             {/* Projects Section */}
-            {activeProjects.length > 0 && (
+            {(filteredProjects.length > 0 || viewFilter === "all") && (
               <div className="mb-4">
-                <div className="flex items-center justify-between py-2 px-3">
+                <div 
+                  className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-muted/30 rounded-lg group"
+                  onClick={() => setIsProjectsCollapsed(!isProjectsCollapsed)}
+                >
                    <div className="flex items-center gap-2">
-                     <ChevronDown className="size-3 text-muted-foreground/50" />
+                     {isProjectsCollapsed ? <ChevronRight className="size-3 text-muted-foreground/50" /> : <ChevronDown className="size-3 text-muted-foreground/50" />}
                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Projects</h3>
-                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">{activeProjects.length}</span>
+                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">{filteredProjects.length}</span>
                    </div>
-                   <button className="text-muted-foreground hover:text-foreground transition-colors">
+                   <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={(e) => e.stopPropagation()}>
                      <Plus className="size-3.5" />
                    </button>
                 </div>
                 
-                <div className="space-y-0.5">
-                  {(showAllProjects ? activeProjects : activeProjects.slice(0, 3)).map(p => (
-                    <ProjectListItem key={p.id} project={p} />
-                  ))}
-                </div>
+                {!isProjectsCollapsed && (
+                  <div className="space-y-0.5">
+                    {filteredProjects.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-muted-foreground/40 italic">No projects in this view</p>
+                    ) : (
+                      (showAllProjects ? filteredProjects : filteredProjects.slice(0, 5)).map(p => (
+                        <ProjectListItem key={p.id} project={p} issues={issues} agents={agents} />
+                      ))
+                    )}
+                  </div>
+                )}
                 
-                {activeProjects.length > 3 && (
+                {!isProjectsCollapsed && filteredProjects.length > 5 && (
                   <button 
                     onClick={() => setShowAllProjects(!showAllProjects)}
                     className="mt-1 w-full py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/30 rounded-lg transition-colors flex items-center justify-center gap-1.5"
@@ -504,7 +646,7 @@ export default function TeamDetailPage() {
                     {showAllProjects ? (
                       <>Show less <ChevronUp className="size-3" /></>
                     ) : (
-                      <>See {activeProjects.length - 3} more projects <ChevronDown className="size-3" /></>
+                      <>See {filteredProjects.length - 5} more projects <ChevronDown className="size-3" /></>
                     )}
                   </button>
                 )}
@@ -512,26 +654,35 @@ export default function TeamDetailPage() {
             )}
             
             {/* Tasks Section */}
-            {activeTasks.length > 0 && (
+            {(filteredTasks.length > 0 || viewFilter === "all") && (
               <div>
-                <div className="flex items-center justify-between py-2 px-3">
+                <div 
+                  className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-muted/30 rounded-lg group"
+                  onClick={() => setIsTasksCollapsed(!isTasksCollapsed)}
+                >
                    <div className="flex items-center gap-2">
-                     <ChevronDown className="size-3 text-muted-foreground/50" />
+                     {isTasksCollapsed ? <ChevronRight className="size-3 text-muted-foreground/50" /> : <ChevronDown className="size-3 text-muted-foreground/50" />}
                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Tasks</h3>
-                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">{activeTasks.length}</span>
+                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">{filteredTasks.length}</span>
                    </div>
-                   <button className="text-muted-foreground hover:text-foreground transition-colors">
+                   <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={(e) => e.stopPropagation()}>
                      <Plus className="size-3.5" />
                    </button>
                 </div>
                 
-                <div className="space-y-0.5">
-                  {(showAllTasks ? activeTasks : activeTasks.slice(0, 3)).map(t => (
-                    <TaskListItem key={t.id} task={t} />
-                  ))}
-                </div>
+                {!isTasksCollapsed && (
+                  <div className="space-y-0.5">
+                    {filteredTasks.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-muted-foreground/40 italic">No tasks in this view</p>
+                    ) : (
+                      (showAllTasks ? filteredTasks : filteredTasks.slice(0, 5)).map(t => (
+                        <TaskListItem key={t.id} task={t} allTasks={tasks} agents={agents} />
+                      ))
+                    )}
+                  </div>
+                )}
                 
-                {activeTasks.length > 3 && (
+                {!isTasksCollapsed && filteredTasks.length > 5 && (
                   <button 
                     onClick={() => setShowAllTasks(!showAllTasks)}
                     className="mt-1 w-full py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/30 rounded-lg transition-colors flex items-center justify-center gap-1.5"
@@ -539,20 +690,20 @@ export default function TeamDetailPage() {
                     {showAllTasks ? (
                       <>Show less <ChevronUp className="size-3" /></>
                     ) : (
-                      <>See {activeTasks.length - 3} more tasks <ChevronDown className="size-3" /></>
+                      <>See {filteredTasks.length - 5} more tasks <ChevronDown className="size-3" /></>
                     )}
                   </button>
                 )}
               </div>
             )}
 
-            {/* Empty State */}
-            {activeProjects.length === 0 && activeTasks.length === 0 && (
+            {/* Global Empty State */}
+            {filteredProjects.length === 0 && filteredTasks.length === 0 && (
               <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
                 <FolderKanban className="size-8 text-muted-foreground/30" />
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">No active work</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">Projects and tasks will appear here once your team starts working.</p>
+                  <p className="text-sm font-medium text-muted-foreground">No work found</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Try changing the filter to see more items.</p>
                 </div>
               </div>
             )}

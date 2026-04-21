@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { randomBytes } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { teams, agents, workspaces, projects, teamTasks } from "../db/schema";
+import { teams, agents, workspaces, projects, teamTasks, projectIssues } from "../db/schema";
 import { createTeamSchema, updateTeamSchema } from "../schemas/team.schema";
 import { success, failure } from "../lib/response";
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -234,6 +234,25 @@ teamsRouter.get("/:id/tasks", authMiddleware, async (req: Request, res: Response
       .orderBy(teamTasks.createdAt);
     
     res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /teams/:id/issues ────────────────────────────────────────────────────
+
+teamsRouter.get("/:id/issues", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await db
+      .select()
+      .from(projectIssues)
+      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+      .where(eq(projects.teamId, String(req.params.id)))
+      .orderBy(projectIssues.createdAt);
+    
+    // Flatten result to return only projectIssues
+    const flattened = rows.map(r => r.project_issues);
+    res.json(success(flattened));
   } catch (err) {
     next(err);
   }

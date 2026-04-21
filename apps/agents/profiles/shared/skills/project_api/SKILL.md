@@ -11,9 +11,10 @@ This skill provides you with the knowledge and standards required to interact wi
 ## Core Mandates
 
 1.  **Prefer Read Before Write**: Always list or get the current state of a project, issue, or task before attempting to update or delete it.
-2.  **Strict Schema Adherence**: Consult `references/openapi.yaml` for the exact field names, types, and valid enum values. **NEVER** invent fields.
-3.  **Team Ownership**: All operations are automatically scoped to your team. You cannot access data from other teams.
-4.  **Health Updates**: Use the project health status to provide transparency on project progress (`on_track`, `at_risk`, `off_track`).
+2.  **Strict Schema Adherence (NO NESTING)**: **NEVER** invent fields like `name` or `description`. The mandatory field for projects and issues is `title`. The description is `descriptionMarkdown`. 
+3.  **No Nested Creation**: You CANNOT create tasks/issues inside the project payload. You must create the project first, extract its `id`, and then make a separate `POST` request to create issues sequentially.
+4.  **Team Ownership**: All operations are automatically scoped to your team. You cannot access data from other teams.
+5.  **Health Updates**: Use the project health status to provide transparency on project progress (`on_track`, `at_risk`, `off_track`).
 
 ## When to use this Skill
 
