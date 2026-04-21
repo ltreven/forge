@@ -22,6 +22,7 @@ import {
   Clock,
   MoreHorizontal,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   GripVertical,
   SignalLow,
