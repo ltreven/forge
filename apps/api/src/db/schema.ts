@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, pgEnum, jsonb, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, pgEnum, jsonb, integer, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -35,6 +35,12 @@ export const counterpartTypeEnum = pgEnum("counterpart_type", [
 ]);
 
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
+export const projectHealthEnum = pgEnum("project_health", [
+  "unknown",
+  "on_track",
+  "at_risk",
+  "off_track",
+]);
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
@@ -175,3 +181,83 @@ export const messages = pgTable("messages", {
 
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+
+// ── Project Management ───────────────────────────────────────────────────────
+
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  shortSummary: text("short_summary"),
+  descriptionMarkdown: text("description_markdown"),
+  descriptionRichText: jsonb("description_rich_text"),
+  startDateKind: text("start_date_kind"),
+  startDateValue: text("start_date_value"),
+  endDateKind: text("end_date_kind"),
+  endDateValue: text("end_date_value"),
+  status: integer("status").notNull().default(0),
+  priority: integer("priority").notNull().default(0),
+  leadId: uuid("lead_id"),
+  health: projectHealthEnum("health").notNull().default("unknown"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Project = typeof projects.$inferSelect;
+export type NewProject = typeof projects.$inferInsert;
+export type ProjectHealth = Project["health"];
+
+export const projectUpdates = pgTable("project_updates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  happenedAt: timestamp("happened_at", { withTimezone: true }).notNull().defaultNow(),
+  oldHealth: projectHealthEnum("old_health").notNull(),
+  newHealth: projectHealthEnum("new_health").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ProjectUpdate = typeof projectUpdates.$inferSelect;
+export type NewProjectUpdate = typeof projectUpdates.$inferInsert;
+
+export const projectIssues = pgTable("project_issues", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  parentIssueId: uuid("parent_issue_id").references((): AnyPgColumn => projectIssues.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  shortSummary: text("short_summary"),
+  descriptionMarkdown: text("description_markdown"),
+  descriptionRichText: jsonb("description_rich_text"),
+  status: integer("status").notNull().default(0),
+  priority: integer("priority").notNull().default(0),
+  assignedToId: uuid("assigned_to_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ProjectIssue = typeof projectIssues.$inferSelect;
+export type NewProjectIssue = typeof projectIssues.$inferInsert;
+
+export const projectActivities = pgTable("project_activities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  entityType: text("entity_type").notNull(),
+  entityId: uuid("entity_id").notNull(),
+  action: text("action").notNull(),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ProjectActivity = typeof projectActivities.$inferSelect;
+export type NewProjectActivity = typeof projectActivities.$inferInsert;

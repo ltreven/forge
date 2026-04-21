@@ -8,6 +8,7 @@ import { integrationsRouter } from "./routes/integrations";
 import { conversationsRouter } from "./routes/conversations";
 import { internalRouter } from "./routes/internal";
 import { errorHandler } from "./middleware/errorHandler";
+import { projectManagementRouter } from "./routes/project-management";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -35,6 +36,7 @@ app.use("/auth", authRouter);
 app.use("/teams", teamsRouter);
 app.use("/agents", agentsRouter);
 app.use("/conversations", conversationsRouter);
+app.use("/project-management", projectManagementRouter);
 
 // Nested: /teams/:id/integrations
 app.use("/teams/:id/integrations", integrationsRouter);
