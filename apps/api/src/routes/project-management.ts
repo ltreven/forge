@@ -18,8 +18,10 @@ import {
   updateProjectUpdateSchema,
 } from "../schemas/project-management.schema";
 import { failure, success } from "../lib/response";
+import { authMiddleware } from "../middleware/authMiddleware";
 
 export const projectManagementRouter = Router();
+projectManagementRouter.use(authMiddleware);
 
 type ActivityEntityType = "project" | "issue" | "update";
 type ActivityAction = "created" | "updated" | "deleted";
@@ -125,21 +127,15 @@ projectManagementRouter.put("/projects/:id", async (req: Request, res: Response,
       return;
     }
 
+    const { startAt, endAt, ...rest } = input;
     const [project] = await db
       .update(projects)
       .set({
-        title: input.title ?? existing.title,
-        shortSummary: input.shortSummary ?? existing.shortSummary,
-        descriptionMarkdown: input.descriptionMarkdown ?? existing.descriptionMarkdown,
-        descriptionRichText: input.descriptionRichText ?? existing.descriptionRichText,
-        status: input.status ?? existing.status,
-        priority: input.priority ?? existing.priority,
-        leadId: input.leadId ?? existing.leadId,
-        health: input.health ?? existing.health,
-        startDateKind: input.startAt?.kind ?? existing.startDateKind,
-        startDateValue: input.startAt?.value ?? existing.startDateValue,
-        endDateKind: input.endAt?.kind ?? existing.endDateKind,
-        endDateValue: input.endAt?.value ?? existing.endDateValue,
+        ...rest,
+        startDateKind: startAt?.kind,
+        startDateValue: startAt?.value,
+        endDateKind: endAt?.kind,
+        endDateValue: endAt?.value,
         updatedAt: new Date(),
       })
       .where(eq(projects.id, existing.id))
@@ -193,21 +189,25 @@ projectManagementRouter.post("/projects/:id/updates", async (req: Request, res: 
       return;
     }
 
-    const [update] = await db
-      .insert(projectUpdates)
-      .values({
-        projectId: body.projectId,
-        happenedAt: body.happenedAt ?? new Date(),
-        oldHealth: project.health,
-        newHealth: body.newHealth,
-        reason: body.reason,
-      })
-      .returning();
+    const [update] = await db.transaction(async (tx) => {
+      const [newUpdate] = await tx
+        .insert(projectUpdates)
+        .values({
+          projectId: body.projectId,
+          happenedAt: body.happenedAt ?? new Date(),
+          oldHealth: project.health,
+          newHealth: body.newHealth,
+          reason: body.reason,
+        })
+        .returning();
 
-    await db
-      .update(projects)
-      .set({ health: body.newHealth as ProjectHealth, updatedAt: new Date() })
-      .where(eq(projects.id, project.id));
+      await tx
+        .update(projects)
+        .set({ health: body.newHealth as ProjectHealth, updatedAt: new Date() })
+        .where(eq(projects.id, project.id));
+
+      return [newUpdate];
+    });
 
     await trackActivity({
       teamId: project.teamId,
@@ -248,19 +248,26 @@ projectManagementRouter.put("/updates/:id", async (req: Request, res: Response, 
       return;
     }
 
-    const [updated] = await db
-      .update(projectUpdates)
-      .set({
-        happenedAt: input.happenedAt ?? existing.happenedAt,
-        newHealth: input.newHealth ?? existing.newHealth,
-        reason: input.reason ?? existing.reason,
-      })
-      .where(eq(projectUpdates.id, existing.id))
-      .returning();
+    const [updated] = await db.transaction(async (tx) => {
+      const [res] = await tx
+        .update(projectUpdates)
+        .set({
+          happenedAt: input.happenedAt ?? existing.happenedAt,
+          newHealth: input.newHealth ?? existing.newHealth,
+          reason: input.reason ?? existing.reason,
+        })
+        .where(eq(projectUpdates.id, existing.id))
+        .returning();
 
-    if (input.newHealth) {
-      await db.update(projects).set({ health: input.newHealth as ProjectHealth, updatedAt: new Date() }).where(eq(projects.id, existing.projectId));
-    }
+      if (input.newHealth) {
+        await tx
+          .update(projects)
+          .set({ health: input.newHealth as ProjectHealth, updatedAt: new Date() })
+          .where(eq(projects.id, existing.projectId));
+      }
+
+      return [res];
+    });
 
     const [project] = await db.select().from(projects).where(eq(projects.id, existing.projectId));
     if (project) {
