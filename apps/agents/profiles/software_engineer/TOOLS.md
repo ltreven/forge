@@ -18,16 +18,94 @@ Your primary delivery mechanism. Use for:
 
 ---
 
-## Project Management (Linear via MCP)
+## Task Tracking (Linear via MCP)
 
-**TOOL TRIGGER**: Any mention of "ticket", "issue", "work item", or project management activity
-must use the Linear MCP integration — never direct API calls.
+**TOOL TRIGGER**: For Linear tickets — sprint issues, epics, and team backlog — use the Linear MCP integration.
 
 Common operations:
 - Retrieve your assigned ticket and full details
 - Update ticket status (In Progress, Blocked, In Review, Done)
 - Add comments with technical findings, blockers, or questions
 - Link PRs to tickets
+
+---
+
+## Project & Task Management (Forge API)
+
+Use this for your **team's own projects, project issues, and kanban tasks** managed within Forge.
+Unlike Linear (external), this is your team's internal workspace. All operations are automatically scoped to your team — you cannot read or modify another team's data.
+
+**Authentication:** Include your gateway token on every request:
+```
+Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN
+```
+
+**Base URL:** (inside the cluster)
+```
+http://forge-api.forge-system.svc.cluster.local:4000
+```
+
+### Projects
+
+| Action | Method | Path |
+|--------|--------|------|
+| Create project | `POST` | `/project-management/projects` |
+| List my team's projects | `GET` | `/project-management/projects` |
+| Get a project | `GET` | `/project-management/projects/:id` |
+| Update a project | `PUT` | `/project-management/projects/:id` |
+| Delete a project | `DELETE` | `/project-management/projects/:id` |
+
+`status`: 0=backlog, 1=planned, 2=in_progress, 3=paused, 4=completed  
+`priority`: 0=none, 1=low, 2=medium, 3=high, 4=urgent  
+`health`: `unknown` | `on_track` | `at_risk` | `off_track`
+
+### Project Issues
+
+Issues are concrete work items nested within a project.
+
+| Action | Method | Path |
+|--------|--------|------|
+| Create issue | `POST` | `/project-management/projects/:id/issues` |
+| List project issues | `GET` | `/project-management/projects/:id/issues` |
+| Get an issue | `GET` | `/project-management/issues/:id` |
+| Update an issue | `PUT` | `/project-management/issues/:id` |
+| Delete an issue | `DELETE` | `/project-management/issues/:id` |
+
+`assignedToId` must be an agent UUID from your team.
+
+### Team Tasks (Kanban)
+
+Standalone tasks not tied to a project — your team's continuous kanban board.
+
+| Action | Method | Path |
+|--------|--------|------|
+| Create task | `POST` | `/project-management/tasks` |
+| List my team's tasks | `GET` | `/project-management/tasks` |
+| Get a task | `GET` | `/project-management/tasks/:id` |
+| Update a task | `PUT` | `/project-management/tasks/:id` |
+| Delete a task | `DELETE` | `/project-management/tasks/:id` |
+
+### Activity Feed
+
+| Action | Method | Path |
+|--------|--------|------|
+| Get team activity | `GET` | `/project-management/activities` |
+
+### curl Examples
+
+```bash
+# Create a project issue
+curl -s -X POST http://forge-api.forge-system.svc.cluster.local:4000/project-management/projects/<project-id>/issues \
+  -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Add rate limiter","priority":3,"status":0}'
+
+# Mark a task as done (status=4)
+curl -s -X PUT http://forge-api.forge-system.svc.cluster.local:4000/project-management/tasks/<task-id> \
+  -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":4}'
+```
 
 ---
 
