@@ -9,6 +9,7 @@ import { conversationsRouter } from "./routes/conversations";
 import { internalRouter } from "./routes/internal";
 import { errorHandler } from "./middleware/errorHandler";
 import { projectManagementRouter } from "./routes/project-management";
+import { teamManagementRouter } from "./routes/team-management";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -64,6 +65,18 @@ app.use("/conversations", conversationsRouter);
  *   GET    /project-management/activities
  */
 app.use("/project-management", projectManagementRouter);
+
+/**
+ * Team management — authenticated by agent gatewayToken.
+ * This is used by agents to inspect their team and provision new agents.
+ * All routes are scoped to the authenticated agent's team automatically.
+ *
+ * Key endpoints:
+ *   GET    /team-management/teams/mine
+ *   GET    /team-management/teams/mine/agents
+ *   POST   /team-management/teams/mine/agents
+ */
+app.use("/team-management", teamManagementRouter);
 
 // Nested: /teams/:id/integrations
 app.use("/teams/:id/integrations", integrationsRouter);

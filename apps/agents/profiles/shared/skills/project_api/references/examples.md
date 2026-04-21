@@ -25,20 +25,27 @@ curl -s http://forge-api.forge.svc.cluster.local:4000/project-management/project
 ## Issue Tracking
 
 ### Create a Project Issue
+**IMPORTANT**: You must replace `{PROJECT_UUID}` with a real `id` (UUID format) obtained from the `GET /project-management/projects` endpoint. Never send literal angle brackets or braces.
+
 ```bash
-curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects/<project-id>/issues \
+# 1. Provide the REAL project id in the URL
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects/{PROJECT_UUID}/issues \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Define Helm templates",
+    "shortSummary": "Write the helm chart for the agent",
     "status": 1,
     "priority": 2
   }'
 ```
 
 ### Update an Issue Status (Mark as Done)
+**IMPORTANT**: Replace `{ISSUE_UUID}` with a real `id` obtained when listing or creating the issue.
+
 ```bash
-curl -s -X PUT http://forge-api.forge.svc.cluster.local:4000/project-management/issues/<issue-id> \
+# 1. Update the issue
+curl -s -X PUT http://forge-api.forge.svc.cluster.local:4000/project-management/issues/{ISSUE_UUID} \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -64,8 +71,10 @@ curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management
 ## Health Updates
 
 ### Post a Health Update
+**IMPORTANT**: Replace `{PROJECT_UUID}` with a real `id` obtained when listing or creating the project.
+
 ```bash
-curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects/<project-id>/updates \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects/{PROJECT_UUID}/updates \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

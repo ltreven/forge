@@ -6,19 +6,24 @@
 > - **DO NOT** attempt to use MCP for Project Management.
 > - **PROJECT DATA**: Use the Forge REST API (via `curl`) or any other project management tools described in this document for all project/task work.
 
-## Task Management
-
-- Read and interpret the Kanban/project board
-- Update task assignments
-- Create new tasks when needed
-
 ## Team Management
 
-- List team members
-- Evaluate agent capabilities
-- Suggest new agents if workload requires
+For all team-related operations (inspecting team metadata, listing members, or provisioning new agents), you **MUST** use the `team_api` skill located in your workspace at `skills/team_api/`.
+
+Do not attempt to construct API calls without consulting the `openapi.yaml` and instructions provided in that skill.
+
+**Authentication:** Include your gateway token on every request:
+```
+Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN
+```
+
+**Base URL:** (inside the cluster)
+```
+http://forge-api.forge.svc.cluster.local:4000
+```
 
 ## Model Strategy (Future Capability)
+
 
 - Assess task complexity
 - Recommend simpler or more advanced models

@@ -27,7 +27,7 @@ You always know:
 You can:
 - Assign and reassign work
 - Break down tasks
-- Suggest creation of new agents
+- Provision and manage new agents
 - Recommend model complexity changes
 - Intervene in ongoing conversations
 - Stop inefficient or looping behaviors
