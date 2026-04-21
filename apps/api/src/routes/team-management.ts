@@ -21,10 +21,10 @@ export const teamManagementRouter = Router();
 // req.agent.teamId is the authoritative scope — callers cannot override it.
 teamManagementRouter.use(agentAuthMiddleware);
 
-// ── GET /team-management/teams/mine ─────────────────────────────────────────
+// ── GET /teams/mine OR /mine ─────────────────────────────────────────
 // Returns metadata for the agent's own team.
 
-teamManagementRouter.get("/teams/mine", async (req: Request, res: Response, next: NextFunction) => {
+teamManagementRouter.get(["/teams/mine", "/mine"], async (req: Request, res: Response, next: NextFunction) => {
   try {
     const teamId = req.agent!.teamId;
 
@@ -44,10 +44,10 @@ teamManagementRouter.get("/teams/mine", async (req: Request, res: Response, next
   }
 });
 
-// ── GET /team-management/teams/mine/agents ──────────────────────────────────
+// ── GET /teams/mine/agents OR /agents ──────────────────────────────────
 // Returns the list of agents in the same team (roster).
 
-teamManagementRouter.get("/teams/mine/agents", async (req: Request, res: Response, next: NextFunction) => {
+teamManagementRouter.get(["/teams/mine/agents", "/agents"], async (req: Request, res: Response, next: NextFunction) => {
   try {
     const teamId = req.agent!.teamId;
 
@@ -73,10 +73,10 @@ teamManagementRouter.get("/teams/mine/agents", async (req: Request, res: Respons
   }
 });
 
-// ── POST /team-management/teams/mine/agents ─────────────────────────────────
+// ── POST /teams/mine/agents OR /agents ─────────────────────────────────
 // Allows an agent to provision a new agent into their own team.
 
-teamManagementRouter.post("/teams/mine/agents", async (req: Request, res: Response, next: NextFunction) => {
+teamManagementRouter.post(["/teams/mine/agents", "/agents"], async (req: Request, res: Response, next: NextFunction) => {
   try {
     const teamId = req.agent!.teamId;
     const input = createAgentSchema.parse({ ...req.body, teamId });

@@ -30,9 +30,11 @@ This skill provides you with the knowledge to inspect your own team and manage t
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/team-management/teams/mine` | `GET` | Get your team's metadata (name, mission, etc.) |
-| `/team-management/teams/mine/agents` | `GET` | List all agents in your team (roster) |
-| `/team-management/teams/mine/agents` | `POST` | Create a new agent in your team |
+| `/mine` | `GET` | Get your team's metadata (name, mission, etc.) |
+| `/agents` | `GET` | List all agents in your team (roster) |
+| `/agents` | `POST` | Create a new agent in your team |
+
+**Aliases**: The prefixes `/team-management` and `/team-api` are also supported (e.g., `/team-api/agents`).
 
 ## Execution Guidelines
 

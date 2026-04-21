@@ -53,11 +53,11 @@ Always use these integer values for the `status` field in Projects, Issues, and 
 
 1.  **Understand the Contract**: Read `references/openapi.yaml` to identify the correct endpoint and payload structure.
 2.  **Use PUT for Updates**: The API does **not** support `PATCH`. If you want to update a field, use `PUT` and include the fields you want to update in the JSON body.
-3.  **Validate Payloads**: Ensure all required fields are present and optional fields match the expected types. For example, status and priority must be integers.
+3.  **Strict JSON Types (CRITICAL)**: Ensure `status` and `priority` are **unquoted integers** (e.g., `"status": 2`, NOT `"status": "2"`). If you send strings for integers, the API will reject your request with a 400 Validation Error.
 4.  **Handle Responses**: 
-    - The API always returns a wrapper JSON object: `{"success": true, "data": {...}}` or `{"success": false, "error": "..."}`.
-    - Check for `200 OK` or `201 Created` status codes.
-    - If you receive a `400 Bad Request` or `404 Not Found`, read the `"error"` field in the response before retrying.
+    - The API always returns a wrapper JSON object: `{"data": {...}, "error": null, "meta": {...}}` on success.
+    - If there is an error, it returns: `{"data": null, "error": {"message": "...", "issues": ...}, "meta": {...}}`.
+    - Always check the `"error"` object if you receive a `400 Bad Request` or `404 Not Found` to understand exactly which field failed validation before retrying.
 5.  **Use Examples**: Refer to `references/examples.md` for `curl` templates for each standard operation.
 
 ## References

@@ -77,6 +77,7 @@ app.use("/project-management", projectManagementRouter);
  *   POST   /team-management/teams/mine/agents
  */
 app.use("/team-management", teamManagementRouter);
+app.use("/team-api", teamManagementRouter);
 
 // Nested: /teams/:id/integrations
 app.use("/teams/:id/integrations", integrationsRouter);
