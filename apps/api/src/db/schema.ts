@@ -261,3 +261,25 @@ export const projectActivities = pgTable("project_activities", {
 
 export type ProjectActivity = typeof projectActivities.$inferSelect;
 export type NewProjectActivity = typeof projectActivities.$inferInsert;
+
+// ── Continuous Kanban Tasks (not linked to projects) ─────────────────────────
+
+export const teamTasks = pgTable("team_tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => teamTasks.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  shortSummary: text("short_summary"),
+  descriptionMarkdown: text("description_markdown"),
+  descriptionRichText: jsonb("description_rich_text"),
+  status: integer("status").notNull().default(0),
+  priority: integer("priority").notNull().default(0),
+  assignedToId: uuid("assigned_to_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TeamTask = typeof teamTasks.$inferSelect;
+export type NewTeamTask = typeof teamTasks.$inferInsert;

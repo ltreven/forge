@@ -7,6 +7,7 @@ import {
   projectUpdates,
   projectIssues,
   projectActivities,
+  teamTasks,
   type ProjectHealth,
 } from "../db/schema";
 import {
@@ -16,6 +17,8 @@ import {
   updateIssueSchema,
   updateProjectSchema,
   updateProjectUpdateSchema,
+  createTaskSchema,
+  updateTaskSchema,
 } from "../schemas/project-management.schema";
 import { failure, success } from "../lib/response";
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -449,6 +452,131 @@ projectManagementRouter.delete("/issues/:id", async (req: Request, res: Response
         entityId: deleted.id,
         action: "deleted",
       });
+    }
+
+    res.json(success({ deleted: true, id: deleted.id }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+projectManagementRouter.post("/teams/:teamId/tasks", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = createTaskSchema.parse({ ...req.body, teamId: req.params.teamId });
+    const [team] = await db.select().from(teams).where(eq(teams.id, input.teamId));
+
+    if (!team) {
+      res.status(404).json(failure("Team not found"));
+      return;
+    }
+
+    if (input.parentTaskId) {
+      const [parentTask] = await db
+        .select()
+        .from(teamTasks)
+        .where(and(eq(teamTasks.id, input.parentTaskId), eq(teamTasks.teamId, input.teamId)));
+      if (!parentTask) {
+        res.status(400).json(failure("Parent task must belong to the same team"));
+        return;
+      }
+    }
+
+    const [task] = await db
+      .insert(teamTasks)
+      .values({
+        teamId: input.teamId,
+        parentTaskId: input.parentTaskId,
+        title: input.title,
+        shortSummary: input.shortSummary,
+        descriptionMarkdown: input.descriptionMarkdown,
+        descriptionRichText: input.descriptionRichText,
+        status: input.status,
+        priority: input.priority,
+        assignedToId: input.assignedToId,
+      })
+      .returning();
+
+    res.status(201).json(success(task));
+  } catch (err) {
+    next(err);
+  }
+});
+
+projectManagementRouter.get("/teams/:teamId/tasks", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await db
+      .select()
+      .from(teamTasks)
+      .where(eq(teamTasks.teamId, String(req.params.teamId)))
+      .orderBy(desc(teamTasks.updatedAt));
+
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+projectManagementRouter.get("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [task] = await db.select().from(teamTasks).where(eq(teamTasks.id, String(req.params.id)));
+    if (!task) {
+      res.status(404).json(failure("Task not found"));
+      return;
+    }
+
+    res.json(success(task));
+  } catch (err) {
+    next(err);
+  }
+});
+
+projectManagementRouter.put("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = updateTaskSchema.parse(req.body);
+    const [existing] = await db.select().from(teamTasks).where(eq(teamTasks.id, String(req.params.id)));
+
+    if (!existing) {
+      res.status(404).json(failure("Task not found"));
+      return;
+    }
+
+    if (input.parentTaskId) {
+      if (input.parentTaskId === existing.id) {
+        res.status(400).json(failure("Task cannot be parent of itself"));
+        return;
+      }
+
+      const [parentTask] = await db
+        .select()
+        .from(teamTasks)
+        .where(and(eq(teamTasks.id, input.parentTaskId), eq(teamTasks.teamId, existing.teamId)));
+      if (!parentTask) {
+        res.status(400).json(failure("Parent task must belong to the same team"));
+        return;
+      }
+    }
+
+    const [task] = await db
+      .update(teamTasks)
+      .set({
+        ...input,
+        updatedAt: new Date(),
+      })
+      .where(eq(teamTasks.id, existing.id))
+      .returning();
+
+    res.json(success(task));
+  } catch (err) {
+    next(err);
+  }
+});
+
+projectManagementRouter.delete("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [deleted] = await db.delete(teamTasks).where(eq(teamTasks.id, String(req.params.id))).returning();
+    if (!deleted) {
+      res.status(404).json(failure("Task not found"));
+      return;
     }
 
     res.json(success({ deleted: true, id: deleted.id }));

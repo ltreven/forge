@@ -57,3 +57,17 @@ export const createIssueSchema = z.object({
 });
 
 export const updateIssueSchema = createIssueSchema.partial().omit({ projectId: true });
+
+export const createTaskSchema = z.object({
+  teamId: z.string().uuid(),
+  parentTaskId: z.string().uuid().nullable().optional(),
+  title: z.string().min(1).max(200),
+  shortSummary: z.string().max(280).nullable().optional(),
+  descriptionMarkdown: z.string().nullable().optional(),
+  descriptionRichText: richTextSchema.nullable().optional(),
+  status: statusDomain.default(0),
+  priority: priorityDomain.default(0),
+  assignedToId: z.string().uuid().nullable().optional(),
+});
+
+export const updateTaskSchema = createTaskSchema.partial().omit({ teamId: true });

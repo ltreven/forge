@@ -50,6 +50,13 @@
       "when": 1776700000000,
       "tag": "0009_project_management",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776800000000,
+      "tag": "0010_team_tasks",
+      "breakpoints": true
     }
   ]
 }
