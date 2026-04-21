@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { randomBytes } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { teams, agents, workspaces } from "../db/schema";
+import { teams, agents, workspaces, projects, teamTasks } from "../db/schema";
 import { createTeamSchema, updateTeamSchema } from "../schemas/team.schema";
 import { success, failure } from "../lib/response";
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -201,6 +201,39 @@ teamsRouter.delete("/:id", async (req: Request, res: Response, next: NextFunctio
     }
 
     res.status(200).json(success({ deleted: true, id: deleted.id }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /teams/:id/projects ──────────────────────────────────────────────────
+
+teamsRouter.get("/:id/projects", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.teamId, String(req.params.id)))
+      // Order by created at or updated at
+      .orderBy(projects.createdAt);
+    
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /teams/:id/tasks ─────────────────────────────────────────────────────
+
+teamsRouter.get("/:id/tasks", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await db
+      .select()
+      .from(teamTasks)
+      .where(eq(teamTasks.teamId, String(req.params.id)))
+      .orderBy(teamTasks.createdAt);
+    
+    res.json(success(rows));
   } catch (err) {
     next(err);
   }

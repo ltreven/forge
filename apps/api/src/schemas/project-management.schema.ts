@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const statusDomain = z.number().int().min(0).max(4);
+const statusDomain = z.number().int().min(0).max(5);
 const priorityDomain = z.number().int().min(0).max(4);
 
 // Compatible with editor payloads such as Tiptap/ProseMirror JSON documents.

@@ -16,12 +16,18 @@ declare global {
  */
 export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
-    res.status(401).json({ success: false, error: "Missing or malformed Authorization header" });
+  if (!header) {
+    res.status(401).json({ success: false, error: "Missing Authorization header" });
     return;
   }
 
-  const token = header.slice(7);
+  const isBearer = /^bearer\s+/i.test(header);
+  if (!isBearer) {
+    res.status(401).json({ success: false, error: "Malformed Authorization header: Prefix must be 'Bearer '" });
+    return;
+  }
+
+  const token = header.split(/\s+/)[1];
   try {
     req.user = verifyToken(token);
     next();

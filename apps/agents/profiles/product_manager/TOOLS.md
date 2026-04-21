@@ -1,5 +1,11 @@
 # TOOLS.md
 
+> [!CAUTION]
+> **CRITICAL RUNTIME WARNING**: You are in a restricted container.
+> - **DO NOT** attempt to use `systemctl`, `systemd`, or `openclaw plugin` commands.
+> - **DO NOT** attempt to use MCP for Project Management.
+> - **PROJECT DATA**: Use the Forge REST API (via `curl`) or any other project management tools described in this document for all project/task work.
+
 ## External Backlog (Linear via MCP)
 
 Your primary external tool. Use Linear for cross-team visibility, roadmap, and stakeholder communication.
@@ -33,7 +39,7 @@ Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN
 
 **Base URL:** (inside the cluster)
 ```
-http://forge-api.forge-system.svc.cluster.local:4000
+http://forge-api.forge.svc.cluster.local:4000
 ```
 
 ### Projects
@@ -115,19 +121,19 @@ Standalone tasks not linked to a project — continuous flow work.
 
 ```bash
 # Create a new project
-curl -s -X POST http://forge-api.forge-system.svc.cluster.local:4000/project-management/projects \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Q3 Growth Initiative","health":"unknown","status":1,"priority":2}'
 
 # Update project health
-curl -s -X POST http://forge-api.forge-system.svc.cluster.local:4000/project-management/projects/<id>/updates \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects/<id>/updates \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"newHealth":"at_risk","reason":"Dependency on backend API not yet delivered."}'
 
 # Create a kanban task
-curl -s -X POST http://forge-api.forge-system.svc.cluster.local:4000/project-management/tasks \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/tasks \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Update roadmap slide","priority":2}'

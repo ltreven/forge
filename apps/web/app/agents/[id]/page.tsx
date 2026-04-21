@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Bot, Brain, ChevronRight, Gauge,
-  History, Loader2, Send, Settings, ShieldCheck, Wrench, Zap,
+  History, Loader2, Send, Settings, ShieldCheck, Wrench, Zap, Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -105,12 +105,36 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
   const [input, setInput]       = useState("");
   const [sending, setSending]   = useState(false);
   const [conv, setConv]         = useState<Conversation | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
   const bottomRef               = useRef<HTMLDivElement>(null);
 
   const headers = useCallback((): HeadersInit => ({
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }), [token]);
+
+  useEffect(() => {
+    setIsInitializing(true);
+    fetch(`${API_BASE}/conversations?agentId=${agentId}`, { headers: headers() })
+      .then(r => r.json())
+      .then(d => {
+        const latest = d.data?.[0];
+        if (latest) {
+          setConv(latest);
+          return fetch(`${API_BASE}/conversations/${latest.id}/messages`, { headers: headers() }).then(r => r.json());
+        }
+        return { data: [] };
+      })
+      .then(d => {
+        setMessages(d.data || []);
+      })
+      .catch(err => console.error("Failed to load conversation history:", err))
+      .finally(() => setIsInitializing(false));
+  }, [agentId, headers]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, sending]);
 
   const send = async () => {
     const text = input.trim();
@@ -130,12 +154,37 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
         setConv(nc); cid = nc.id;
       }
       const res = await fetch(`${API_BASE}/conversations/${cid}/messages`, { method: "POST", headers: headers(), body: JSON.stringify({ role: "user", content: text }) });
+      
+      const resultObj = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        let errStr = "Failed to send message.";
-        try { const errObj = await res.json(); errStr = errObj.message || errObj.error || errStr; } catch {}
-        throw new Error(errStr);
+        let errStr = resultObj.error?.message || resultObj.message || resultObj.error || "Failed to send message.";
+        
+        if (resultObj.data?.userMessage) {
+          // The message was saved in the db despite the error
+          setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage.id } : m));
+          throw { isSendError: true, keepMessage: true, message: errStr };
+        }
+        
+        throw { isSendError: true, keepMessage: false, message: errStr };
       }
-      const resultObj = await res.json();
+
+      // Handle 201 OK but with error (e.g. messaging_unavailable)
+      if (resultObj.data?.error) {
+        const errMap: Record<string, string> = {
+          "messaging_unavailable": "RabbitMQ is unavailable or offline. Agent cannot receive messages."
+        };
+        const errStr = errMap[resultObj.data.error] || resultObj.data.error;
+        
+        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage?.id || userMsg.id } : m));
+        throw { isSendError: true, keepMessage: true, message: errStr };
+      }
+
+      // Successful reply
+      if (resultObj.data?.userMessage) {
+        setMessages((p) => p.map(m => m.id === userMsg.id ? { ...m, id: resultObj.data.userMessage.id } : m));
+      }
+
       if (resultObj.data?.agentMessage) {
         const amMsg: ChatMessage = {
           id: resultObj.data.agentMessage.id || `a-${Date.now()}`,
@@ -146,73 +195,148 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
         setMessages((p) => [...p, amMsg]);
       }
     } catch (err: any) {
-      toast.error(err.message || "Failed to send message.");
-      setMessages((p) => p.filter((m) => m.id !== userMsg.id));
+      const msg = err.isSendError ? err.message : (err.message || "Failed to send message.");
+      toast.error(msg);
+      if (!(err.isSendError && err.keepMessage)) {
+        setMessages((p) => p.filter((m) => m.id !== userMsg.id));
+      }
     } finally { setSending(false); }
   };
 
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-5">
-        {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 select-none pointer-events-none">
-            <div className="flex size-12 items-center justify-center rounded-2xl text-2xl opacity-30"
-              style={{ background: agentColor + "18" }}>{agentIcon}</div>
-            <p className="text-xs text-muted-foreground/50">{tc.emptySubtitle}</p>
+  const startNewChat = () => {
+    setConv(null);
+    setMessages([]);
+  };
+
+  const renderMessages = () => {
+    let lastDate = "";
+    const els: React.ReactNode[] = [];
+
+    messages.forEach((m) => {
+      const d = new Date(m.createdAt);
+      const dateStr = d.toLocaleDateString();
+      
+      if (dateStr !== lastDate) {
+        const today = new Date();
+        const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+        
+        let label = dateStr; // fallback
+        if (dateStr === today.toLocaleDateString()) label = "Hoje";
+        else if (dateStr === yesterday.toLocaleDateString()) label = "Ontem";
+        
+        els.push(
+          <div key={`date-${dateStr}`} className="flex justify-center my-3">
+            <span className="rounded-full bg-muted/60 px-3 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              {label}
+            </span>
           </div>
-        ) : (
-          <div className="flex flex-col gap-3.5">
-            {messages.map((m) => {
-              const isUser = m.role === "user";
-              return (
-                <div key={m.id} className={cn("flex items-end gap-2", isUser && "flex-row-reverse")}>
-                  <div className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-                    style={isUser ? { background: "#6366f1", color: "#fff" } : { background: agentColor + "22" }}>
-                    {isUser ? userName.charAt(0).toUpperCase() : agentIcon}
-                  </div>
-                  <div className={cn("max-w-[78%] flex flex-col gap-0.5", isUser && "items-end")}>
-                    <span className="px-1 text-[10px] text-muted-foreground">{isUser ? tc.you : agentName}</span>
-                    <div className={cn("rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                      isUser ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm")}>
-                      {m.content}
+        );
+        lastDate = dateStr;
+      }
+
+      const isUser = m.role === "user";
+      els.push(
+        <div key={m.id} className={cn("flex items-end gap-2", isUser && "flex-row-reverse mb-3", !isUser && "mb-3")}>
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+            style={isUser ? { background: "#6366f1", color: "#fff" } : { background: agentColor + "22" }}>
+            {isUser ? userName.charAt(0).toUpperCase() : agentIcon}
+          </div>
+          <div className={cn("max-w-[78%] flex flex-col gap-0.5", isUser && "items-end")}>
+            <span className="px-1 text-[10px] text-muted-foreground">{isUser ? tc.you : agentName}</span>
+            <div className={cn("rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+              isUser ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm")}>
+              {m.content}
+            </div>
+            <span className="px-1 text-[9px] text-muted-foreground/60">
+              {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+        </div>
+      );
+    });
+    return els;
+  };
+
+  return (
+    <>
+      <div className="border-b border-border px-5 py-3.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="size-4 text-primary" />
+            <p className="text-sm font-semibold text-foreground">Chat</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={startNewChat}
+              title="Start New Chat Session"
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Plus className="size-3.5" />
+              <span className="hidden sm:inline">New Chat</span>
+            </button>
+            <Link
+              href={`/agents/${agentId}/history`}
+              title="View conversation history"
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <History className="size-3.5" />
+              <span className="hidden sm:inline">History</span>
+            </Link>
+          </div>
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">Send a message directly to this agent.</p>
+      </div>
+
+      <div className="flex h-[520px] flex-col overflow-hidden">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-4 py-5">
+          {isInitializing ? (
+            <div className="flex h-full items-center justify-center gap-2">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 select-none pointer-events-none">
+              <div className="flex size-12 items-center justify-center rounded-2xl text-2xl opacity-30"
+                style={{ background: agentColor + "18" }}>{agentIcon}</div>
+              <p className="text-xs text-muted-foreground/50">{tc.emptySubtitle || "Start a new conversation..."}</p>
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {renderMessages()}
+              {sending && (
+                <div className="flex items-end gap-2 mb-3">
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-full" style={{ background: agentColor + "22" }}>{agentIcon}</div>
+                  <div className="rounded-2xl rounded-bl-sm bg-muted px-3.5 py-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
+                      <span className="ml-1 text-xs text-muted-foreground">{tc.thinking || "Thinking..."}</span>
                     </div>
                   </div>
                 </div>
-              );
-            })}
-            {sending && (
-              <div className="flex items-end gap-2">
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-full" style={{ background: agentColor + "22" }}>{agentIcon}</div>
-                <div className="rounded-2xl rounded-bl-sm bg-muted px-3.5 py-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
-                    <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
-                    <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
-                    <span className="ml-1 text-xs text-muted-foreground">{tc.thinking}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-        )}
-      </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          )}
+        </div>
 
-      {/* Input */}
-      <div className="shrink-0 border-t border-border px-4 py-3">
-        <form onSubmit={(e) => { e.preventDefault(); send(); }} className="flex items-center gap-2">
-          <Input id="chat-input" value={input} onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder={tc.placeholder} className="h-10 flex-1 rounded-xl" disabled={sending} autoFocus />
-          <Button id="chat-send-btn" type="submit" size="icon" disabled={!input.trim() || sending} className="size-10 shrink-0 rounded-xl">
-            {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-          </Button>
-        </form>
+        {/* Input */}
+        <div className="shrink-0 border-t border-border px-4 py-3 bg-card">
+          <form onSubmit={(e) => { e.preventDefault(); send(); }} className="flex items-center gap-2">
+            <Input id="chat-input" value={input} onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+              placeholder={tc.placeholder || "Type a message..."} className="h-10 flex-1 rounded-xl" disabled={sending} autoFocus />
+            <Button id="chat-send-btn" type="submit" size="icon" disabled={!input.trim() || sending} className="size-10 shrink-0 rounded-xl bg-primary text-primary-foreground">
+              {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            </Button>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
+
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -316,36 +440,16 @@ export default function AgentPage() {
 
         {/* ── LEFT (col-span-2): Chat ─── */}
         <div className="lg:col-span-2">
-          <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-            <div className="border-b border-border px-5 py-3.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Zap className="size-4 text-primary" />
-                  <p className="text-sm font-semibold text-foreground">Chat</p>
-                </div>
-                <Link
-                  href={`/agents/${agentId}/history`}
-                  id="chat-history-btn"
-                  title="View conversation history"
-                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <History className="size-3.5" />
-                  <span className="hidden sm:inline">History</span>
-                </Link>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">Send a message directly to this agent.</p>
-            </div>
-            <div className="flex h-[520px] flex-col overflow-hidden">
-              <ChatArea
-                agentId={agentId}
-                agentName={agent.name}
-                agentIcon={icon}
-                agentColor={color}
-                userName={user?.name ?? "You"}
-                token={token}
-                t={t}
-              />
-            </div>
+          <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm flex flex-col h-full">
+            <ChatArea
+              agentId={agentId}
+              agentName={agent.name}
+              agentIcon={icon}
+              agentColor={color}
+              userName={user?.name ?? "You"}
+              token={token}
+              t={t}
+            />
           </section>
         </div>
 

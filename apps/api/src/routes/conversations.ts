@@ -197,7 +197,11 @@ conversationsRouter.post("/:id/messages", async (req: Request, res: Response, ne
 
     if (!replyJson) {
       // Timeout — the agent is processing or unavailable
-      res.status(504).json(failure("Agent did not reply within 30s. Try again shortly."));
+      res.status(504).json({
+        data: { userMessage, agentMessage: null },
+        error: { message: "Agent did not reply within 30s. Try again shortly." },
+        meta: { timestamp: new Date().toISOString() }
+      });
       return;
     }
 

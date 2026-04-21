@@ -1,5 +1,11 @@
 # TOOLS.md
 
+> [!CAUTION]
+> **CRITICAL RUNTIME WARNING**: You are in a restricted container.
+> - **DO NOT** attempt to use `systemctl`, `systemd`, or `openclaw plugin` commands.
+> - **DO NOT** attempt to use MCP for Project Management.
+> - **PROJECT DATA**: Use the Forge REST API (via `curl`) or any other project management tools described in this document for all project/task work.
+
 ## Version Control (Git)
 
 Your primary delivery mechanism. Use for:
@@ -42,7 +48,7 @@ Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN
 
 **Base URL:** (inside the cluster)
 ```
-http://forge-api.forge-system.svc.cluster.local:4000
+http://forge-api.forge.svc.cluster.local:4000
 ```
 
 ### Projects
@@ -95,13 +101,13 @@ Standalone tasks not tied to a project — your team's continuous kanban board.
 
 ```bash
 # Create a project issue
-curl -s -X POST http://forge-api.forge-system.svc.cluster.local:4000/project-management/projects/<project-id>/issues \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects/<project-id>/issues \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Add rate limiter","priority":3,"status":0}'
 
 # Mark a task as done (status=4)
-curl -s -X PUT http://forge-api.forge-system.svc.cluster.local:4000/project-management/tasks/<task-id> \
+curl -s -X PUT http://forge-api.forge.svc.cluster.local:4000/project-management/tasks/<task-id> \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status":4}'

@@ -6,7 +6,6 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Bot,
-  ChevronRight,
   Crown,
   Layers,
   Loader2,
@@ -14,6 +13,17 @@ import {
   Zap,
   Activity,
   FolderKanban,
+  Plus,
+  ListTodo,
+  CheckCircle2,
+  CircleDashed,
+  CircleDot,
+  Circle,
+  Clock,
+  MoreHorizontal,
+  ChevronDown,
+  ChevronUp,
+  GripVertical
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
@@ -26,15 +36,38 @@ type AgentType =
   | "software_engineer" | "software_architect"
   | "product_manager";
 
+type HealthStatus = "online" | "starting" | "offline";
+
 interface Agent {
   id: string; name: string; type: AgentType;
   icon?: string; metadata?: { avatarColor?: string };
+  k8sStatus?: "pending" | "provisioning" | "running" | "failed" | "terminated" | null;
 }
+
+function computeHealth(a: Agent): HealthStatus {
+  const k8s = a.k8sStatus;
+  if (k8s === "running") return "online";
+  if (k8s === "failed" || k8s === "terminated") return "offline";
+  return "starting";
+}
+
 
 interface Team {
   id: string; name: string; icon?: string; mission?: string;
   waysOfWorking?: string; template?: string;
   createdAt: string;
+}
+
+export interface Project {
+  id: string; title: string; shortSummary?: string | null;
+  status: number; priority: number; health: string;
+  updatedAt: string;
+}
+
+export interface TeamTask {
+  id: string; title: string; shortSummary?: string | null;
+  status: number; priority: number;
+  updatedAt: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -60,11 +93,36 @@ const ROLE_EMOJIS: Record<string, string> = {
   product_manager:    "📋",
 };
 
+const STATUS_LABELS: Record<number, string> = {
+  0: "Backlog",
+  1: "To Do",
+  2: "In Progress",
+  3: "In Review",
+  4: "Done",
+  5: "Cancelled",
+};
+
+const PRIORITY_LABELS: Record<number, string> = {
+  0: "Low",
+  1: "Medium",
+  2: "High",
+  3: "Urgent",
+  4: "Critical",
+};
+
 // ── Agent Card ────────────────────────────────────────────────────────────────
 
 function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) {
   const color  = agent.metadata?.avatarColor ?? ROLE_COLORS[agent.type] ?? "#6366f1";
   const isLead = agent.type === "team_lead";
+  const health = computeHealth(agent);
+
+  const healthLabels = {
+    online: "Online",
+    starting: "Provisioning",
+    offline: "Offline"
+  };
+  const healthLabel = healthLabels[health];
 
   return (
     <button
@@ -105,19 +163,113 @@ function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) {
           Open →
         </span>
         <div className="flex items-center gap-1">
-          <span className="size-2 rounded-full bg-muted-foreground/30" title="Offline (not configured)" />
-          <span className="text-[10px] text-muted-foreground/50">Offline</span>
+          <span className={cn(
+            "relative flex size-2 shrink-0 rounded-full",
+            health === "online"   && "bg-emerald-500",
+            health === "starting" && "bg-amber-400",
+            health === "offline"  && "bg-red-500",
+          )}>
+            {health === "online" && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+            )}
+            {health === "starting" && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
+            )}
+          </span>
+          <span className="text-[10px] text-muted-foreground/50">{healthLabel}</span>
         </div>
       </div>
     </button>
   );
 }
 
+// ── Project & Task Cards ──────────────────────────────────────────────────────
+
+// ── Project & Task List Items ────────────────────────────────────────────────
+
+function StatusIcon({ status }: { status: number }) {
+  // 0: Backlog, 1: To Do, 2: In Progress, 3: In Review, 4: Done, 5: Cancelled
+  switch (status) {
+    case 0: return <Circle className="size-3.5 text-muted-foreground/40" />;
+    case 1: return <Circle className="size-3.5 text-muted-foreground" />;
+    case 2: return <CircleDot className="size-3.5 text-amber-500 animate-pulse" />;
+    case 3: return <CircleDashed className="size-3.5 text-blue-500" />;
+    case 4: return <CheckCircle2 className="size-3.5 text-emerald-500" />;
+    case 5: return <Circle className="size-3.5 text-red-500/50" />;
+    default: return <Circle className="size-3.5 text-muted-foreground" />;
+  }
+}
+
+function formatDate(dateStr: string) {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
+function getShorthandId(prefix: string, id: string) {
+  return `${prefix}-${id.substring(0, 4).toUpperCase()}`;
+}
+
+function ProjectListItem({ project }: { project: Project }) {
+  return (
+    <div className="group flex items-center gap-3 py-2 px-3 hover:bg-muted/50 rounded-lg transition-colors cursor-pointer">
+      <GripVertical className="size-3.5 text-muted-foreground/20 group-hover:text-muted-foreground/40 transition-colors" />
+      <span className="text-[10px] font-mono font-medium text-muted-foreground w-16 shrink-0">
+        {getShorthandId("PRJ", project.id)}
+      </span>
+      <StatusIcon status={project.status} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate">{project.title}</p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+          Forge
+        </span>
+        <span className="text-[10px] text-muted-foreground/60 w-12 text-right">
+          {formatDate(project.updatedAt)}
+        </span>
+        <MoreHorizontal className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+    </div>
+  );
+}
+
+function TaskListItem({ task }: { task: TeamTask }) {
+  const isHighPriority = task.priority >= 2;
+  
+  return (
+    <div className="group flex items-center gap-3 py-2 px-3 hover:bg-muted/50 rounded-lg transition-colors cursor-pointer">
+      <GripVertical className="size-3.5 text-muted-foreground/20 group-hover:text-muted-foreground/40 transition-colors" />
+      <span className="text-[10px] font-mono font-medium text-muted-foreground w-16 shrink-0">
+        {getShorthandId("TSK", task.id)}
+      </span>
+      <StatusIcon status={task.status} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        {isHighPriority && (
+          <span className="hidden sm:inline-block rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:text-red-400">
+            {PRIORITY_LABELS[task.priority]}
+          </span>
+        )}
+        <span className="text-[10px] text-muted-foreground/60 w-12 text-right">
+          {formatDate(task.updatedAt)}
+        </span>
+        <MoreHorizontal className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+    </div>
+  );
+}
+
 // ── Section Header ────────────────────────────────────────────────────────────
 
-function SectionTitle({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+function SectionTitle({ icon: Icon, label, className }: { icon: React.ElementType; label: string; className?: string }) {
   return (
-    <div className="mb-4 flex items-center gap-2">
+    <div className={cn("flex items-center gap-2", className)}>
       <Icon className="size-4 text-muted-foreground" />
       <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">{label}</h2>
     </div>
@@ -135,6 +287,11 @@ export default function TeamDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [team, setTeam]           = useState<Team | null>(null);
   const [agents, setAgents]       = useState<Agent[]>([]);
+  const [projects, setProjects]   = useState<Project[]>([]);
+  const [tasks, setTasks]         = useState<TeamTask[]>([]);
+  
+  const [showAllProjects, setShowAllProjects] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   // ── Load data ──────────────────────────────────────────────────────────────
 
@@ -150,8 +307,10 @@ export default function TeamDetailPage() {
     Promise.all([
       fetch(`${API_BASE}/teams/${teamId}`, { headers }),
       fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers }),
+      fetch(`${API_BASE}/teams/${teamId}/projects`, { headers }),
+      fetch(`${API_BASE}/teams/${teamId}/tasks`, { headers }),
     ])
-      .then(async ([teamRes, agentsRes]) => {
+      .then(async ([teamRes, agentsRes, projectsRes, tasksRes]) => {
         if (teamRes.ok) {
           const d = await teamRes.json();
           const t: Team = d.data;
@@ -170,6 +329,14 @@ export default function TeamDetailPage() {
             return 0;
           });
           setAgents(all);
+        }
+        if (projectsRes.ok) {
+          const d = await projectsRes.json();
+          setProjects(d.data ?? []);
+        }
+        if (tasksRes.ok) {
+          const d = await tasksRes.json();
+          setTasks(d.data ?? []);
         }
       })
       .catch(() => toast.error("Failed to load team."))
@@ -195,6 +362,9 @@ export default function TeamDetailPage() {
 
   const teamLead  = agents.find((a) => a.type === "team_lead");
   const otherAgents = agents.filter((a) => a.type !== "team_lead");
+  
+  const activeProjects = projects.filter(p => p.status === 1 || p.status === 2);
+  const activeTasks = tasks.filter(t => t.status === 1 || t.status === 2).sort((a,b) => b.priority - a.priority);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -207,152 +377,210 @@ export default function TeamDetailPage() {
       </Link>
 
       {/* ── Page header ────────────────────────────────────────────────── */}
-      <div className="mb-8 flex items-start gap-4">
-        <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl text-3xl shadow-sm bg-primary/10">
-          {team.icon ?? <Layers className="size-7 text-primary" />}
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4 min-w-0 flex-1">
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl text-3xl shadow-sm bg-primary/10">
+            {team.icon ?? <Layers className="size-7 text-primary" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground truncate">{team.name}</h1>
+            {team.mission && (
+              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{team.mission}</p>
+            )}
+            {team.template && (
+              <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground capitalize">
+                {team.template === "starter" ? "🧩" : team.template === "engineering" ? "💻" : "🎧"} {team.template}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">{team.name}</h1>
-          {team.mission && (
-            <p className="mt-1 text-sm text-muted-foreground">{team.mission}</p>
-          )}
-          {team.template && (
-            <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground capitalize">
-              {team.template === "starter" ? "🧩" : team.template === "engineering" ? "💻" : "🎧"} {team.template}
-            </span>
-          )}
+
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={`/teams/${teamId}/general`}
+            id="header-nav-general"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent hover:text-foreground active:scale-95"
+          >
+            <Settings2 className="size-3.5" />
+            <span className="hidden sm:inline">Settings</span>
+          </Link>
+          <Link
+            href={`/teams/${teamId}/integrations`}
+            id="header-nav-integrations"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent hover:text-foreground active:scale-95"
+          >
+            <Zap className="size-3.5" />
+            <span className="hidden sm:inline">Integrations</span>
+          </Link>
         </div>
       </div>
 
-      {/* ── 3-column layout ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* ── Team Agents ────────────────────────────────────────────────── */}
+      <section id="team-agents" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <SectionTitle icon={Bot} label="Agents" />
+          <Link
+            href={`/teams/${teamId}/agents/new`}
+            id="new-agent-btn"
+            className="flex items-center gap-2 rounded-xl border border-primary/50 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-all hover:bg-primary hover:text-primary-foreground hover:shadow-md active:scale-95"
+          >
+            <Plus className="size-3.5" />
+            New Agent
+          </Link>
+        </div>
 
-        {/* ── LEFT COLUMN: Agents + placeholders ── */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
+        {agents.length === 0 ? (
+          <div className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-5 py-6">
+            <Bot className="size-5 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">No agents on this team yet.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {/* Team lead first, prominent */}
+            {teamLead && (
+              <AgentCard
+                agent={teamLead}
+                onClick={() => router.push(`/agents/${teamLead.id}`)}
+              />
+            )}
 
-          {/* Agents section */}
-          <section id="team-agents" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <SectionTitle icon={Bot} label="Agents" />
-
-            {agents.length === 0 ? (
-              <div className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-5 py-6">
-                <Bot className="size-5 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No agents on this team yet.</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {/* Team lead first, prominent */}
-                {teamLead && (
-                  <AgentCard
-                    agent={teamLead}
-                    onClick={() => router.push(`/agents/${teamLead.id}`)}
-                  />
-                )}
-
-                {/* Separator */}
-                {teamLead && otherAgents.length > 0 && (
-                  <div className="flex items-center gap-2 px-1">
-                    <div className="h-px flex-1 bg-border" />
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Team</span>
-                    <div className="h-px flex-1 bg-border" />
-                  </div>
-                )}
-
-                {/* Rest of agents */}
-                {otherAgents.map((agent) => (
-                  <AgentCard
-                    key={agent.id}
-                    agent={agent}
-                    onClick={() => router.push(`/agents/${agent.id}`)}
-                  />
-                ))}
+            {/* Separator */}
+            {teamLead && otherAgents.length > 0 && (
+              <div className="flex items-center gap-2 px-1">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Team</span>
+                <div className="h-px flex-1 bg-border" />
               </div>
             )}
-          </section>
 
-          {/* Active Projects — placeholder */}
-          <section id="team-projects" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <SectionTitle icon={FolderKanban} label="Active Projects" />
-            <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/10 py-10 text-center">
-              <FolderKanban className="size-8 text-muted-foreground/30" />
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">No active projects</p>
-                <p className="text-xs text-muted-foreground/60 mt-0.5">Projects will appear here once your team starts working.</p>
-              </div>
-            </div>
-          </section>
-
-          {/* Recent Activity — placeholder */}
-          <section id="team-activity" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <SectionTitle icon={Activity} label="Recent Activity" />
-            <div className="flex flex-col gap-3">
-              {/* Skeleton placeholder rows */}
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/10 px-4 py-3">
-                  <div className="size-6 rounded-full bg-muted animate-pulse" />
-                  <div className="flex-1 flex flex-col gap-1.5">
-                    <div className="h-2.5 rounded bg-muted animate-pulse" style={{ width: `${60 + i * 10}%` }} />
-                    <div className="h-2 rounded bg-muted animate-pulse" style={{ width: `${30 + i * 5}%` }} />
-                  </div>
-                  <div className="h-2 w-10 rounded bg-muted animate-pulse" />
-                </div>
-              ))}
-              <p className="text-center text-xs text-muted-foreground/50 pt-1">
-                Activity feed coming soon
-              </p>
-            </div>
-          </section>
-        </div>
-
-        {/* ── RIGHT COLUMN: Nav cards ── */}
-        <div className="flex flex-col gap-4">
-
-          {/* General Settings card */}
-          <Link href={`/teams/${teamId}/general`} id="nav-general-settings"
-            className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 transition-transform group-hover:scale-105">
-              <Settings2 className="size-5 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">General Settings</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Name, emoji, mission, ways of working</p>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-          </Link>
-
-          {/* Integrations card */}
-          <Link href={`/teams/${teamId}/integrations`} id="nav-integrations"
-            className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 transition-transform group-hover:scale-105">
-              <Zap className="size-5 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Integrations</p>
-              <p className="text-xs text-muted-foreground mt-0.5">GitHub, Linear, Jira, Notion and more</p>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-          </Link>
-
-          {/* Quick info card */}
-          <div className="rounded-2xl border border-border bg-muted/20 px-5 py-4 text-xs text-muted-foreground flex flex-col gap-2">
-            <div className="flex justify-between">
-              <span className="font-medium">Agents</span>
-              <span className="font-bold text-foreground">{agents.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-medium">Template</span>
-              <span className="font-bold text-foreground capitalize">{team.template ?? "starter"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-medium">Created</span>
-              <span className="font-bold text-foreground">
-                {new Date(team.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </span>
-            </div>
+            {/* Rest of agents */}
+            {otherAgents.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                onClick={() => router.push(`/agents/${agent.id}`)}
+              />
+            ))}
           </div>
+        )}
+      </section>
 
-        </div>
+
+      {/* ── Bottom rows: Projects & Activity ──────────────────────────── */}
+      <div className="flex flex-col gap-6 mt-6">
+        
+        {/* Active Work (Combined Projects & Tasks) */}
+        <section id="team-projects" className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          <div className="p-6 pb-2">
+            <SectionTitle icon={FolderKanban} label="Active Work" />
+          </div>
+          
+          <div className="px-3 pb-6">
+            {/* Projects Section */}
+            {activeProjects.length > 0 && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between py-2 px-3">
+                   <div className="flex items-center gap-2">
+                     <ChevronDown className="size-3 text-muted-foreground/50" />
+                     <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Projects</h3>
+                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">{activeProjects.length}</span>
+                   </div>
+                   <button className="text-muted-foreground hover:text-foreground transition-colors">
+                     <Plus className="size-3.5" />
+                   </button>
+                </div>
+                
+                <div className="space-y-0.5">
+                  {(showAllProjects ? activeProjects : activeProjects.slice(0, 3)).map(p => (
+                    <ProjectListItem key={p.id} project={p} />
+                  ))}
+                </div>
+                
+                {activeProjects.length > 3 && (
+                  <button 
+                    onClick={() => setShowAllProjects(!showAllProjects)}
+                    className="mt-1 w-full py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/30 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    {showAllProjects ? (
+                      <>Show less <ChevronUp className="size-3" /></>
+                    ) : (
+                      <>See {activeProjects.length - 3} more projects <ChevronDown className="size-3" /></>
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
+            
+            {/* Tasks Section */}
+            {activeTasks.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between py-2 px-3">
+                   <div className="flex items-center gap-2">
+                     <ChevronDown className="size-3 text-muted-foreground/50" />
+                     <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Tasks</h3>
+                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">{activeTasks.length}</span>
+                   </div>
+                   <button className="text-muted-foreground hover:text-foreground transition-colors">
+                     <Plus className="size-3.5" />
+                   </button>
+                </div>
+                
+                <div className="space-y-0.5">
+                  {(showAllTasks ? activeTasks : activeTasks.slice(0, 3)).map(t => (
+                    <TaskListItem key={t.id} task={t} />
+                  ))}
+                </div>
+                
+                {activeTasks.length > 3 && (
+                  <button 
+                    onClick={() => setShowAllTasks(!showAllTasks)}
+                    className="mt-1 w-full py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/30 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    {showAllTasks ? (
+                      <>Show less <ChevronUp className="size-3" /></>
+                    ) : (
+                      <>See {activeTasks.length - 3} more tasks <ChevronDown className="size-3" /></>
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Empty State */}
+            {activeProjects.length === 0 && activeTasks.length === 0 && (
+              <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+                <FolderKanban className="size-8 text-muted-foreground/30" />
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">No active work</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Projects and tasks will appear here once your team starts working.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Recent Activity — placeholder */}
+        <section id="team-activity" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <SectionTitle icon={Activity} label="Recent Activity" className="mb-4" />
+          <div className="flex flex-col gap-3">
+            {/* Skeleton placeholder rows */}
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/10 px-4 py-3">
+                <div className="size-6 rounded-full bg-muted animate-pulse" />
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <div className="h-2.5 rounded bg-muted animate-pulse" style={{ width: `${60 + i * 10}%` }} />
+                  <div className="h-2 rounded bg-muted animate-pulse" style={{ width: `${30 + i * 5}%` }} />
+                </div>
+                <div className="h-2 w-10 rounded bg-muted animate-pulse" />
+              </div>
+            ))}
+            <p className="text-center text-xs text-muted-foreground/50 pt-1">
+              Activity feed coming soon
+            </p>
+          </div>
+        </section>
       </div>
+
     </div>
   );
 }

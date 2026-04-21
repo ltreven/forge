@@ -1,5 +1,11 @@
 # TOOLS
 
+> [!CAUTION]
+> **CRITICAL RUNTIME WARNING**: You are in a restricted container.
+> - **DO NOT** attempt to use `systemctl`, `systemd`, or `openclaw plugin` commands.
+> - **DO NOT** attempt to use MCP for Project Management.
+> - **PROJECT DATA**: Use the Forge REST API (via `curl`) or any other project management tools described in this document for all project/task work.
+
 ## Task Management
 
 - Read and interpret the Kanban/project board
@@ -81,7 +87,7 @@ Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN
 
 **Base URL:** (inside the cluster)
 ```
-http://forge-api.forge-system.svc.cluster.local:4000
+http://forge-api.forge.svc.cluster.local:4000
 ```
 
 ---
@@ -212,18 +218,18 @@ View a chronological log of all project-level changes made by your team.
 
 ```bash
 # Create a project
-curl -s -X POST http://forge-api.forge-system.svc.cluster.local:4000/project-management/projects \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Q3 Migration","health":"unknown","status":1,"priority":2}'
 
 # Create a kanban task
-curl -s -X POST http://forge-api.forge-system.svc.cluster.local:4000/project-management/tasks \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/tasks \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Update dependencies","priority":1}'
 
 # List my team tasks
-curl -s http://forge-api.forge-system.svc.cluster.local:4000/project-management/tasks \
+curl -s http://forge-api.forge.svc.cluster.local:4000/project-management/tasks \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN"
 ```

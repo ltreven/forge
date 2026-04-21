@@ -100,6 +100,18 @@ async function mgmtRequest(
   return { ok: response.ok, status: response.status, text };
 }
 
+/**
+ * Checks if the RabbitMQ Management API is ready and responding.
+ */
+export async function checkManagementApiReady(): Promise<boolean> {
+  try {
+    const res = await mgmtRequest("GET", "overview");
+    return res.ok;
+  } catch (err) {
+    return false;
+  }
+}
+
 // ── Tenant provisioning ───────────────────────────────────────────────────────
 
 /**

@@ -93,14 +93,27 @@ app.listen(PORT, HOST, () => {
   // cluster restarts (e.g. tilt down && tilt up) before provisioning starts.
   // Idempotent — safe to run on every startup, even if tenants already exist.
   if (process.env.DISABLE_RABBIT_STARTUP_REPROVISION !== "true") {
-    const delayMs = Number(process.env.RABBIT_STARTUP_DELAY_MS ?? 15_000);
+    const delayMs = Number(process.env.RABBIT_STARTUP_DELAY_MS ?? 30_000);
     setTimeout(async () => {
       try {
-        const { provisionTenant }             = await import("./lib/rabbitmq");
+        const { provisionTenant, checkManagementApiReady } = await import("./lib/rabbitmq");
         const { applyRabbitMQCredentialsSecret, rolloutRestartDeployment } = await import("./k8s/provisioner");
         const { db }                          = await import("./db/client");
         const { workspaces, agents, teams }   = await import("./db/schema");
         const { eq }                          = await import("drizzle-orm");
+
+        let apiReady = false;
+        for (let attempt = 1; attempt <= 6; attempt++) {
+          apiReady = await checkManagementApiReady();
+          if (apiReady) break;
+          console.warn(`[startup] RabbitMQ Management API not ready. Retrying in 10s... (Attempt ${attempt}/6)`);
+          await new Promise(r => setTimeout(r, 10_000));
+        }
+
+        if (!apiReady) {
+          console.error("[startup] RabbitMQ Management API failed to become ready. Skipping reprovision.");
+          return;
+        }
 
         const allWorkspaces = await db.select().from(workspaces);
         let provisioned = 0;

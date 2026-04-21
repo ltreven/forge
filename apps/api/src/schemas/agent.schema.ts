@@ -3,6 +3,7 @@ import { z } from "zod";
 // ── Agent type enum ───────────────────────────────────────────────────────────
 
 export const agentTypeSchema = z.enum([
+  "team_lead",
   "software_engineer",
   "product_manager",
   "software_architect",
