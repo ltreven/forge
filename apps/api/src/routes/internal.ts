@@ -1,8 +1,10 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { agents } from "../db/schema";
+import { agents, teams, workspaces } from "../db/schema";
 import { success, failure } from "../lib/response";
+import { applyRabbitMQCredentialsSecret, rolloutRestartDeployment } from "../k8s/provisioner";
+import { provisionTenant } from "../lib/rabbitmq";
 
 /**
  * Internal routes — NOT exposed via the external Ingress.
@@ -45,6 +47,124 @@ internalRouter.patch(
       }
 
       res.json(success({ id: updated.id, k8sStatus: updated.k8sStatus }));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /internal/workspaces/:id/reprovision-rabbit
+ *
+ * Idempotent endpoint to (re-)provision the RabbitMQ tenant for a workspace.
+ *
+ * Use case: called automatically at startup (see below) or manually when
+ * RabbitMQ was not ready at workspace creation time (e.g. after `tilt down && tilt up`).
+ *
+ * Steps:
+ *  1. Provisions vhost / user / exchange in RabbitMQ (idempotent).
+ *  2. Upserts the `rabbitmq-credentials` Secret in the workspace namespace.
+ *  3. Rolling-restarts all agent Deployments in the namespace so pods pick up the new env vars.
+ *
+ * Returns: { workspaceId, namespace, agentsRestarted: number }
+ */
+internalRouter.post(
+  "/workspaces/:id/reprovision-rabbit",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const workspaceId = String(req.params.id);
+
+      const [workspace] = await db
+        .select()
+        .from(workspaces)
+        .where(eq(workspaces.id, workspaceId));
+
+      if (!workspace) {
+        res.status(404).json(failure("Workspace not found"));
+        return;
+      }
+
+      if (!workspace.k8sNamespace) {
+        res.status(400).json(failure("Workspace has no Kubernetes namespace — not yet provisioned"));
+        return;
+      }
+
+      // 1. Provision (or re-provision) the RabbitMQ tenant
+      const creds = await provisionTenant(workspaceId);
+      console.log(`[internal] RabbitMQ tenant (re-)provisioned for workspace ${workspaceId}`);
+
+      // 2. Upsert the rabbitmq-credentials Secret in the workspace namespace
+      await applyRabbitMQCredentialsSecret(workspace.k8sNamespace, creds);
+      console.log(`[internal] rabbitmq-credentials Secret upserted in ${workspace.k8sNamespace}`);
+
+      // 3. Rolling-restart all agents in the workspace so they pick up the new creds
+      const workspaceAgents = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .innerJoin(teams, eq(teams.id, agents.teamId))
+        .where(eq(teams.workspaceId, workspaceId));
+
+      let agentsRestarted = 0;
+      for (const agent of workspaceAgents) {
+        try {
+          await rolloutRestartDeployment(workspace.k8sNamespace, agent.id);
+          agentsRestarted++;
+        } catch (err) {
+          // Non-fatal: agent may not be deployed yet
+          console.warn(`[internal] rollout restart failed for agent ${agent.id} (skipped):`, err);
+        }
+      }
+
+      console.log(`[internal] Rolling-restarted ${agentsRestarted} agents in ${workspace.k8sNamespace}`);
+
+      res.json(success({
+        workspaceId,
+        namespace: workspace.k8sNamespace,
+        agentsRestarted,
+      }));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /internal/startup/reprovision-all-rabbit
+ *
+ * Startup safety net — called by the API process itself on boot (see index.ts).
+ * Re-provisions RabbitMQ tenants for every workspace that already has a K8s namespace
+ * but whose tenant may have been lost (e.g. after `tilt down && tilt up`).
+ *
+ * Idempotent and non-fatal: errors per workspace are logged but do not abort the loop.
+ * Does NOT restart pods — the caller (startup hook) handles that if needed.
+ *
+ * Returns a summary of what was (re-)provisioned.
+ */
+internalRouter.post(
+  "/startup/reprovision-all-rabbit",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const allWorkspaces = await db
+        .select()
+        .from(workspaces)
+        .where(eq(workspaces.k8sNamespace, workspaces.k8sNamespace)); // all with non-null namespace
+
+      const results: Array<{ workspaceId: string; status: string; error?: string }> = [];
+
+      for (const ws of allWorkspaces) {
+        if (!ws.k8sNamespace) continue;
+        try {
+          const creds = await provisionTenant(ws.id);
+          await applyRabbitMQCredentialsSecret(ws.k8sNamespace, creds);
+          results.push({ workspaceId: ws.id, status: "ok" });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[internal/startup] RabbitMQ reprovision failed for workspace ${ws.id}:`, msg);
+          results.push({ workspaceId: ws.id, status: "error", error: msg });
+        }
+      }
+
+      res.json(success({ reprovisioned: results }));
     } catch (err) {
       next(err);
     }

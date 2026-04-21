@@ -86,7 +86,62 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 
 app.listen(PORT, HOST, () => {
   console.log(`🚀 Forge API running on http://${HOST}:${PORT}`);
+
+  // ── Startup: RabbitMQ tenant safety net ──────────────────────────────────
+  // Re-provisions RabbitMQ vhosts/users/secrets for all existing workspaces.
+  // Runs after a short delay to give RabbitMQ time to become ready after
+  // cluster restarts (e.g. tilt down && tilt up) before provisioning starts.
+  // Idempotent — safe to run on every startup, even if tenants already exist.
+  if (process.env.DISABLE_RABBIT_STARTUP_REPROVISION !== "true") {
+    const delayMs = Number(process.env.RABBIT_STARTUP_DELAY_MS ?? 15_000);
+    setTimeout(async () => {
+      try {
+        const { provisionTenant }             = await import("./lib/rabbitmq");
+        const { applyRabbitMQCredentialsSecret, rolloutRestartDeployment } = await import("./k8s/provisioner");
+        const { db }                          = await import("./db/client");
+        const { workspaces, agents, teams }   = await import("./db/schema");
+        const { eq }                          = await import("drizzle-orm");
+
+        const allWorkspaces = await db.select().from(workspaces);
+        let provisioned = 0;
+        let failed = 0;
+
+        for (const ws of allWorkspaces) {
+          if (!ws.k8sNamespace) continue;
+          try {
+            const creds = await provisionTenant(ws.id);
+            await applyRabbitMQCredentialsSecret(ws.k8sNamespace, creds);
+
+            // Restart any agents whose consumer has been retrying (no connection yet)
+            const wsAgents = await db
+              .select({ id: agents.id })
+              .from(agents)
+              .innerJoin(teams, eq(teams.id, agents.teamId))
+              .where(eq(teams.workspaceId, ws.id));
+
+            for (const agent of wsAgents) {
+              try {
+                await rolloutRestartDeployment(ws.k8sNamespace, agent.id);
+              } catch {
+                // Pod may not exist yet — non-fatal
+              }
+            }
+            provisioned++;
+            console.log(`[startup] RabbitMQ re-provisioned for workspace ${ws.id}`);
+          } catch (err) {
+            failed++;
+            console.warn(`[startup] RabbitMQ reprovision failed for workspace ${ws.id}:`, err instanceof Error ? err.message : err);
+          }
+        }
+
+        console.log(`[startup] RabbitMQ reprovision complete — ok: ${provisioned}, failed: ${failed}`);
+      } catch (err) {
+        console.error("[startup] RabbitMQ reprovision hook crashed:", err);
+      }
+    }, delayMs);
+  }
 });
 
 
 export default app;
+
