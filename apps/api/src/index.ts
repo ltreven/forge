@@ -10,6 +10,7 @@ import { internalRouter } from "./routes/internal";
 import { errorHandler } from "./middleware/errorHandler";
 import { projectManagementRouter } from "./routes/project-management";
 import { teamManagementRouter } from "./routes/team-management";
+import { projectsRouter } from "./routes/projects";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -78,6 +79,11 @@ app.use("/project-management", projectManagementRouter);
  */
 app.use("/team-management", teamManagementRouter);
 app.use("/team-api", teamManagementRouter);
+
+/**
+ * Project management for human users.
+ */
+app.use("/projects", projectsRouter);
 
 // Nested: /teams/:id/integrations
 app.use("/teams/:id/integrations", integrationsRouter);

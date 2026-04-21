@@ -246,11 +246,11 @@ function getShorthandId(prefix: string, id: string) {
 
 function ItemRow({ 
   id, prefix, title, status, priority, updatedAt, assignedToId, 
-  level = 0, children, agents 
+  level = 0, children, agents, href
 }: { 
   id: string; prefix: string; title: string; status: number; 
   priority: number; updatedAt: string; assignedToId?: string | null;
-  level?: number; children?: React.ReactNode; agents: Agent[]
+  level?: number; children?: React.ReactNode; agents: Agent[]; href?: string;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const assignee = agents.find(a => a.id === assignedToId);
@@ -267,7 +267,7 @@ function ItemRow({
       >
         <div className="flex items-center gap-1.5 shrink-0">
           {hasChildren ? (
-            <button className="p-0.5 hover:bg-muted rounded transition-colors">
+            <button className="p-0.5 hover:bg-muted rounded transition-colors" onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}>
               {isExpanded ? <ChevronDown className="size-3 text-muted-foreground" /> : <ChevronRight className="size-3 text-muted-foreground" />}
             </button>
           ) : (
@@ -281,9 +281,19 @@ function ItemRow({
         <StatusIcon status={status} />
         
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <p className={cn("text-sm font-medium truncate", status === 4 ? "text-muted-foreground line-through" : "text-foreground")}>
-            {title}
-          </p>
+          {href ? (
+            <Link 
+              href={href} 
+              className={cn("text-sm font-medium truncate hover:underline", status === 4 ? "text-muted-foreground line-through" : "text-foreground")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {title}
+            </Link>
+          ) : (
+            <p className={cn("text-sm font-medium truncate", status === 4 ? "text-muted-foreground line-through" : "text-foreground")}>
+              {title}
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -312,7 +322,8 @@ function ItemRow({
 
 function ProjectListItem({ project, issues, agents }: { project: Project, issues: ProjectIssue[], agents: Agent[] }) {
   const projectIssues = issues.filter(i => i.projectId === project.id && !i.parentIssueId);
-  const lead = agents.find(a => a.id === project.leadId);
+  const params = useParams();
+  const teamId = String(params.id);
 
   return (
     <ItemRow 
@@ -320,6 +331,7 @@ function ProjectListItem({ project, issues, agents }: { project: Project, issues
       status={project.status} priority={project.priority} 
       updatedAt={project.updatedAt} assignedToId={project.leadId}
       agents={agents}
+      href={`/teams/${teamId}/projects/${project.id}`}
     >
       {projectIssues.map(issue => (
         <IssueItem key={issue.id} issue={issue} allIssues={issues} agents={agents} level={1} />
