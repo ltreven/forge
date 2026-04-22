@@ -20,17 +20,16 @@ import {
   Flame,
   LayoutGrid,
   ListTodo,
-  Calendar,
   User,
   Save,
-  MoreHorizontal,
   Trash2,
-  MessageSquare
+  MessageSquare,
+  FolderKanban
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { Project, ProjectIssue, Agent, Comment } from "@/lib/types";
+import { Team, Project, ProjectIssue, Agent, Comment } from "@/lib/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -67,13 +66,93 @@ function StatusIcon({ status }: { status: number }) {
 
 function PriorityIcon({ priority, className }: { priority: number; className?: string }) {
   switch (priority) {
-    case 0: return <Circle className={cn("size-3.5 text-muted-foreground/20", className)} />;
-    case 1: return <SignalLow className={cn("size-3.5 text-blue-500/70", className)} />;
-    case 2: return <SignalMedium className={cn("size-3.5 text-amber-500/70", className)} />;
-    case 3: return <SignalHigh className={cn("size-3.5 text-orange-500", className)} />;
-    case 4: return <Flame className={cn("size-3.5 text-red-500", className)} />;
+    case 0: return <Circle className={cn("size-3 text-muted-foreground/20", className)} />;
+    case 1: return <SignalLow className={cn("size-3 text-blue-500/70", className)} />;
+    case 2: return <SignalMedium className={cn("size-3 text-amber-500/70", className)} />;
+    case 3: return <SignalHigh className={cn("size-3 text-orange-500", className)} />;
+    case 4: return <Flame className={cn("size-3 text-red-500", className)} />;
     default: return null;
   }
+}
+
+function CommentsList({ 
+  comments, agents, onDelete 
+}: { 
+  comments: Comment[]; 
+  agents: Agent[]; 
+  onDelete: (id: string) => void 
+}) {
+  const { user } = useAuth();
+
+  if (comments.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {comments.map((c) => {
+        const isHuman = c.actorType === "human";
+        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
+        const canDelete = isHuman && c.actorId === user?.userId;
+
+        return (
+          <div key={c.id} className="group flex gap-3">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
+              {isHuman ? "👤" : (agent?.icon || "🤖")}
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-foreground">
+                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/60">
+                    {new Date(c.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                {canDelete && (
+                  <button 
+                    onClick={() => onDelete(c.id)}
+                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                {c.content}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Button({ 
+  className, variant, size, ...props 
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
+  variant?: "primary" | "outline" | "destructive"; 
+  size?: "sm" | "md" 
+}) {
+  return (
+    <button
+      className={cn(
+        "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
+        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
+        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
+        "bg-primary text-primary-foreground hover:opacity-90",
+        size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
+        className
+      )}
+      {...props}
+    />
+  );
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -150,47 +229,47 @@ export default function ProjectPage() {
   }, [authLoading, loadData]);
 
   const handleSaveProject = async () => {
-      if (!project || isSaving) return;
-      setIsSaving(true);
-      try {
-        const res = await fetch(`${API_BASE}/projects/${projectId}`, {
-          method: "PUT",
-          headers: headers(),
-          body: JSON.stringify({
-            title,
-            descriptionMarkdown: description,
-            status,
-            priority
-          }),
-        });
+    if (!project || isSaving) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+        method: "PUT",
+        headers: headers(),
+        body: JSON.stringify({
+          title,
+          descriptionMarkdown: description,
+          status,
+          priority
+        }),
+      });
 
-        if (!res.ok) throw new Error();
-        const updated = (await res.json()).data;
-        setProject(updated);
-        toast.success("Project updated successfully");
-      } catch {
-        toast.error("Failed to save project changes");
-      } finally {
-        setIsSaving(false);
-      }
-    };
+      if (!res.ok) throw new Error();
+      const updated = (await res.json()).data;
+      setProject(updated);
+      toast.success("Project updated successfully");
+    } catch {
+      toast.error("Failed to save project changes");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-    const handleDeleteProject = async () => {
-      if (!project) return;
-      if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) return;
-
-      try {
-        const res = await fetch(`${API_BASE}/projects/${projectId}`, {
-          method: "DELETE",
-          headers: headers(),
-        });
-        if (!res.ok) throw new Error();
-        toast.success("Project deleted");
-        router.replace(`/teams/${teamId}`);
-      } catch {
-        toast.error("Failed to delete project");
-      }
-    };
+  const handleDeleteProject = async () => {
+    if (!project) return;
+    if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) return;
+    
+    try {
+      const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Project deleted");
+      router.replace(`/teams/${teamId}`);
+    } catch {
+      toast.error("Failed to delete project");
+    }
+  };
 
   const handleCreateIssue = async (targetStatus: number) => {
     const issueTitle = prompt("Issue title:");
@@ -203,7 +282,7 @@ export default function ProjectPage() {
         body: JSON.stringify({
           title: issueTitle,
           status: targetStatus,
-          priority: 1 // Default
+          priority: 1 
         }),
       });
 
@@ -213,20 +292,6 @@ export default function ProjectPage() {
       toast.success("Issue created");
     } catch {
       toast.error("Failed to create issue");
-    }
-  };
-
-  const handleUpdateIssueStatus = async (id: string, newStatus: number) => {
-    try {
-      const res = await fetch(`${API_BASE}/projects/issues/${id}`, {
-        method: "PUT",
-        headers: headers(),
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!res.ok) throw new Error();
-      setIssues(p => p.map(i => i.id === id ? { ...i, status: newStatus } : i));
-    } catch {
-      toast.error("Failed to update issue");
     }
   };
 
@@ -320,7 +385,6 @@ export default function ProjectPage() {
           
           {/* ── Left Column: Details ────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Title & Description */}
             <div className="space-y-4">
               <input
                 type="text"
@@ -341,7 +405,6 @@ export default function ProjectPage() {
                   placeholder="Add a detailed description for the agents..."
                   className="min-h-[300px] w-full resize-none rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground outline-none transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                 />
-                <p className="text-[10px] text-muted-foreground">Markdown is supported and interpreted by the agents.</p>
               </div>
             </div>
 
@@ -377,65 +440,6 @@ export default function ProjectPage() {
               </div>
             </div>
           </div>
-...
-function CommentsList({ 
-  comments, agents, onDelete 
-}: { 
-  comments: Comment[]; 
-  agents: Agent[]; 
-  onDelete: (id: string) => void 
-}) {
-  const { user } = useAuth();
-
-  if (comments.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {comments.map((c) => {
-        const isHuman = c.actorType === "human";
-        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
-        const canDelete = isHuman && c.actorId === user?.userId;
-
-        return (
-          <div key={c.id} className="group flex gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
-              {isHuman ? "👤" : (agent?.icon || "🤖")}
-            </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground">
-                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/60">
-                    {new Date(c.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                {canDelete && (
-                  <button 
-                    onClick={() => onDelete(c.id)}
-                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {c.content}
-              </p>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
           {/* ── Right Column: Sidebar ───────────────────────────────────── */}
           <div className="space-y-6">
@@ -443,7 +447,6 @@ function CommentsList({
               <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Properties</h3>
               
               <div className="space-y-4">
-                {/* Status Picker */}
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Status</label>
                   <select 
@@ -457,7 +460,6 @@ function CommentsList({
                   </select>
                 </div>
 
-                {/* Priority Picker */}
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Priority</label>
                   <select 
@@ -473,7 +475,6 @@ function CommentsList({
 
                 <div className="h-px bg-border my-2" />
 
-                {/* Health Display */}
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Health</label>
                   <div className="flex items-center gap-1.5">
@@ -518,11 +519,11 @@ function CommentsList({
           </div>
         </div>
 
-        {/* ── Issues List (Simple Grouped View) ─────────────────────────── */}
+        {/* ── Issues List ─────────────────────────── */}
         <div className="mt-16 space-y-8">
           <div className="flex items-center justify-between">
              <div className="flex items-center gap-2">
-               <LayoutGrid className="size-5 text-primary" />
+               <FolderKanban className="size-5 text-primary" />
                <h2 className="text-xl font-bold tracking-tight">Project Issues</h2>
              </div>
           </div>
@@ -591,7 +592,7 @@ function CommentsList({
   );
 }
 
-// ── UI Components (Mocked from Shadcn) ─────────────────────────────────────────
+// ── UI Components ───────────────────────────────────────────────────────────
 
 function Button({ 
   className, variant, size, ...props 

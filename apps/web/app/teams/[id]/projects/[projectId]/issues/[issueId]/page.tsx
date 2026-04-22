@@ -20,12 +20,11 @@ import {
   Flame,
   LayoutGrid,
   ListTodo,
-  Calendar,
   User,
   Save,
-  MoreHorizontal,
   Target,
-  Trash2
+  Trash2,
+  MessageSquare
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
@@ -76,10 +75,90 @@ function PriorityIcon({ priority, className }: { priority: number; className?: s
   }
 }
 
+function CommentsList({ 
+  comments, agents, onDelete 
+}: { 
+  comments: Comment[]; 
+  agents: Agent[]; 
+  onDelete: (id: string) => void 
+}) {
+  const { user } = useAuth();
+
+  if (comments.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {comments.map((c) => {
+        const isHuman = c.actorType === "human";
+        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
+        const canDelete = isHuman && c.actorId === user?.userId;
+
+        return (
+          <div key={c.id} className="group flex gap-3">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
+              {isHuman ? "👤" : (agent?.icon || "🤖")}
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-foreground">
+                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/60">
+                    {new Date(c.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                {canDelete && (
+                  <button 
+                    onClick={() => onDelete(c.id)}
+                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                {c.content}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Button({ 
+  className, variant, size, ...props 
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
+  variant?: "primary" | "outline" | "destructive"; 
+  size?: "sm" | "md" 
+}) {
+  return (
+    <button
+      className={cn(
+        "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
+        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
+        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
+        "bg-primary text-primary-foreground hover:opacity-90",
+        size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function IssuePage() {
-  const { user, token, isLoading: authLoading } = useAuth();
+  const { token, isLoading: authLoading } = useAuth();
   const params = useParams();
   const router = useRouter();
   
@@ -116,7 +195,7 @@ export default function IssuePage() {
     Promise.all([
       fetch(`${API_BASE}/projects/${projectId}`, { headers: headers() }),
       fetch(`${API_BASE}/projects/issues/${issueId}`, { headers: headers() }),
-      fetch(`${API_BASE}/projects/${projectId}/issues`, { headers: headers() }), // To find sub-issues
+      fetch(`${API_BASE}/projects/${projectId}/issues`, { headers: headers() }),
       fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers: headers() }),
       fetch(`${API_BASE}/projects/issues/${issueId}/comments`, { headers: headers() }),
     ])
@@ -130,7 +209,7 @@ export default function IssuePage() {
         const i: ProjectIssue = (await issueRes.json()).data;
         const all: ProjectIssue[] = (await allIssuesRes.json()).data ?? [];
         const a: Agent[] = (await agentsRes.json()).data ?? [];
-        const c: Comment[] = commentsRes.ok ? (await commentsRes.json()).data ?? [] : [];
+        const c: Comment[] = (await commentsRes.json()).data ?? [];
 
         setProject(p);
         setIssue(i);
@@ -157,83 +236,47 @@ export default function IssuePage() {
   }, [authLoading, loadData]);
 
   const handleSaveIssue = async () => {
-  if (!issue || isSaving) return;
-  setIsSaving(true);
-  try {
-    const res = await fetch(`${API_BASE}/projects/issues/${issueId}`, {
-      method: "PUT",
-      headers: headers(),
-      body: JSON.stringify({
-        title,
-        descriptionMarkdown: description,
-        status,
-        priority,
-        assignedToId
-      }),
-    });
+    if (!issue || isSaving) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/projects/issues/${issueId}`, {
+        method: "PUT",
+        headers: headers(),
+        body: JSON.stringify({
+          title,
+          descriptionMarkdown: description,
+          status,
+          priority,
+          assignedToId
+        }),
+      });
 
-    if (!res.ok) throw new Error();
-    const updated = (await res.json()).data;
-    setIssue(updated);
-    toast.success("Issue updated successfully");
-  } catch {
-    toast.error("Failed to save issue changes");
-  } finally {
-    setIsSaving(false);
-  }
-};
-
-const handleDeleteIssue = async () => {
-  if (!issue) return;
-  if (!confirm("Are you sure you want to delete this issue? This action cannot be undone.")) return;
-
-  try {
-    const res = await fetch(`${API_BASE}/projects/issues/${issueId}`, {
-      method: "DELETE",
-      headers: headers(),
-    });
-    if (!res.ok) throw new Error();
-    toast.success("Issue deleted");
-    router.replace(`/teams/${teamId}/projects/${projectId}`);
-  } catch {
-    toast.error("Failed to delete issue");
-  }
+      if (!res.ok) throw new Error();
+      const updated = (await res.json()).data;
+      setIssue(updated);
+      toast.success("Issue updated successfully");
+    } catch {
+      toast.error("Failed to save issue changes");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handlePostComment = async () => {
-  if (!newComment.trim() || isPostingComment) return;
-  setIsPostingComment(true);
-  try {
-    const res = await fetch(`${API_BASE}/projects/issues/${issueId}/comments`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ content: newComment.trim() }),
-    });
-    if (!res.ok) throw new Error();
-    const comment = (await res.json()).data;
-    setComments(prev => [...prev, comment]);
-    setNewComment("");
-    toast.success("Comment posted");
-  } catch {
-    toast.error("Failed to post comment");
-  } finally {
-    setIsPostingComment(false);
-  }
-  };
-
-  const handleDeleteComment = async (commentId: string) => {
-  if (!confirm("Are you sure you want to delete this comment?")) return;
-  try {
-    const res = await fetch(`${API_BASE}/projects/comments/${commentId}`, {
-      method: "DELETE",
-      headers: headers(),
-    });
-    if (!res.ok) throw new Error();
-    setComments(prev => prev.filter(c => c.id !== commentId));
-    toast.success("Comment deleted");
-  } catch {
-    toast.error("Failed to delete comment");
-  }
+  const handleDeleteIssue = async () => {
+    if (!issue) return;
+    if (!confirm("Are you sure you want to delete this issue? This action cannot be undone.")) return;
+    
+    try {
+      const res = await fetch(`${API_BASE}/projects/issues/${issueId}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Issue deleted");
+      router.replace(`/teams/${teamId}/projects/${projectId}`);
+    } catch {
+      toast.error("Failed to delete issue");
+    }
   };
 
   const handleCreateSubIssue = async () => {
@@ -247,7 +290,7 @@ const handleDeleteIssue = async () => {
         body: JSON.stringify({
           title: subTitle,
           parentIssueId: issueId,
-          status: 1, // To Do
+          status: 1, 
           priority: 1
         }),
       });
@@ -271,8 +314,8 @@ const handleDeleteIssue = async () => {
         body: JSON.stringify({ content: newComment.trim() }),
       });
       if (!res.ok) throw new Error();
-      const c = (await res.json()).data;
-      setComments(prev => [...prev, c]);
+      const comment = (await res.json()).data;
+      setComments(prev => [...prev, comment]);
       setNewComment("");
       toast.success("Comment posted");
     } catch {
@@ -343,7 +386,6 @@ const handleDeleteIssue = async () => {
               Save Changes
             </Button>
           </div>
-
         </div>
       </div>
 
@@ -352,7 +394,6 @@ const handleDeleteIssue = async () => {
           
           {/* ── Left Column: Details ────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Title & Description */}
             <div className="space-y-4">
               <input
                 type="text"
@@ -373,7 +414,6 @@ const handleDeleteIssue = async () => {
                   placeholder="Add a detailed description for the agents..."
                   className="min-h-[250px] w-full resize-none rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground outline-none transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                 />
-                <p className="text-[10px] text-muted-foreground">Markdown is supported.</p>
               </div>
             </div>
 
@@ -459,7 +499,6 @@ const handleDeleteIssue = async () => {
               <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Properties</h3>
               
               <div className="space-y-4">
-                {/* Status Picker */}
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Status</label>
                   <select 
@@ -473,7 +512,6 @@ const handleDeleteIssue = async () => {
                   </select>
                 </div>
 
-                {/* Priority Picker */}
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Priority</label>
                   <select 
@@ -489,7 +527,6 @@ const handleDeleteIssue = async () => {
 
                 <div className="h-px bg-border my-2" />
 
-                {/* Assignee Picker */}
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Assignee</label>
                   <select 
@@ -531,88 +568,6 @@ const handleDeleteIssue = async () => {
           </div>
         </div>
       </main>
-    </div>
-  );
-}
-
-// ── UI Components (Mocked from Shadcn) ─────────────────────────────────────────
-
-function Button({ 
-  className, variant, size, ...props 
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "outline" | "destructive"; 
-  size?: "sm" | "md" 
-}) {
-  return (
-    <button
-      className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
-        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
-        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
-        "bg-primary text-primary-foreground hover:opacity-90",
-        size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function CommentsList({ 
-  comments, agents, onDelete 
-}: { 
-  comments: Comment[]; 
-  agents: Agent[]; 
-  onDelete: (id: string) => void 
-}) {
-  const { user } = useAuth();
-
-  if (comments.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {comments.map((c) => {
-        const isHuman = c.actorType === "human";
-        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
-        const canDelete = isHuman && c.actorId === user?.userId;
-
-        return (
-          <div key={c.id} className="group flex gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
-              {isHuman ? "👤" : (agent?.icon || "🤖")}
-            </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground">
-                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/60">
-                    {new Date(c.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                {canDelete && (
-                  <button 
-                    onClick={() => onDelete(c.id)}
-                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {c.content}
-              </p>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
