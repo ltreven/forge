@@ -478,7 +478,15 @@ export default function TeamDetailPage() {
       <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-4">
         <div className="lg:col-span-3 space-y-8">
           <section id="agents-grid">
-            <SectionTitle icon={Bot} label="Agents" className="mb-4" />
+            <div className="mb-4 flex items-center justify-between">
+              <SectionTitle icon={Bot} label="Agents" />
+              <Link
+                href={`/teams/${teamId}/agents/new`}
+                className="flex size-6 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
+              >
+                <Plus className="size-3.5" />
+              </Link>
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {teamLead && (
                 <AgentCard agent={teamLead} onClick={() => router.push(`/agents/${teamLead.id}`)} />
