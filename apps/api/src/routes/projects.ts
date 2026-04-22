@@ -274,3 +274,44 @@ projectsRouter.put("/tasks/:id", authMiddleware, async (req: Request, res: Respo
     next(err);
   }
 });
+
+/**
+ * POST /tasks
+ */
+projectsRouter.post("/tasks", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const input = createTaskSchema.parse(req.body);
+
+    const hasAccess = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+      .where(and(eq(workspaces.userId, userId), eq(teams.id, input.teamId)))
+      .limit(1);
+
+    if (hasAccess.length === 0) {
+      res.status(403).json(failure("Access denied to this team"));
+      return;
+    }
+
+    const [task] = await db
+      .insert(teamTasks)
+      .values({
+        teamId: input.teamId,
+        parentTaskId: input.parentTaskId ? String(input.parentTaskId) : null,
+        title: String(input.title),
+        shortSummary: input.shortSummary ? String(input.shortSummary) : null,
+        descriptionMarkdown: input.descriptionMarkdown ? String(input.descriptionMarkdown) : null,
+        descriptionRichText: input.descriptionRichText ?? null,
+        status: Number(input.status ?? 0),
+        priority: Number(input.priority ?? 0),
+        assignedToId: input.assignedToId ? String(input.assignedToId) : null,
+      })
+      .returning();
+
+    res.status(201).json(success(task));
+  } catch (err) {
+    next(err);
+  }
+});
