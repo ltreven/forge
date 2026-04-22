@@ -2,13 +2,19 @@
 
 ## Inspecting the Team
 
-### Get Team Metadata
+### Get Team Metadata (Intuitive)
 ```bash
-curl -s http://forge-api.forge.svc.cluster.local:4000/team-api/mine \
+curl -s http://forge-api.forge.svc.cluster.local:4000/team/info \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN"
 ```
 
-### List All Team Agents (Roster)
+### List All Team Members (Intuitive)
+```bash
+curl -s http://forge-api.forge.svc.cluster.local:4000/team/members \
+  -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN"
+```
+
+### Full Path (Alternative)
 ```bash
 curl -s http://forge-api.forge.svc.cluster.local:4000/team-api/agents \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN"
@@ -20,7 +26,7 @@ curl -s http://forge-api.forge.svc.cluster.local:4000/team-api/agents \
 Example: Provisioning a Software Architect to help with a complex design.
 
 ```bash
-curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/team-api/agents \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/team/members \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

@@ -65,6 +65,7 @@ app.use("/issues", projectManagementRouter);
  */
 app.use("/team-management", teamManagementRouter);
 app.use("/team-api", teamManagementRouter);
+app.use("/team", teamManagementRouter);
 
 /**
  * Project & Task management for humans — authenticated by user JWT.
