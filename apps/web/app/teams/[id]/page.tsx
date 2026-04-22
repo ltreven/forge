@@ -425,6 +425,38 @@ export default function TeamDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
 
+  const handleCreateProject = async () => {
+    const title = prompt("Project title:");
+    if (!title) return;
+    try {
+      const res = await fetch(`${API_BASE}/projects`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ teamId, title, status: 1, priority: 1 }),
+      });
+      if (!res.ok) throw new Error();
+      const newProj = (await res.json()).data;
+      setProjects(p => [...p, newProj]);
+      toast.success("Project created");
+    } catch { toast.error("Failed to create project"); }
+  };
+
+  const handleCreateStandaloneTask = async () => {
+    const title = prompt("Task title:");
+    if (!title) return;
+    try {
+      const res = await fetch(`${API_BASE}/projects/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ teamId, title, status: 1, priority: 1 }),
+      });
+      if (!res.ok) throw new Error();
+      const newTask = (await res.json()).data;
+      setTasks(p => [...p, newTask]);
+      toast.success("Task created");
+    } catch { toast.error("Failed to create task"); }
+  };
+
   // ── Guards ────────────────────────────────────────────────────────────────
 
 
@@ -597,7 +629,7 @@ export default function TeamDetailPage() {
                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Projects</h3>
                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">{filteredProjects.length}</span>
                    </div>
-                   <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={(e) => e.stopPropagation()}>
+                   <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={(e) => { e.stopPropagation(); handleCreateProject(); }}>
                      <Plus className="size-3.5" />
                    </button>
                 </div>
@@ -641,7 +673,7 @@ export default function TeamDetailPage() {
                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Tasks</h3>
                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">{filteredTasks.length}</span>
                    </div>
-                   <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={(e) => e.stopPropagation()}>
+                   <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={(e) => { e.stopPropagation(); handleCreateStandaloneTask(); }}>
                      <Plus className="size-3.5" />
                    </button>
                 </div>

@@ -13,6 +13,7 @@ export function errorHandler(
   _next: NextFunction
 ): void {
   if (err instanceof ZodError) {
+    console.warn("[validation_error]", JSON.stringify(err.flatten().fieldErrors, null, 2));
     res.status(400).json(failure("Validation error", err.flatten().fieldErrors));
     return;
   }

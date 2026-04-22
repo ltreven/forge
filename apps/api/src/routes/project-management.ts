@@ -77,6 +77,17 @@ async function assertAgentBelongsToTeam(
   return true;
 }
 
+/**
+ * Helper to normalize payload for projects/issues/tasks.
+ * Agents often send 'name' instead of 'title' or 'description' instead of 'descriptionMarkdown'.
+ */
+function normalizePayload(body: any) {
+  const payload = { ...body };
+  if (!payload.title && payload.name) payload.title = payload.name;
+  if (!payload.descriptionMarkdown && payload.description) payload.descriptionMarkdown = payload.description;
+  return payload;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Projects
 // ─────────────────────────────────────────────────────────────────────────────
@@ -88,8 +99,9 @@ async function assertAgentBelongsToTeam(
  */
 projectManagementRouter.post("/projects", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const payload = normalizePayload(req.body);
     // Inject teamId from token so the schema validation passes
-    const input = createProjectSchema.parse({ ...req.body, teamId: req.agent!.teamId });
+    const input = createProjectSchema.parse({ ...payload, teamId: req.agent!.teamId });
 
     // Validate leadId belongs to the same team
     if (input.leadId) {
@@ -185,7 +197,8 @@ projectManagementRouter.put("/projects/:id", async (req: Request, res: Response,
       return;
     }
 
-    const input = updateProjectSchema.parse(req.body);
+    const payload = normalizePayload(req.body);
+    const input = updateProjectSchema.parse(payload);
 
     if (input.leadId) {
       const ok = await assertAgentBelongsToTeam(input.leadId, req.agent!.teamId, res, "leadId");
@@ -194,7 +207,21 @@ projectManagementRouter.put("/projects/:id", async (req: Request, res: Response,
 
     const [project] = await db
       .update(projects)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        title: input.title,
+        shortSummary: input.shortSummary,
+        descriptionMarkdown: input.descriptionMarkdown,
+        descriptionRichText: input.descriptionRichText,
+        startDateKind: input.startAt?.kind,
+        startDateValue: input.startAt?.value,
+        endDateKind: input.endAt?.kind,
+        endDateValue: input.endAt?.value,
+        status: input.status,
+        priority: input.priority,
+        leadId: input.leadId,
+        health: input.health,
+        updatedAt: new Date(),
+      })
       .where(eq(projects.id, existing.id))
       .returning();
 
@@ -417,7 +444,8 @@ projectManagementRouter.post("/projects/:id/issues", async (req: Request, res: R
       return;
     }
 
-    const input = createIssueSchema.parse({ ...req.body, projectId: project.id });
+    const payload = normalizePayload(req.body);
+    const input = createIssueSchema.parse({ ...payload, projectId: project.id });
 
     if (input.parentIssueId) {
       const [parentIssue] = await db
@@ -532,7 +560,8 @@ projectManagementRouter.put("/issues/:id", async (req: Request, res: Response, n
       return;
     }
 
-    const input = updateIssueSchema.parse(req.body);
+    const payload = normalizePayload(req.body);
+    const input = updateIssueSchema.parse(payload);
 
     if (input.parentIssueId) {
       if (input.parentIssueId === row.issue.id) {
@@ -618,7 +647,8 @@ projectManagementRouter.delete("/issues/:id", async (req: Request, res: Response
  */
 projectManagementRouter.post("/tasks", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = createTaskSchema.parse({ ...req.body, teamId: req.agent!.teamId });
+    const payload = normalizePayload(req.body);
+    const input = createTaskSchema.parse({ ...payload, teamId: req.agent!.teamId });
 
     if (input.parentTaskId) {
       const [parentTask] = await db
@@ -712,7 +742,8 @@ projectManagementRouter.put("/tasks/:id", async (req: Request, res: Response, ne
       return;
     }
 
-    const input = updateTaskSchema.parse(req.body);
+    const payload = normalizePayload(req.body);
+    const input = updateTaskSchema.parse(payload);
 
     if (input.parentTaskId) {
       if (input.parentTaskId === existing.id) {

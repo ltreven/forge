@@ -3,6 +3,7 @@ import { and, eq, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import { projects, projectIssues, teams, workspaces, teamTasks } from "../db/schema";
 import { 
+  createProjectSchema,
   updateProjectSchema, 
   createIssueSchema, 
   updateIssueSchema,
@@ -15,8 +16,28 @@ import { authMiddleware } from "../middleware/authMiddleware";
 export const projectsRouter = Router();
 
 /**
- * Validates that the authenticated user has access to a project via its team/workspace.
+ * Helper to normalize payload for projects/issues/tasks.
+ * Humans and agents might send 'name' instead of 'title' or 'description' instead of 'descriptionMarkdown'.
  */
+function normalizePayload(body: any) {
+  const payload = { ...body };
+  if (!payload.title && payload.name) payload.title = payload.name;
+  if (!payload.descriptionMarkdown && payload.description) payload.descriptionMarkdown = payload.description;
+  return payload;
+}
+
+/**
+ * Validates that the authenticated user has access to a team.
+ */
+async function assertUserHasTeamAccess(userId: string, teamId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+    .where(and(eq(workspaces.userId, userId), eq(teams.id, teamId)))
+    .limit(1);
+  return !!row;
+}
 async function assertUserHasProjectAccess(userId: string, projectId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: projects.id })
@@ -29,6 +50,46 @@ async function assertUserHasProjectAccess(userId: string, projectId: string): Pr
 }
 
 // ── Projects ─────────────────────────────────────────────────────────────────
+
+/**
+ * POST /
+ */
+projectsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = normalizePayload(req.body);
+    const input = createProjectSchema.parse(payload);
+    const userId = req.user!.userId;
+
+    const hasAccess = await assertUserHasTeamAccess(userId, input.teamId);
+    if (!hasAccess) {
+      res.status(403).json(failure("Access denied to this team"));
+      return;
+    }
+
+    const [project] = await db
+      .insert(projects)
+      .values({
+        teamId: String(input.teamId),
+        title: String(input.title),
+        shortSummary: input.shortSummary ? String(input.shortSummary) : null,
+        descriptionMarkdown: input.descriptionMarkdown ? String(input.descriptionMarkdown) : null,
+        descriptionRichText: input.descriptionRichText ?? null,
+        startDateKind: input.startAt?.kind,
+        startDateValue: input.startAt?.value,
+        endDateKind: input.endAt?.kind,
+        endDateValue: input.endAt?.value,
+        status: Number(input.status ?? 0),
+        priority: Number(input.priority ?? 0),
+        leadId: input.leadId ? String(input.leadId) : null,
+        health: input.health,
+      })
+      .returning();
+
+    res.status(201).json(success(project));
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * GET /projects/:id
@@ -70,11 +131,26 @@ projectsRouter.put("/:id", authMiddleware, async (req: Request, res: Response, n
       return;
     }
 
-    const input = updateProjectSchema.parse(req.body);
+    const payload = normalizePayload(req.body);
+    const input = updateProjectSchema.parse(payload);
 
     const [updated] = await db
       .update(projects)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        title: input.title ? String(input.title) : undefined,
+        shortSummary: input.shortSummary !== undefined ? (input.shortSummary ? String(input.shortSummary) : null) : undefined,
+        descriptionMarkdown: input.descriptionMarkdown !== undefined ? (input.descriptionMarkdown ? String(input.descriptionMarkdown) : null) : undefined,
+        descriptionRichText: input.descriptionRichText !== undefined ? (input.descriptionRichText ?? null) : undefined,
+        startDateKind: input.startAt?.kind,
+        startDateValue: input.startAt?.value,
+        endDateKind: input.endAt?.kind,
+        endDateValue: input.endAt?.value,
+        status: input.status !== undefined ? Number(input.status) : undefined,
+        priority: input.priority !== undefined ? Number(input.priority) : undefined,
+        leadId: input.leadId !== undefined ? (input.leadId ? String(input.leadId) : null) : undefined,
+        health: input.health,
+        updatedAt: new Date(),
+      })
       .where(eq(projects.id, projectId))
       .returning();
 
@@ -126,7 +202,8 @@ projectsRouter.post("/:id/issues", authMiddleware, async (req: Request, res: Res
       return;
     }
 
-    const input = createIssueSchema.parse({ ...req.body, projectId });
+    const payload = normalizePayload(req.body);
+    const input = createIssueSchema.parse({ ...payload, projectId });
 
     const [issue] = await db
       .insert(projectIssues)
@@ -173,11 +250,22 @@ projectsRouter.put("/issues/:id", authMiddleware, async (req: Request, res: Resp
       return;
     }
 
-    const input = updateIssueSchema.parse(req.body);
+    const payload = normalizePayload(req.body);
+    const input = updateIssueSchema.parse(payload);
 
     const [updated] = await db
       .update(projectIssues)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        title: input.title ? String(input.title) : undefined,
+        shortSummary: input.shortSummary !== undefined ? (input.shortSummary ? String(input.shortSummary) : null) : undefined,
+        descriptionMarkdown: input.descriptionMarkdown !== undefined ? (input.descriptionMarkdown ? String(input.descriptionMarkdown) : null) : undefined,
+        descriptionRichText: input.descriptionRichText !== undefined ? (input.descriptionRichText ?? null) : undefined,
+        status: input.status !== undefined ? Number(input.status) : undefined,
+        priority: input.priority !== undefined ? Number(input.priority) : undefined,
+        assignedToId: input.assignedToId !== undefined ? (input.assignedToId ? String(input.assignedToId) : null) : undefined,
+        parentIssueId: input.parentIssueId !== undefined ? (input.parentIssueId ? String(input.parentIssueId) : null) : undefined,
+        updatedAt: new Date(),
+      })
       .where(eq(projectIssues.id, issueId))
       .returning();
 
@@ -262,11 +350,22 @@ projectsRouter.put("/tasks/:id", authMiddleware, async (req: Request, res: Respo
       return;
     }
 
-    const input = updateTaskSchema.parse(req.body);
+    const payload = normalizePayload(req.body);
+    const input = updateTaskSchema.parse(payload);
 
     const [updated] = await db
       .update(teamTasks)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        title: input.title ? String(input.title) : undefined,
+        shortSummary: input.shortSummary !== undefined ? (input.shortSummary ? String(input.shortSummary) : null) : undefined,
+        descriptionMarkdown: input.descriptionMarkdown !== undefined ? (input.descriptionMarkdown ? String(input.descriptionMarkdown) : null) : undefined,
+        descriptionRichText: input.descriptionRichText !== undefined ? (input.descriptionRichText ?? null) : undefined,
+        status: input.status !== undefined ? Number(input.status) : undefined,
+        priority: input.priority !== undefined ? Number(input.priority) : undefined,
+        assignedToId: input.assignedToId !== undefined ? (input.assignedToId ? String(input.assignedToId) : null) : undefined,
+        parentTaskId: input.parentTaskId !== undefined ? (input.parentTaskId ? String(input.parentTaskId) : null) : undefined,
+        updatedAt: new Date(),
+      })
       .where(eq(teamTasks.id, taskId))
       .returning();
 
@@ -282,7 +381,8 @@ projectsRouter.put("/tasks/:id", authMiddleware, async (req: Request, res: Respo
 projectsRouter.post("/tasks", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const input = createTaskSchema.parse(req.body);
+    const payload = normalizePayload(req.body);
+    const input = createTaskSchema.parse(payload);
 
     const hasAccess = await db
       .select({ id: teams.id })
