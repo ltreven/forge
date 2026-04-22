@@ -29,6 +29,9 @@ This skill provides you with the knowledge and standards required to interact wi
 - **CRITICAL ROUTE PREFIX**: All routes MUST start with `/project-management`. For example, use `GET /project-management/projects`. **Never** guess or use `GET /projects`.
 - **Authentication**: All requests MUST include the gateway token:
   `Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN`
+- **MANDATORY CONTENT-TYPE (CRITICAL)**: All `POST` and `PUT` requests **MUST** include the header:
+  `Content-Type: application/json`
+  If you omit this header, the server will not parse your JSON body and will return a "Validation Error: title Required" because it sees an empty request.
 
 ### Canonical Status Mapping
 
@@ -54,8 +57,9 @@ Always use these integer values for the `status` field in Projects, Issues, and 
 
 1.  **Understand the Contract**: Read `references/openapi.yaml` to identify the correct endpoint and payload structure.
 2.  **Use PUT for Updates**: The API does **not** support `PATCH`. If you want to update a field, use `PUT` and include the fields you want to update in the JSON body.
-3.  **Strict JSON Types (CRITICAL)**: Ensure `status` and `priority` are **unquoted integers** (e.g., `"status": 2`, NOT `"status": "2"`). If you send strings for integers, the API will reject your request with a 400 Validation Error.
-4.  **Handle Responses**: 
+3.  **Always send Headers (CRITICAL)**: Every `POST` and `PUT` request must have both `Authorization` and `Content-Type: application/json`. Without the content-type, your payload is ignored.
+4.  **Strict JSON Types (CRITICAL)**: Ensure `status` and `priority` are **unquoted integers** (e.g., `"status": 2`, NOT `"status": "2"`). If you send strings for integers, the API will reject your request with a 400 Validation Error.
+5.  **Handle Responses**: 
     - The API always returns a wrapper JSON object: `{"data": {...}, "error": null, "meta": {...}}` on success.
     - If there is an error, it returns: `{"data": null, "error": {"message": "...", "issues": ...}, "meta": {...}}`.
     - Always check the `"error"` object if you receive a `400 Bad Request` or `404 Not Found` to understand exactly which field failed validation before retrying.

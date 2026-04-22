@@ -26,6 +26,18 @@ app.use(
 );
 app.use(express.json());
 
+// Enforce Content-Type for mutations to help agents/users debug missing headers
+app.use((req, res, next) => {
+  if ((req.method === "POST" || req.method === "PUT") && !req.is("application/json")) {
+    res.status(415).json({
+      success: false,
+      error: "Unsupported Media Type. You MUST send 'Content-Type: application/json' header.",
+    });
+    return;
+  }
+  next();
+});
+
 // ── Health check ──────────────────────────────────────────────────────────────
 
 app.get("/health", (_req, res) => {
