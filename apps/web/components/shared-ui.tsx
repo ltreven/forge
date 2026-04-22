@@ -83,7 +83,7 @@ export function CommentsList({
       {comments.map((c) => {
         const isHuman = c.actorType === "human";
         const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
-        const canDelete = isHuman && c.actorId === user?.userId;
+        const canDelete = isHuman && c.actorId === user?.id;
 
         return (
           <div key={c.id} className="group flex gap-3">
