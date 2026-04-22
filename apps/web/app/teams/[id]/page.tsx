@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -22,34 +22,29 @@ import {
   Clock,
   MoreHorizontal,
   ChevronDown,
-  ChevronRight,
   ChevronUp,
+  ChevronRight,
   GripVertical,
   SignalLow,
   SignalMedium,
   SignalHigh,
   Flame,
-  AlertTriangle,
-  Flag
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { Team, Project, ProjectIssue, TeamTask, Agent, AgentType, HealthStatus, TeamActivity } from "@/lib/types";
+import { Team, Project, ProjectIssue, TeamTask, Agent, AgentType, HealthStatus } from "@/lib/types";
+import { StatusIcon, PriorityIcon } from "@/components/shared-ui";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-export type DisplayStatus = "provisioning" | "offline" | "available" | "busy" | "blocked";
-
-function computeDisplayStatus(a: Agent): DisplayStatus {
+function computeHealth(a: Agent): HealthStatus {
   const k8s = a.k8sStatus;
+  if (k8s === "running") return "online";
   if (k8s === "failed" || k8s === "terminated") return "offline";
-  if (k8s !== "running") return "provisioning";
-  
-  return a.availability || "available";
+  return "starting";
 }
-
-// ── Constants ─────────────────────────────────────────────────────────────────
 
 const ROLE_COLORS: Record<string, string> = {
   team_lead:          "#6366f1",
@@ -60,16 +55,16 @@ const ROLE_COLORS: Record<string, string> = {
 
 const ROLE_LABELS: Record<string, string> = {
   team_lead:          "Team Lead",
-  software_engineer:  "Software Engineer",
-  software_architect: "Software Architect",
-  product_manager:    "Product Manager",
+  software_engineer:  "Engineer",
+  software_architect: "Architect",
+  product_manager:    "PM",
 };
 
 const ROLE_EMOJIS: Record<string, string> = {
   team_lead:          "👑",
-  software_engineer:  "🛠️",
+  software_engineer:  "💻",
   software_architect: "🏛️",
-  product_manager:    "📋",
+  product_manager:    "🎨",
 };
 
 const STATUS_LABELS: Record<number, string> = {
@@ -81,133 +76,64 @@ const STATUS_LABELS: Record<number, string> = {
   5: "Cancelled",
 };
 
-const PRIORITY_LABELS: Record<number, string> = {
-  0: "None",
-  1: "Low",
-  2: "Medium",
-  3: "High",
-  4: "Urgent",
-};
-
-// ── Priority Icon ─────────────────────────────────────────────────────────────
-
-function PriorityIcon({ priority, className }: { priority: number; className?: string }) {
-  switch (priority) {
-    case 0: return <Circle className={cn("size-3 text-muted-foreground/20", className)} />;
-    case 1: return <SignalLow className={cn("size-3 text-blue-500/70", className)} />;
-    case 2: return <SignalMedium className={cn("size-3 text-amber-500/70", className)} />;
-    case 3: return <SignalHigh className={cn("size-3 text-orange-500", className)} />;
-    case 4: return <Flame className={cn("size-3 text-red-500 animate-pulse", className)} />;
-    default: return null;
-  }
+function getShorthandId(prefix: string, id: string) {
+  return `${prefix}-${id.substring(0, 4).toUpperCase()}`;
 }
 
-// ── Agent Card ────────────────────────────────────────────────────────────────
+// ── Components ────────────────────────────────────────────────────────────────
 
 function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) {
   const color  = agent.metadata?.avatarColor ?? ROLE_COLORS[agent.type] ?? "#6366f1";
   const isLead = agent.type === "team_lead";
-  const status = computeDisplayStatus(agent);
-
-  const statusLabels: Record<DisplayStatus, string> = {
-    available: "Available",
-    busy: "Processing",
-    blocked: "Blocked",
-    provisioning: "Provisioning",
-    offline: "Offline"
-  };
-  const statusLabel = statusLabels[status];
+  const health = computeHealth(agent);
+  const healthLabel = health.charAt(0).toUpperCase() + health.slice(1);
 
   return (
-    <button
-      id={`agent-card-${agent.id}`}
-      type="button"
+    <div 
       onClick={onClick}
-      className={cn(
-        "group flex items-center gap-4 rounded-xl border bg-card p-4 text-left transition-all hover:shadow-sm",
-        isLead
-          ? "border-primary/40 bg-primary/5 hover:border-primary/60"
-          : "border-border hover:border-primary/30"
-      )}
+      className="group flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:border-primary/50 hover:shadow-md cursor-pointer relative overflow-hidden"
     >
-      <div
-        className="relative flex size-11 shrink-0 items-center justify-center rounded-xl text-xl shadow-sm transition-transform group-hover:scale-105"
-        style={{ background: color + "25" }}
-      >
-        <span>{agent.icon ?? ROLE_EMOJIS[agent.type] ?? "🤖"}</span>
-        {isLead && (
-          <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[9px]">
-            <Crown className="size-2.5 text-primary-foreground" />
-          </span>
-        )}
+      <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+         <Settings2 className="size-3.5 text-muted-foreground" />
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-foreground truncate">{agent.name}</p>
+
+      <div className="flex items-center gap-4">
+        <div className="relative">
+          <div 
+            className="flex size-12 items-center justify-center rounded-2xl text-2xl shadow-inner border border-white/10"
+            style={{ backgroundColor: `${color}20`, color }}
+          >
+            {agent.icon || ROLE_EMOJIS[agent.type] || "🤖"}
+          </div>
+          <span className={cn(
+            "absolute -bottom-1 -right-1 block size-3.5 rounded-full border-2 border-card",
+            health === "online"   ? "bg-emerald-500" :
+            health === "starting" ? "bg-amber-500 animate-pulse" : "bg-red-500"
+          )} />
           {isLead && (
-            <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
-              Team Lead
+            <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[9px]">
+              <Crown className="size-2.5 text-primary-foreground" />
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">{ROLE_LABELS[agent.type] ?? agent.type}</p>
-      </div>
-      <div className="shrink-0 flex flex-col items-end gap-1">
-        <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          Open →
-        </span>
-        <div className="flex items-center gap-1.5">
-          {status === "busy" ? (
-            <Loader2 className="size-3 animate-spin text-blue-500" />
-          ) : status === "blocked" ? (
-            <Flag className="size-3 text-red-500 fill-red-500" />
-          ) : (
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-bold tracking-tight text-foreground">{agent.name}</h3>
+          <div className="mt-0.5 flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+              {ROLE_LABELS[agent.type]}
+            </span>
+            <div className="size-1 rounded-full bg-border" />
             <span className={cn(
-              "relative flex size-2 shrink-0 rounded-full",
-              status === "available"    && "bg-emerald-500",
-              status === "provisioning" && "bg-amber-400",
-              status === "offline"      && "bg-red-500",
-            )}>
-              {status === "provisioning" && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
-              )}
-            </span>
-          )}
-          <span className="text-[10px] font-medium text-muted-foreground/70">{statusLabel}</span>
+              "text-[10px] font-medium",
+              health === "online"   && "text-emerald-600",
+              health === "starting" && "text-amber-600",
+              health === "offline"  && "text-red-600"
+            )}>{healthLabel}</span>
+          </div>
         </div>
       </div>
-    </button>
+    </div>
   );
-}
-
-// ── Project & Task Cards ──────────────────────────────────────────────────────
-
-// ── Project & Task List Items ────────────────────────────────────────────────
-
-function StatusIcon({ status }: { status: number }) {
-  // 0: Backlog, 1: To Do, 2: In Progress, 3: In Review, 4: Done, 5: Cancelled
-  switch (status) {
-    case 0: return <Circle className="size-3.5 text-muted-foreground/40" />;
-    case 1: return <Circle className="size-3.5 text-muted-foreground" />;
-    case 2: return <CircleDot className="size-3.5 text-amber-500 animate-pulse" />;
-    case 3: return <CircleDashed className="size-3.5 text-blue-500" />;
-    case 4: return <CheckCircle2 className="size-3.5 text-emerald-500" />;
-    case 5: return <Circle className="size-3.5 text-red-500/50" />;
-    default: return <Circle className="size-3.5 text-muted-foreground" />;
-  }
-}
-
-function formatDate(dateStr: string) {
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } catch {
-    return "";
-  }
-}
-
-function getShorthandId(prefix: string, id: string) {
-  return `${prefix}-${id.substring(0, 4).toUpperCase()}`;
 }
 
 function ItemRow({ 
@@ -272,7 +198,7 @@ function ItemRow({
           )}
 
           <span className="text-[9px] text-muted-foreground/40 w-10 text-right">
-            {formatDate(updatedAt)}
+            {new Date(updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
           </span>
         </div>
       </div>
@@ -346,8 +272,6 @@ function TaskListItem({ task, allTasks, agents, level = 0 }: { task: TeamTask, a
   );
 }
 
-// ── Section Header ────────────────────────────────────────────────────────────
-
 function SectionTitle({ icon: Icon, label, className }: { icon: React.ElementType; label: string; className?: string }) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
@@ -371,7 +295,7 @@ export default function TeamDetailPage() {
   const [projects, setProjects]   = useState<Project[]>([]);
   const [issues, setIssues]       = useState<ProjectIssue[]>([]);
   const [tasks, setTasks]         = useState<TeamTask[]>([]);
-  const [activities, setActivities] = useState<TeamActivity[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
   
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [showAllTasks, setShowAllTasks] = useState(false);
@@ -379,46 +303,44 @@ export default function TeamDetailPage() {
   const [isTasksCollapsed, setIsTasksCollapsed] = useState(false);
   const [viewFilter, setViewFilter] = useState<"active" | "all">("active");
 
-  // ── Load data ──────────────────────────────────────────────────────────────
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+
+  const fetchAgents = async () => {
+    try {
+      const agentsRes = await fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers });
+      if (agentsRes.ok) {
+        const d = await agentsRes.json();
+        const all: Agent[] = d.data ?? [];
+        all.sort((a, b) => {
+          if (a.type === "team_lead") return -1;
+          if (b.type === "team_lead") return 1;
+          return 0;
+        });
+        setAgents(all);
+      }
+    } catch (err) {
+      console.error("Failed to poll agents", err);
+    }
+  };
+
+  const fetchActivities = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/teams/${teamId}/activities`, { headers });
+      if (res.ok) {
+        const d = await res.json();
+        setActivities(d.data ?? []);
+      }
+    } catch (err) {
+      console.error("Failed to poll activities", err);
+    }
+  };
 
   useEffect(() => {
     if (authLoading) return;
     if (!token) { router.replace("/login"); return; }
-
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    };
-
-    const fetchAgents = async () => {
-      try {
-        const agentsRes = await fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers });
-        if (agentsRes.ok) {
-          const d = await agentsRes.json();
-          const all: Agent[] = d.data ?? [];
-          all.sort((a, b) => {
-            if (a.type === "team_lead") return -1;
-            if (b.type === "team_lead") return 1;
-            return 0;
-          });
-          setAgents(all);
-        }
-      } catch (err) {
-        console.error("Failed to poll agents", err);
-      }
-    };
-
-    const fetchActivities = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/teams/${teamId}/activities`, { headers });
-        if (res.ok) {
-          const d = await res.json();
-          setActivities(d.data ?? []);
-        }
-      } catch (err) {
-        console.error("Failed to poll activities", err);
-      }
-    };
 
     Promise.all([
       fetch(`${API_BASE}/teams/${teamId}`, { headers }),
@@ -431,8 +353,7 @@ export default function TeamDetailPage() {
       .then(async ([teamRes, _agentsRes, _actRes, projectsRes, issuesRes, tasksRes]) => {
         if (teamRes && teamRes.ok) {
           const d = await teamRes.json();
-          const t: Team = d.data;
-          setTeam(t);
+          setTeam(d.data);
         } else if (teamRes && !teamRes.ok) {
           toast.error("Team not found.");
           router.replace("/teams");
@@ -454,14 +375,11 @@ export default function TeamDetailPage() {
       .catch(() => toast.error("Failed to load team."))
       .finally(() => setIsLoading(false));
 
-    // Polling interval for agents and activities (every 5 seconds)
     const intervalId = setInterval(() => {
       fetchAgents();
       fetchActivities();
     }, 5000);
     return () => clearInterval(intervalId);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
 
   const handleCreateProject = async () => {
@@ -470,7 +388,7 @@ export default function TeamDetailPage() {
     try {
       const res = await fetch(`${API_BASE}/projects`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({ teamId, title, status: 1, priority: 1 }),
       });
       if (!res.ok) throw new Error();
@@ -486,7 +404,7 @@ export default function TeamDetailPage() {
     try {
       const res = await fetch(`${API_BASE}/projects/tasks`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({ teamId, title, status: 1, priority: 1 }),
       });
       if (!res.ok) throw new Error();
@@ -496,16 +414,10 @@ export default function TeamDetailPage() {
     } catch { toast.error("Failed to create task"); }
   };
 
-  // ── Guards ────────────────────────────────────────────────────────────────
-
-
   if (authLoading || isLoading) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <Loader2 className="size-8 animate-spin text-primary" />
-          <p className="text-sm">Loading team…</p>
-        </div>
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -517,152 +429,87 @@ export default function TeamDetailPage() {
   
   const filteredProjects = projects.filter(p => {
     if (viewFilter === "active") return p.status >= 1 && p.status <= 4;
-    return true; // "all"
+    return true;
   });
 
   const filteredTasks = tasks.filter(t => {
     if (viewFilter === "active") return t.status >= 1 && t.status <= 4;
-    return true; // "all"
+    return true;
   }).sort((a,b) => b.priority - a.priority);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-
-      {/* ── Back link ──────────────────────────────────────────────────── */}
       <Link href="/teams" id="back-to-teams"
-        className="mb-6 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
         <ArrowLeft className="size-3.5" />
-        My Teams
+        Back to Teams
       </Link>
 
-      {/* ── Page header ────────────────────────────────────────────────── */}
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div className="flex items-start gap-4 min-w-0 flex-1">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl text-3xl shadow-sm bg-primary/10">
-            {team.icon ?? <Layers className="size-7 text-primary" />}
+      <header className="mt-8 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-2xl">
+              {team.icon || "🛡️"}
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">{team.name}</h1>
           </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground truncate">{team.name}</h1>
-            {team.mission && (
-              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{team.mission}</p>
-            )}
+          {team.mission && (
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {team.mission}
+            </p>
+          )}
+          <div className="flex items-center gap-2 pt-1">
             {team.template && (
-              <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground capitalize">
-                {team.template === "starter" ? "🧩" : team.template === "engineering" ? "💻" : "🎧"} {team.template}
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {team.template === "engineering" ? "💻" : "🎧"} {team.template}
               </span>
             )}
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Link
-            href={`/teams/${teamId}/general`}
-            id="header-nav-general"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent hover:text-foreground active:scale-95"
-          >
-            <Settings2 className="size-3.5" />
-            <span className="hidden sm:inline">Settings</span>
-          </Link>
-          <Link
-            href={`/teams/${teamId}/integrations`}
-            id="header-nav-integrations"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent hover:text-foreground active:scale-95"
-          >
-            <Zap className="size-3.5" />
-            <span className="hidden sm:inline">Integrations</span>
+          <Link href={`/teams/${teamId}/general`}
+            className="inline-flex h-9 items-center justify-center rounded-xl bg-muted px-4 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground">
+            Settings
           </Link>
         </div>
-      </div>
+      </header>
 
-      {/* ── Team Agents ────────────────────────────────────────────────── */}
-      <section id="team-agents" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <SectionTitle icon={Bot} label="Agents" />
-          <Link
-            href={`/teams/${teamId}/agents/new`}
-            id="new-agent-btn"
-            className="flex items-center gap-2 rounded-xl border border-primary/50 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-all hover:bg-primary hover:text-primary-foreground hover:shadow-md active:scale-95"
-          >
-            <Plus className="size-3.5" />
-            New Agent
-          </Link>
-        </div>
-
-        {agents.length === 0 ? (
-          <div className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-5 py-6">
-            <Bot className="size-5 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">No agents on this team yet.</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {/* Team lead first, prominent */}
-            {teamLead && (
-              <AgentCard
-                agent={teamLead}
-                onClick={() => router.push(`/agents/${teamLead.id}`)}
-              />
-            )}
-
-            {/* Separator */}
-            {teamLead && otherAgents.length > 0 && (
-              <div className="flex items-center gap-2 px-1">
-                <div className="h-px flex-1 bg-border" />
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Team</span>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-            )}
-
-            {/* Rest of agents */}
-            {otherAgents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                onClick={() => router.push(`/agents/${agent.id}`)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-
-      {/* ── Bottom rows: Projects & Activity ──────────────────────────── */}
-      <div className="flex flex-col gap-6 mt-6">
-        
-        {/* TEAM WORK (Combined Projects & Tasks) */}
-        <section id="team-projects" className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-          <div className="p-6 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <SectionTitle icon={FolderKanban} label="Team Work" />
-            
-            <div className="flex items-center bg-muted/50 p-1 rounded-xl border border-border/50 self-start sm:self-auto">
-              <button 
-                onClick={() => setViewFilter("active")}
-                className={cn(
-                  "px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
-                  viewFilter === "active" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Active
-              </button>
-              <button 
-                onClick={() => setViewFilter("all")}
-                className={cn(
-                  "px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
-                  viewFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                All Statuses
-              </button>
+      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-4">
+        <div className="lg:col-span-3 space-y-8">
+          <section id="agents-grid">
+            <SectionTitle icon={Bot} label="Agents" className="mb-4" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {teamLead && (
+                <AgentCard agent={teamLead} onClick={() => router.push(`/agents/${teamLead.id}`)} />
+              )}
+              {otherAgents.map((agent) => (
+                <AgentCard key={agent.id} agent={agent} onClick={() => router.push(`/agents/${agent.id}`)} />
+              ))}
             </div>
-          </div>
-          
-          <div className="px-3 pb-6">
-            {/* Projects Section */}
-            {(filteredProjects.length > 0 || viewFilter === "all") && (
+          </section>
+
+          <section id="team-projects" className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+            <div className="p-6 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <SectionTitle icon={FolderKanban} label="Team Work" />
+              <div className="flex items-center bg-muted/50 p-1 rounded-xl border border-border/50 self-start sm:self-auto">
+                <button onClick={() => setViewFilter("active")}
+                  className={cn("px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
+                    viewFilter === "active" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  Active
+                </button>
+                <button onClick={() => setViewFilter("all")}
+                  className={cn("px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
+                    viewFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  All Statuses
+                </button>
+              </div>
+            </div>
+            
+            <div className="px-3 pb-6">
               <div className="mb-4">
-                <div 
-                  className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-muted/30 rounded-lg group"
-                  onClick={() => setIsProjectsCollapsed(!isProjectsCollapsed)}
-                >
+                <div className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-muted/30 rounded-lg group"
+                  onClick={() => setIsProjectsCollapsed(!isProjectsCollapsed)}>
                    <div className="flex items-center gap-2">
                      {isProjectsCollapsed ? <ChevronRight className="size-3 text-muted-foreground/50" /> : <ChevronDown className="size-3 text-muted-foreground/50" />}
                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Projects</h3>
@@ -672,41 +519,17 @@ export default function TeamDetailPage() {
                      <Plus className="size-3.5" />
                    </button>
                 </div>
-                
                 {!isProjectsCollapsed && (
                   <div className="space-y-0.5">
-                    {filteredProjects.length === 0 ? (
-                      <p className="py-4 text-center text-xs text-muted-foreground/40 italic">No projects in this view</p>
-                    ) : (
-                      (showAllProjects ? filteredProjects : filteredProjects.slice(0, 5)).map(p => (
-                        <ProjectListItem key={p.id} project={p} issues={issues} agents={agents} />
-                      ))
-                    )}
+                    {filteredProjects.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground/40 italic">No projects</p> :
+                      (showAllProjects ? filteredProjects : filteredProjects.slice(0, 5)).map(p => <ProjectListItem key={p.id} project={p} issues={issues} agents={agents} />)}
                   </div>
                 )}
-                
-                {!isProjectsCollapsed && filteredProjects.length > 5 && (
-                  <button 
-                    onClick={() => setShowAllProjects(!showAllProjects)}
-                    className="mt-1 w-full py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/30 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    {showAllProjects ? (
-                      <>Show less <ChevronUp className="size-3" /></>
-                    ) : (
-                      <>See {filteredProjects.length - 5} more projects <ChevronDown className="size-3" /></>
-                    )}
-                  </button>
-                )}
               </div>
-            )}
-            
-            {/* Tasks Section */}
-            {(filteredTasks.length > 0 || viewFilter === "all") && (
+              
               <div>
-                <div 
-                  className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-muted/30 rounded-lg group"
-                  onClick={() => setIsTasksCollapsed(!isTasksCollapsed)}
-                >
+                <div className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-muted/30 rounded-lg group"
+                  onClick={() => setIsTasksCollapsed(!isTasksCollapsed)}>
                    <div className="flex items-center gap-2">
                      {isTasksCollapsed ? <ChevronRight className="size-3 text-muted-foreground/50" /> : <ChevronDown className="size-3 text-muted-foreground/50" />}
                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Tasks</h3>
@@ -716,89 +539,51 @@ export default function TeamDetailPage() {
                      <Plus className="size-3.5" />
                    </button>
                 </div>
-                
                 {!isTasksCollapsed && (
                   <div className="space-y-0.5">
-                    {filteredTasks.length === 0 ? (
-                      <p className="py-4 text-center text-xs text-muted-foreground/40 italic">No tasks in this view</p>
-                    ) : (
-                      (showAllTasks ? filteredTasks : filteredTasks.slice(0, 5)).map(t => (
-                        <TaskListItem key={t.id} task={t} allTasks={tasks} agents={agents} />
-                      ))
-                    )}
+                    {filteredTasks.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground/40 italic">No tasks</p> :
+                      (showAllTasks ? filteredTasks : filteredTasks.slice(0, 5)).map(t => <TaskListItem key={t.id} task={t} allTasks={tasks} agents={agents} />)}
                   </div>
                 )}
-                
-                {!isTasksCollapsed && filteredTasks.length > 5 && (
-                  <button 
-                    onClick={() => setShowAllTasks(!showAllTasks)}
-                    className="mt-1 w-full py-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/30 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    {showAllTasks ? (
-                      <>Show less <ChevronUp className="size-3" /></>
-                    ) : (
-                      <>See {filteredTasks.length - 5} more tasks <ChevronDown className="size-3" /></>
-                    )}
-                  </button>
-                )}
               </div>
-            )}
+            </div>
+          </section>
+        </div>
 
-            {/* Global Empty State */}
-            {filteredProjects.length === 0 && filteredTasks.length === 0 && (
-              <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-                <FolderKanban className="size-8 text-muted-foreground/30" />
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">No work found</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">Try changing the filter to see more items.</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Recent Activity */}
-        <section id="team-activity" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <section id="team-activity" className="lg:col-span-1">
           <SectionTitle icon={Activity} label="Recent Activity" className="mb-4" />
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             {activities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
-                <Activity className="size-6 text-muted-foreground/30" />
-                <p className="text-sm font-medium text-muted-foreground">No recent activity</p>
+              <div className="rounded-2xl border border-dashed border-border/50 p-6 text-center">
+                <p className="text-xs text-muted-foreground/40 italic">No activity yet</p>
               </div>
             ) : (
-              activities.map((act) => {
+              activities.slice(0, 10).map((act) => {
                 const isHuman = act.actorType === "human";
-                const agent = isHuman ? null : agents.find(a => a.id === act.actorId);
+                const agent = isHuman ? null : agents.find((a) => a.id === act.actorId);
                 const title = act.payload?.title || act.entityId.substring(0, 8);
-                
+
                 let text = "";
                 switch (act.type) {
                   case "project_created": text = `created project "${title}"`; break;
                   case "project_updated": text = `updated project "${title}"`; break;
                   case "task_created": text = `created task "${title}"`; break;
                   case "project_issue_created": text = `created issue "${title}"`; break;
-                  case "request_created": text = `requested a task to be executed`; break;
-                  case "request_received": text = `started processing a request`; break;
-                  case "request_responded": text = `responded to a request`; break;
-                  case "task_blocked": text = `blocked task "${title}"`; break;
-                  case "task_unblocked": text = `unblocked task "${title}"`; break;
-                  case "task_finished": text = `finished task "${title}"`; break;
                   default: text = `performed ${act.type} on ${act.entityType}`;
                 }
 
                 return (
-                  <div key={act.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-background px-4 py-3 hover:bg-muted/30 transition-colors">
-                    <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px]" title={isHuman ? "Human" : agent?.name}>
-                      {isHuman ? "👤" : (agent?.icon || ROLE_EMOJIS[agent?.type || ""] || "🤖")}
+                  <div key={act.id} className="flex gap-3 items-start">
+                    <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px]">
+                      {isHuman ? "👤" : (agent?.icon || "🤖")}
                     </div>
-                    <div className="flex-1 flex flex-col">
-                      <p className="text-sm text-foreground">
-                        <span className="font-semibold">{isHuman ? "Team Member" : agent?.name || "Unknown Agent"}</span> {text}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] leading-tight text-foreground">
+                        <span className="font-bold">{isHuman ? "You" : agent?.name || "Agent"}</span> {text}
                       </p>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground/50 shrink-0">
-                      {formatDate(act.createdAt)}
+                      <p className="text-[9px] text-muted-foreground/50 mt-0.5">
+                        {new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
                   </div>
                 );
@@ -807,7 +592,6 @@ export default function TeamDetailPage() {
           </div>
         </section>
       </div>
-
     </div>
   );
 }

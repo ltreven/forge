@@ -5,20 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Circle,
-  CircleDashed,
-  CircleDot,
-  CheckCircle2,
   Plus,
   Loader2,
-  SignalLow,
-  SignalMedium,
-  SignalHigh,
-  Flame,
-  LayoutGrid,
   ListTodo,
   User,
   Save,
@@ -28,8 +16,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
-import { cn } from "@/lib/utils";
-import { Team, Project, ProjectIssue, Agent, Comment } from "@/lib/types";
+import { Project, ProjectIssue, Agent, Comment } from "@/lib/types";
+import { StatusIcon, PriorityIcon, Button, CommentsList } from "@/components/shared-ui";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -49,111 +37,6 @@ const PRIORITY_LABELS: Record<number, string> = {
   3: "High",
   4: "Urgent",
 };
-
-// ── UI Components ───────────────────────────────────────────────────────────
-
-function StatusIcon({ status }: { status: number }) {
-  switch (status) {
-    case 0: return <Circle className="size-3.5 text-muted-foreground/40" />;
-    case 1: return <Circle className="size-3.5 text-muted-foreground" />;
-    case 2: return <CircleDot className="size-3.5 text-amber-500 animate-pulse" />;
-    case 3: return <CircleDashed className="size-3.5 text-blue-500" />;
-    case 4: return <CheckCircle2 className="size-3.5 text-emerald-500" />;
-    case 5: return <Circle className="size-3.5 text-red-500/50" />;
-    default: return <Circle className="size-3.5 text-muted-foreground" />;
-  }
-}
-
-function PriorityIcon({ priority, className }: { priority: number; className?: string }) {
-  switch (priority) {
-    case 0: return <Circle className={cn("size-3 text-muted-foreground/20", className)} />;
-    case 1: return <SignalLow className={cn("size-3 text-blue-500/70", className)} />;
-    case 2: return <SignalMedium className={cn("size-3 text-amber-500/70", className)} />;
-    case 3: return <SignalHigh className={cn("size-3 text-orange-500", className)} />;
-    case 4: return <Flame className={cn("size-3 text-red-500", className)} />;
-    default: return null;
-  }
-}
-
-function Button({ 
-  className, variant, size, ...props 
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "outline" | "destructive"; 
-  size?: "sm" | "md" 
-}) {
-  return (
-    <button
-      className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
-        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
-        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
-        "bg-primary text-primary-foreground hover:opacity-90",
-        size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function CommentsList({ 
-  comments, agents, onDelete 
-}: { 
-  comments: Comment[]; 
-  agents: Agent[]; 
-  onDelete: (id: string) => void 
-}) {
-  const { user } = useAuth();
-
-  if (comments.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {comments.map((c) => {
-        const isHuman = c.actorType === "human";
-        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
-        const canDelete = isHuman && c.actorId === user?.userId;
-
-        return (
-          <div key={c.id} className="group flex gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
-              {isHuman ? "👤" : (agent?.icon || "🤖")}
-            </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground">
-                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/60">
-                    {new Date(c.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                {canDelete && (
-                  <button 
-                    onClick={() => onDelete(c.id)}
-                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {c.content}
-              </p>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -342,7 +225,6 @@ export default function ProjectPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* ── Top Nav ───────────────────────────────────────────────────── */}
       <div className="border-b border-border bg-card/50 px-6 py-3">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-4">
@@ -381,7 +263,6 @@ export default function ProjectPage() {
 
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
-          
           <div className="lg:col-span-2 space-y-8">
             <div className="space-y-4">
               <input
@@ -406,7 +287,6 @@ export default function ProjectPage() {
               </div>
             </div>
 
-            {/* ── Comments ────────────────────────────────────────── */}
             <div className="pt-10 space-y-6">
               <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
                 <MessageSquare className="size-3.5" />
@@ -442,74 +322,27 @@ export default function ProjectPage() {
           <div className="space-y-6">
             <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Properties</h3>
-              
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Status</label>
-                  <select 
-                    value={status}
-                    onChange={(e) => setStatus(Number(e.target.value))}
-                    className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer"
-                  >
+                  <select value={status} onChange={(e) => setStatus(Number(e.target.value))} className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer">
                     {Object.entries(STATUS_LABELS).map(([val, label]) => (
                       <option key={val} value={val}>{label}</option>
                     ))}
                   </select>
                 </div>
-
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Priority</label>
-                  <select 
-                    value={priority}
-                    onChange={(e) => setPriority(Number(e.target.value))}
-                    className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer"
-                  >
+                  <select value={priority} onChange={(e) => setPriority(Number(e.target.value))} className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer">
                     {Object.entries(PRIORITY_LABELS).map(([val, label]) => (
                       <option key={val} value={val}>{label}</option>
                     ))}
                   </select>
                 </div>
-
                 <div className="h-px bg-border my-2" />
-
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">Health</label>
-                  <div className="flex items-center gap-1.5">
-                    <span className={cn(
-                      "size-2 rounded-full",
-                      project.health === "on_track" ? "bg-emerald-500" :
-                      project.health === "at_risk" ? "bg-amber-500" :
-                      project.health === "off_track" ? "bg-red-500" : "bg-muted"
-                    )} />
-                    <span className="text-xs font-semibold text-foreground capitalize">
-                      {project.health.replace("_", " ")}
-                    </span>
-                  </div>
-                </div>
-
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Updated</label>
-                  <span className="text-xs font-semibold text-foreground">
-                    {new Date(project.updatedAt).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Project Lead</h3>
-                <User className="size-3.5 text-muted-foreground" />
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-lg">
-                  {agents.find(a => a.id === project.leadId)?.icon || "🤖"}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold truncate text-foreground">
-                    {agents.find(a => a.id === project.leadId)?.name || "Unassigned"}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">Project Lead</p>
+                  <span className="text-xs font-semibold text-foreground">{new Date(project.updatedAt).toLocaleDateString()}</span>
                 </div>
               </div>
             </section>
@@ -523,7 +356,6 @@ export default function ProjectPage() {
                <h2 className="text-xl font-bold tracking-tight">Project Issues</h2>
              </div>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             {[0, 1, 2, 3, 4].map(statusVal => {
               const statusIssues = issues.filter(i => i.status === statusVal);
@@ -531,52 +363,24 @@ export default function ProjectPage() {
                 <div key={statusVal} className="flex flex-col gap-3">
                   <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
-                        {STATUS_LABELS[statusVal]}
-                      </span>
-                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">
-                        {statusIssues.length}
-                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">{STATUS_LABELS[statusVal]}</span>
+                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">{statusIssues.length}</span>
                     </div>
-                    <button 
-                      onClick={() => handleCreateIssue(statusVal)}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                    >
+                    <button onClick={() => handleCreateIssue(statusVal)} className="text-muted-foreground hover:text-foreground transition-colors">
                       <Plus className="size-3.5" />
                     </button>
                   </div>
-
                   <div className="flex flex-col gap-2">
                     {statusIssues.map(issue => (
-                      <Link 
-                        key={issue.id}
-                        href={`/teams/${teamId}/projects/${projectId}/issues/${issue.id}`}
-                        className="group relative flex flex-col gap-2 rounded-xl border border-border bg-card p-3 shadow-sm transition-all hover:border-primary/40 hover:shadow-md cursor-pointer"
-                      >
+                      <Link key={issue.id} href={`/teams/${teamId}/projects/${projectId}/issues/${issue.id}`}
+                        className="group relative flex flex-col gap-2 rounded-xl border border-border bg-card p-3 shadow-sm transition-all hover:border-primary/40 hover:shadow-md cursor-pointer">
                         <div className="flex items-start justify-between gap-2">
-                          <span className="text-[8px] font-mono font-medium text-muted-foreground/50">
-                            ISS-{issue.id.substring(0,4).toUpperCase()}
-                          </span>
+                          <span className="text-[8px] font-mono font-medium text-muted-foreground/50">ISS-{issue.id.substring(0,4).toUpperCase()}</span>
                           <PriorityIcon priority={issue.priority} />
                         </div>
-                        <p className={cn("text-xs font-medium leading-snug text-foreground", issue.status === 4 && "text-muted-foreground line-through")}>
-                          {issue.title}
-                        </p>
-                        <div className="mt-1 flex items-center justify-between">
-                          <div className="flex size-5 items-center justify-center rounded-full bg-muted text-[10px]">
-                            {agents.find(a => a.id === issue.assignedToId)?.icon || "🤖"}
-                          </div>
-                          <span className="text-[8px] text-muted-foreground">
-                            {new Date(issue.updatedAt).toLocaleDateString()}
-                          </span>
-                        </div>
+                        <p className={cn("text-xs font-medium text-foreground", issue.status === 4 && "text-muted-foreground line-through")}>{issue.title}</p>
                       </Link>
                     ))}
-                    {statusIssues.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-border/50 p-6 flex items-center justify-center">
-                        <p className="text-[10px] text-muted-foreground/40 italic">Empty</p>
-                      </div>
-                    )}
                   </div>
                 </div>
               );
@@ -584,88 +388,6 @@ export default function ProjectPage() {
           </div>
         </div>
       </main>
-    </div>
-  );
-}
-
-// ── UI Components ───────────────────────────────────────────────────────────
-
-function Button({ 
-  className, variant, size, ...props 
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "outline" | "destructive"; 
-  size?: "sm" | "md" 
-}) {
-  return (
-    <button
-      className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
-        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
-        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
-        "bg-primary text-primary-foreground hover:opacity-90",
-        size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function CommentsList({ 
-  comments, agents, onDelete 
-}: { 
-  comments: Comment[]; 
-  agents: Agent[]; 
-  onDelete: (id: string) => void 
-}) {
-  const { user } = useAuth();
-
-  if (comments.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {comments.map((c) => {
-        const isHuman = c.actorType === "human";
-        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
-        const canDelete = isHuman && c.actorId === user?.userId;
-
-        return (
-          <div key={c.id} className="group flex gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
-              {isHuman ? "👤" : (agent?.icon || "🤖")}
-            </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground">
-                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/60">
-                    {new Date(c.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                {canDelete && (
-                  <button 
-                    onClick={() => onDelete(c.id)}
-                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {c.content}
-              </p>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

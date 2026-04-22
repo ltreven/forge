@@ -5,31 +5,20 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Circle,
-  CircleDashed,
-  CircleDot,
-  CheckCircle2,
   Plus,
   Loader2,
-  SignalLow,
-  SignalMedium,
-  SignalHigh,
-  Flame,
-  LayoutGrid,
   ListTodo,
   User,
   Save,
-  Target,
   Trash2,
-  MessageSquare
+  MessageSquare,
+  Target,
+  LayoutGrid
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 import { Project, ProjectIssue, Agent, Comment } from "@/lib/types";
+import { StatusIcon, PriorityIcon, Button, CommentsList } from "@/components/shared-ui";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -49,111 +38,6 @@ const PRIORITY_LABELS: Record<number, string> = {
   3: "High",
   4: "Urgent",
 };
-
-// ── Shared Components ─────────────────────────────────────────────────────────
-
-function StatusIcon({ status }: { status: number }) {
-  switch (status) {
-    case 0: return <Circle className="size-3.5 text-muted-foreground/40" />;
-    case 1: return <Circle className="size-3.5 text-muted-foreground" />;
-    case 2: return <CircleDot className="size-3.5 text-amber-500 animate-pulse" />;
-    case 3: return <CircleDashed className="size-3.5 text-blue-500" />;
-    case 4: return <CheckCircle2 className="size-3.5 text-emerald-500" />;
-    case 5: return <Circle className="size-3.5 text-red-500/50" />;
-    default: return <Circle className="size-3.5 text-muted-foreground" />;
-  }
-}
-
-function PriorityIcon({ priority, className }: { priority: number; className?: string }) {
-  switch (priority) {
-    case 0: return <Circle className={cn("size-3 text-muted-foreground/20", className)} />;
-    case 1: return <SignalLow className={cn("size-3 text-blue-500/70", className)} />;
-    case 2: return <SignalMedium className={cn("size-3 text-amber-500/70", className)} />;
-    case 3: return <SignalHigh className={cn("size-3 text-orange-500", className)} />;
-    case 4: return <Flame className={cn("size-3 text-red-500", className)} />;
-    default: return null;
-  }
-}
-
-function CommentsList({ 
-  comments, agents, onDelete 
-}: { 
-  comments: Comment[]; 
-  agents: Agent[]; 
-  onDelete: (id: string) => void 
-}) {
-  const { user } = useAuth();
-
-  if (comments.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {comments.map((c) => {
-        const isHuman = c.actorType === "human";
-        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
-        const canDelete = isHuman && c.actorId === user?.userId;
-
-        return (
-          <div key={c.id} className="group flex gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
-              {isHuman ? "👤" : (agent?.icon || "🤖")}
-            </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground">
-                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/60">
-                    {new Date(c.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                {canDelete && (
-                  <button 
-                    onClick={() => onDelete(c.id)}
-                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {c.content}
-              </p>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Button({ 
-  className, variant, size, ...props 
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "outline" | "destructive"; 
-  size?: "sm" | "md" 
-}) {
-  return (
-    <button
-      className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
-        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
-        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
-        "bg-primary text-primary-foreground hover:opacity-90",
-        size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
-        className
-      )}
-      {...props}
-    />
-  );
-}
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -209,7 +93,7 @@ export default function IssuePage() {
         const i: ProjectIssue = (await issueRes.json()).data;
         const all: ProjectIssue[] = (await allIssuesRes.json()).data ?? [];
         const a: Agent[] = (await agentsRes.json()).data ?? [];
-        const c: Comment[] = (await commentsRes.json()).data ?? [];
+        const c: Comment[] = commentsRes.ok ? (await commentsRes.json()).data ?? [] : [];
 
         setProject(p);
         setIssue(i);
@@ -217,7 +101,6 @@ export default function IssuePage() {
         setAgents(a);
         setComments(c);
         
-        // Populate form
         setTitle(i.title);
         setDescription(i.descriptionMarkdown || "");
         setStatus(i.status);
@@ -352,7 +235,6 @@ export default function IssuePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* ── Top Nav ───────────────────────────────────────────────────── */}
       <div className="border-b border-border bg-card/50 px-6 py-3">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-4">
@@ -391,8 +273,6 @@ export default function IssuePage() {
 
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
-          
-          {/* ── Left Column: Details ────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-8">
             <div className="space-y-4">
               <input
@@ -402,7 +282,6 @@ export default function IssuePage() {
                 placeholder="Issue title..."
                 className="w-full bg-transparent text-3xl font-bold tracking-tight text-foreground outline-none focus:ring-0 placeholder:text-muted-foreground/30"
               />
-              
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
                   <ListTodo className="size-3.5" />
@@ -417,7 +296,6 @@ export default function IssuePage() {
               </div>
             </div>
 
-            {/* Sub-issues section */}
             <div className="pt-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
@@ -428,64 +306,32 @@ export default function IssuePage() {
                   <Plus className="size-3.5" />
                 </button>
               </div>
-
               <div className="rounded-xl border border-border bg-card/30 overflow-hidden">
-                {subIssues.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <p className="text-xs text-muted-foreground/50">No sub-issues yet.</p>
-                  </div>
-                ) : (
+                {subIssues.length === 0 ? <div className="p-8 text-center text-xs text-muted-foreground/50">No sub-issues yet.</div> :
                   <div className="divide-y divide-border/50">
                     {subIssues.map(sub => (
-                      <Link 
-                        key={sub.id}
-                        href={`/teams/${teamId}/projects/${projectId}/issues/${sub.id}`}
-                        className="flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors group"
-                      >
+                      <Link key={sub.id} href={`/teams/${teamId}/projects/${projectId}/issues/${sub.id}`} className="flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors group">
                         <StatusIcon status={sub.status} />
-                        <span className="text-[9px] font-mono text-muted-foreground/50 w-14 shrink-0">
-                          ISS-{sub.id.substring(0,4).toUpperCase()}
-                        </span>
-                        <p className={cn("text-sm flex-1 truncate", sub.status === 4 && "line-through text-muted-foreground")}>
-                          {sub.title}
-                        </p>
+                        <span className="text-[9px] font-mono text-muted-foreground/50 w-14 shrink-0">ISS-{sub.id.substring(0,4).toUpperCase()}</span>
+                        <p className={cn("text-sm flex-1 truncate", sub.status === 4 && "line-through text-muted-foreground")}>{sub.title}</p>
                         <PriorityIcon priority={sub.priority} />
-                        <div className="flex size-5 items-center justify-center rounded-full bg-muted text-[10px]">
-                          {agents.find(a => a.id === sub.assignedToId)?.icon || "🤖"}
-                        </div>
                       </Link>
                     ))}
                   </div>
-                )}
+                }
               </div>
             </div>
 
-            {/* ── Comments ────────────────────────────────────────── */}
             <div className="pt-10 space-y-6">
               <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
                 <MessageSquare className="size-3.5" />
                 Comments
               </div>
-              
-              <CommentsList 
-                comments={comments} 
-                agents={agents} 
-                onDelete={handleDeleteComment} 
-              />
-
+              <CommentsList comments={comments} agents={agents} onDelete={handleDeleteComment} />
               <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/50 p-4">
-                <textarea
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Leave a comment for the team..."
-                  className="min-h-[80px] w-full resize-none bg-transparent text-sm outline-none"
-                />
+                <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Leave a comment..." className="min-h-[80px] w-full resize-none bg-transparent text-sm outline-none" />
                 <div className="flex justify-end">
-                  <Button 
-                    size="sm" 
-                    onClick={handlePostComment}
-                    disabled={!newComment.trim() || isPostingComment}
-                  >
+                  <Button size="sm" onClick={handlePostComment} disabled={!newComment.trim() || isPostingComment}>
                     {isPostingComment ? <Loader2 className="size-3.5 animate-spin" /> : "Post Comment"}
                   </Button>
                 </div>
@@ -493,69 +339,42 @@ export default function IssuePage() {
             </div>
           </div>
 
-          {/* ── Right Column: Sidebar ───────────────────────────────────── */}
           <div className="space-y-6">
             <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Properties</h3>
-              
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Status</label>
-                  <select 
-                    value={status}
-                    onChange={(e) => setStatus(Number(e.target.value))}
-                    className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer"
-                  >
+                  <select value={status} onChange={(e) => setStatus(Number(e.target.value))} className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer">
                     {Object.entries(STATUS_LABELS).map(([val, label]) => (
                       <option key={val} value={val}>{label}</option>
                     ))}
                   </select>
                 </div>
-
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Priority</label>
-                  <select 
-                    value={priority}
-                    onChange={(e) => setPriority(Number(e.target.value))}
-                    className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer"
-                  >
+                  <select value={priority} onChange={(e) => setPriority(Number(e.target.value))} className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer">
                     {Object.entries(PRIORITY_LABELS).map(([val, label]) => (
                       <option key={val} value={val}>{label}</option>
                     ))}
                   </select>
                 </div>
-
                 <div className="h-px bg-border my-2" />
-
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Assignee</label>
-                  <select 
-                    value={assignedToId || ""}
-                    onChange={(e) => setAssignedToId(e.target.value || null)}
-                    className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer max-w-[120px]"
-                  >
+                  <select value={assignedToId || ""} onChange={(e) => setAssignedToId(e.target.value || null)} className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer max-w-[120px]">
                     <option value="">Unassigned</option>
                     {agents.map(a => (
                       <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
                     ))}
                   </select>
                 </div>
-
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">Updated</label>
-                  <span className="text-xs font-semibold text-foreground">
-                    {new Date(issue.updatedAt).toLocaleDateString()}
-                  </span>
-                </div>
               </div>
             </section>
 
             <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Project</h3>
-              <Link 
-                href={`/teams/${teamId}/projects/${projectId}`}
-                className="flex items-center gap-3 p-2 -m-2 rounded-xl hover:bg-muted/50 transition-colors"
-              >
+              <Link href={`/teams/${teamId}/projects/${projectId}`} className="flex items-center gap-3 p-2 -m-2 rounded-xl hover:bg-muted/50 transition-colors">
                 <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <LayoutGrid className="size-4" />
                 </div>
