@@ -198,8 +198,43 @@ const handleDeleteTask = async () => {
   } catch {
     toast.error("Failed to delete task");
   }
-};
+  };
 
+  const handlePostComment = async () => {
+  if (!newComment.trim() || isPostingComment) return;
+  setIsPostingComment(true);
+  try {
+    const res = await fetch(`${API_BASE}/projects/tasks/${taskId}/comments`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ content: newComment.trim() }),
+    });
+    if (!res.ok) throw new Error();
+    const comment = (await res.json()).data;
+    setComments(prev => [...prev, comment]);
+    setNewComment("");
+    toast.success("Comment posted");
+  } catch {
+    toast.error("Failed to post comment");
+  } finally {
+    setIsPostingComment(false);
+  }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+  if (!confirm("Are you sure you want to delete this comment?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/projects/comments/${commentId}`, {
+      method: "DELETE",
+      headers: headers(),
+    });
+    if (!res.ok) throw new Error();
+    setComments(prev => prev.filter(c => c.id !== commentId));
+    toast.success("Comment deleted");
+  } catch {
+    toast.error("Failed to delete comment");
+  }
+  };
   const handleCreateSubTask = async () => {
     const subTitle = prompt("Sub-task title:");
     if (!subTitle) return;
@@ -384,56 +419,33 @@ const handleDeleteTask = async () => {
               </div>
             </div>
 
-            {/* Comments section */}
-            <div className="pt-6 space-y-4 border-t border-border/50">
+            {/* ── Comments ────────────────────────────────────────── */}
+            <div className="pt-10 space-y-6">
               <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-                <MoreHorizontal className="size-3.5" />
+                <MessageSquare className="size-3.5" />
                 Comments
               </div>
-              <div className="space-y-4">
-                {comments.map((c) => (
-                  <div key={c.id} className="flex gap-3">
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
-                      {c.actorType === "agent" ? agents.find(a => a.id === c.actorId)?.icon || "🤖" : "👤"}
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground">
-                          {c.actorType === "agent" ? agents.find(a => a.id === c.actorId)?.name || "Agent" : user?.name || "User"}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(c.createdAt).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{c.content}</p>
-                      {user?.id === c.actorId && c.actorType === "human" && (
-                        <button
-                          onClick={() => handleDeleteComment(c.id)}
-                          className="text-xs text-red-500/70 hover:text-red-500 transition-colors mt-1"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
               
-              <div className="pt-2">
+              <CommentsList 
+                comments={comments} 
+                agents={agents} 
+                onDelete={handleDeleteComment} 
+              />
+
+              <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/50 p-4">
                 <textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a comment..."
-                  className="min-h-[80px] w-full resize-none rounded-xl border border-border bg-card p-3 text-sm leading-relaxed text-foreground outline-none transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                  placeholder="Leave a comment for the team..."
+                  className="min-h-[80px] w-full resize-none bg-transparent text-sm outline-none"
                 />
-                <div className="flex justify-end mt-2">
+                <div className="flex justify-end">
                   <Button 
                     size="sm" 
-                    onClick={handlePostComment} 
-                    disabled={isPostingComment || !newComment.trim()}
+                    onClick={handlePostComment}
+                    disabled={!newComment.trim() || isPostingComment}
                   >
-                    {isPostingComment ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
-                    Post Comment
+                    {isPostingComment ? <Loader2 className="size-3.5 animate-spin" /> : "Post Comment"}
                   </Button>
                 </div>
               </div>
@@ -539,5 +551,64 @@ function Button({
       )}
       {...props}
     />
+  );
+}
+
+function CommentsList({ 
+  comments, agents, onDelete 
+}: { 
+  comments: Comment[]; 
+  agents: Agent[]; 
+  onDelete: (id: string) => void 
+}) {
+  const { user } = useAuth();
+
+  if (comments.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {comments.map((c) => {
+        const isHuman = c.actorType === "human";
+        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
+        const canDelete = isHuman && c.actorId === user?.userId;
+
+        return (
+          <div key={c.id} className="group flex gap-3">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
+              {isHuman ? "👤" : (agent?.icon || "🤖")}
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-foreground">
+                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/60">
+                    {new Date(c.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                {canDelete && (
+                  <button 
+                    onClick={() => onDelete(c.id)}
+                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                {c.content}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

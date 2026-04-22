@@ -777,3 +777,68 @@ projectsRouter.delete("/tasks/:id", authMiddleware, async (req: Request, res: Re
     next(err);
   }
 });
+
+/**
+ * GET /projects/:id/comments
+ */
+projectsRouter.get("/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = String(req.params.id);
+    const userId = req.user!.userId;
+
+    const hasAccess = await assertUserHasProjectAccess(userId, projectId);
+    if (!hasAccess) {
+      res.status(404).json(failure("Project not found or access denied"));
+      return;
+    }
+
+    const rows = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.projectId, projectId))
+      .orderBy(comments.createdAt);
+
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /projects/:id/comments
+ */
+projectsRouter.post("/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = String(req.params.id);
+    const userId = req.user!.userId;
+
+    const [row] = await db
+      .select({ id: projects.id, teamId: projects.teamId })
+      .from(projects)
+      .innerJoin(teams, eq(projects.teamId, teams.id))
+      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+      .where(and(eq(workspaces.userId, userId), eq(projects.id, projectId)));
+
+    if (!row) {
+      res.status(404).json(failure("Project not found or access denied"));
+      return;
+    }
+
+    const input = createCommentSchema.parse({ ...req.body, projectId });
+
+    const [comment] = await db
+      .insert(comments)
+      .values({
+        teamId: row.teamId,
+        projectId: projectId,
+        actorId: userId,
+        actorType: "human",
+        content: input.content,
+      })
+      .returning();
+
+    res.status(201).json(success(comment));
+  } catch (err) {
+    next(err);
+  }
+});

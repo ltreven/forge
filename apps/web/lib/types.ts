@@ -110,6 +110,7 @@ export interface TeamActivity {
 export interface Comment {
   id: string;
   teamId: string;
+  projectId?: string | null;
   teamTaskId?: string | null;
   projectIssueId?: string | null;
   actorId: string;

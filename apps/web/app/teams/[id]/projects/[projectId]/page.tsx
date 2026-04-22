@@ -24,12 +24,13 @@ import {
   User,
   Save,
   MoreHorizontal,
-  Trash2
+  Trash2,
+  MessageSquare
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { Project, ProjectIssue, Agent } from "@/lib/types";
+import { Project, ProjectIssue, Agent, Comment } from "@/lib/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,9 @@ export default function ProjectPage() {
   const [project, setProject]   = useState<Project | null>(null);
   const [issues, setIssues]     = useState<ProjectIssue[]>([]);
   const [agents, setAgents]     = useState<Agent[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [isPostingComment, setIsPostingComment] = useState(false);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -110,8 +114,9 @@ export default function ProjectPage() {
       fetch(`${API_BASE}/projects/${projectId}`, { headers: headers() }),
       fetch(`${API_BASE}/projects/${projectId}/issues`, { headers: headers() }),
       fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers: headers() }),
+      fetch(`${API_BASE}/projects/${projectId}/comments`, { headers: headers() }),
     ])
-      .then(async ([projRes, issuesRes, agentsRes]) => {
+      .then(async ([projRes, issuesRes, agentsRes, commentsRes]) => {
         if (!projRes.ok) {
           toast.error("Project not found.");
           router.replace(`/teams/${teamId}`);
@@ -120,10 +125,12 @@ export default function ProjectPage() {
         const p: Project = (await projRes.json()).data;
         const i: ProjectIssue[] = (await issuesRes.json()).data ?? [];
         const a: Agent[] = (await agentsRes.json()).data ?? [];
+        const c: Comment[] = commentsRes.ok ? (await commentsRes.json()).data ?? [] : [];
 
         setProject(p);
         setIssues(i);
         setAgents(a);
+        setComments(c);
         
         // Populate form
         setTitle(p.title);
@@ -223,6 +230,42 @@ export default function ProjectPage() {
     }
   };
 
+  const handlePostComment = async () => {
+    if (!newComment.trim() || isPostingComment) return;
+    setIsPostingComment(true);
+    try {
+      const res = await fetch(`${API_BASE}/projects/${projectId}/comments`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ content: newComment.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      const comment = (await res.json()).data;
+      setComments(prev => [...prev, comment]);
+      setNewComment("");
+      toast.success("Comment posted");
+    } catch {
+      toast.error("Failed to post comment");
+    } finally {
+      setIsPostingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm("Are you sure you want to delete this comment?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/projects/comments/${commentId}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error();
+      setComments(prev => prev.filter(c => c.id !== commentId));
+      toast.success("Comment deleted");
+    } catch {
+      toast.error("Failed to delete comment");
+    }
+  };
+
   if (authLoading || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -301,7 +344,98 @@ export default function ProjectPage() {
                 <p className="text-[10px] text-muted-foreground">Markdown is supported and interpreted by the agents.</p>
               </div>
             </div>
+
+            {/* ── Comments ────────────────────────────────────────── */}
+            <div className="pt-10 space-y-6">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                <MessageSquare className="size-3.5" />
+                Comments
+              </div>
+              
+              <CommentsList 
+                comments={comments} 
+                agents={agents} 
+                onDelete={handleDeleteComment} 
+              />
+
+              <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/50 p-4">
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Leave a comment for the team..."
+                  className="min-h-[80px] w-full resize-none bg-transparent text-sm outline-none"
+                />
+                <div className="flex justify-end">
+                  <Button 
+                    size="sm" 
+                    onClick={handlePostComment}
+                    disabled={!newComment.trim() || isPostingComment}
+                  >
+                    {isPostingComment ? <Loader2 className="size-3.5 animate-spin" /> : "Post Comment"}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
+...
+function CommentsList({ 
+  comments, agents, onDelete 
+}: { 
+  comments: Comment[]; 
+  agents: Agent[]; 
+  onDelete: (id: string) => void 
+}) {
+  const { user } = useAuth();
+
+  if (comments.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {comments.map((c) => {
+        const isHuman = c.actorType === "human";
+        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
+        const canDelete = isHuman && c.actorId === user?.userId;
+
+        return (
+          <div key={c.id} className="group flex gap-3">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
+              {isHuman ? "👤" : (agent?.icon || "🤖")}
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-foreground">
+                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/60">
+                    {new Date(c.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                {canDelete && (
+                  <button 
+                    onClick={() => onDelete(c.id)}
+                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                {c.content}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
           {/* ── Right Column: Sidebar ───────────────────────────────────── */}
           <div className="space-y-6">
@@ -477,5 +611,64 @@ function Button({
       )}
       {...props}
     />
+  );
+}
+
+function CommentsList({ 
+  comments, agents, onDelete 
+}: { 
+  comments: Comment[]; 
+  agents: Agent[]; 
+  onDelete: (id: string) => void 
+}) {
+  const { user } = useAuth();
+
+  if (comments.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {comments.map((c) => {
+        const isHuman = c.actorType === "human";
+        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
+        const canDelete = isHuman && c.actorId === user?.userId;
+
+        return (
+          <div key={c.id} className="group flex gap-3">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
+              {isHuman ? "👤" : (agent?.icon || "🤖")}
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-foreground">
+                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/60">
+                    {new Date(c.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                {canDelete && (
+                  <button 
+                    onClick={() => onDelete(c.id)}
+                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                {c.content}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
