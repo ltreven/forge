@@ -138,12 +138,10 @@ export default function ProjectPage() {
   }, [projectId, teamId, token, headers, router]);
 
   useEffect(() => {
-    Save,
-    MoreHorizontal,
-    Trash2
-    } from "lucide-react";
-    ...
-    const handleSaveProject = async () => {
+    if (!authLoading) loadData();
+  }, [authLoading, loadData]);
+
+  const handleSaveProject = async () => {
       if (!project || isSaving) return;
       setIsSaving(true);
       try {

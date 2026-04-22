@@ -150,14 +150,12 @@ export default function TaskPage() {
       })
       .finally(() => setIsLoading(false));
   }, [taskId, teamId, token, headers, router]);
-Save,
-MoreHorizontal,
-Target,
-Users,
-Trash2
-} from "lucide-react";
-...
-const handleSaveTask = async () => {
+
+  useEffect(() => {
+    if (!authLoading) loadData();
+  }, [authLoading, loadData]);
+
+  const handleSaveTask = async () => {
   if (!task || isSaving) return;
   setIsSaving(true);
   try {

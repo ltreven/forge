@@ -150,13 +150,12 @@ export default function IssuePage() {
       })
       .finally(() => setIsLoading(false));
   }, [projectId, issueId, teamId, token, headers, router]);
-Save,
-MoreHorizontal,
-Target,
-Trash2
-} from "lucide-react";
-...
-const handleSaveIssue = async () => {
+
+  useEffect(() => {
+    if (!authLoading) loadData();
+  }, [authLoading, loadData]);
+
+  const handleSaveIssue = async () => {
   if (!issue || isSaving) return;
   setIsSaving(true);
   try {
