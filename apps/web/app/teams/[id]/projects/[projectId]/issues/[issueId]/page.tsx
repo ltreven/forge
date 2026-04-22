@@ -150,37 +150,56 @@ export default function IssuePage() {
       })
       .finally(() => setIsLoading(false));
   }, [projectId, issueId, teamId, token, headers, router]);
+Save,
+MoreHorizontal,
+Target,
+Trash2
+} from "lucide-react";
+...
+const handleSaveIssue = async () => {
+  if (!issue || isSaving) return;
+  setIsSaving(true);
+  try {
+    const res = await fetch(`${API_BASE}/projects/issues/${issueId}`, {
+      method: "PUT",
+      headers: headers(),
+      body: JSON.stringify({
+        title,
+        descriptionMarkdown: description,
+        status,
+        priority,
+        assignedToId
+      }),
+    });
 
-  useEffect(() => {
-    if (!authLoading) loadData();
-  }, [authLoading, loadData]);
+    if (!res.ok) throw new Error();
+    const updated = (await res.json()).data;
+    setIssue(updated);
+    toast.success("Issue updated successfully");
+  } catch {
+    toast.error("Failed to save issue changes");
+  } finally {
+    setIsSaving(false);
+  }
+};
 
-  const handleSaveIssue = async () => {
-    if (!issue || isSaving) return;
-    setIsSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/projects/issues/${issueId}`, {
-        method: "PUT",
-        headers: headers(),
-        body: JSON.stringify({
-          title,
-          descriptionMarkdown: description,
-          status,
-          priority,
-          assignedToId
-        }),
-      });
+const handleDeleteIssue = async () => {
+  if (!issue) return;
+  if (!confirm("Are you sure you want to delete this issue? This action cannot be undone.")) return;
 
-      if (!res.ok) throw new Error();
-      const updated = (await res.json()).data;
-      setIssue(updated);
-      toast.success("Issue updated successfully");
-    } catch {
-      toast.error("Failed to save issue changes");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  try {
+    const res = await fetch(`${API_BASE}/projects/issues/${issueId}`, {
+      method: "DELETE",
+      headers: headers(),
+    });
+    if (!res.ok) throw new Error();
+    toast.success("Issue deleted");
+    router.replace(`/teams/${teamId}/projects/${projectId}`);
+  } catch {
+    toast.error("Failed to delete issue");
+  }
+};
+
 
   const handleCreateSubIssue = async () => {
     const subTitle = prompt("Sub-issue title:");
@@ -273,6 +292,14 @@ export default function IssuePage() {
           <div className="flex items-center gap-3">
             <Button 
               variant="outline" size="sm" 
+              className="h-8 gap-2 text-xs border-destructive/20 text-destructive hover:bg-destructive hover:text-destructive-foreground" 
+              onClick={handleDeleteIssue}
+            >
+              <Trash2 className="size-3.5" />
+              Delete
+            </Button>
+            <Button 
+              variant="primary" size="sm" 
               className="h-8 gap-2 text-xs" 
               onClick={handleSaveIssue}
               disabled={isSaving}
@@ -281,6 +308,7 @@ export default function IssuePage() {
               Save Changes
             </Button>
           </div>
+
         </div>
       </div>
 
@@ -500,14 +528,16 @@ export default function IssuePage() {
 function Button({ 
   className, variant, size, ...props 
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "outline"; 
+  variant?: "primary" | "outline" | "destructive"; 
   size?: "sm" | "md" 
 }) {
   return (
     <button
       className={cn(
         "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
-        variant === "outline" ? "border border-border bg-background hover:bg-muted" : "bg-primary text-primary-foreground hover:opacity-90",
+        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
+        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
+        "bg-primary text-primary-foreground hover:opacity-90",
         size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
         className
       )}

@@ -150,37 +150,56 @@ export default function TaskPage() {
       })
       .finally(() => setIsLoading(false));
   }, [taskId, teamId, token, headers, router]);
+Save,
+MoreHorizontal,
+Target,
+Users,
+Trash2
+} from "lucide-react";
+...
+const handleSaveTask = async () => {
+  if (!task || isSaving) return;
+  setIsSaving(true);
+  try {
+    const res = await fetch(`${API_BASE}/projects/tasks/${taskId}`, {
+      method: "PUT",
+      headers: headers(),
+      body: JSON.stringify({
+        title,
+        descriptionMarkdown: description,
+        status,
+        priority,
+        assignedToId
+      }),
+    });
 
-  useEffect(() => {
-    if (!authLoading) loadData();
-  }, [authLoading, loadData]);
+    if (!res.ok) throw new Error();
+    const updated = (await res.json()).data;
+    setTask(updated);
+    toast.success("Task updated successfully");
+  } catch {
+    toast.error("Failed to save task changes");
+  } finally {
+    setIsSaving(false);
+  }
+};
 
-  const handleSaveTask = async () => {
-    if (!task || isSaving) return;
-    setIsSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/projects/tasks/${taskId}`, {
-        method: "PUT",
-        headers: headers(),
-        body: JSON.stringify({
-          title,
-          descriptionMarkdown: description,
-          status,
-          priority,
-          assignedToId
-        }),
-      });
+const handleDeleteTask = async () => {
+  if (!task) return;
+  if (!confirm("Are you sure you want to delete this task? This action cannot be undone.")) return;
 
-      if (!res.ok) throw new Error();
-      const updated = (await res.json()).data;
-      setTask(updated);
-      toast.success("Task updated successfully");
-    } catch {
-      toast.error("Failed to save task changes");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  try {
+    const res = await fetch(`${API_BASE}/projects/tasks/${taskId}`, {
+      method: "DELETE",
+      headers: headers(),
+    });
+    if (!res.ok) throw new Error();
+    toast.success("Task deleted");
+    router.replace(`/teams/${teamId}`);
+  } catch {
+    toast.error("Failed to delete task");
+  }
+};
 
   const handleCreateSubTask = async () => {
     const subTitle = prompt("Sub-task title:");
@@ -274,6 +293,14 @@ export default function TaskPage() {
           <div className="flex items-center gap-3">
             <Button 
               variant="outline" size="sm" 
+              className="h-8 gap-2 text-xs border-destructive/20 text-destructive hover:bg-destructive hover:text-destructive-foreground" 
+              onClick={handleDeleteTask}
+            >
+              <Trash2 className="size-3.5" />
+              Delete
+            </Button>
+            <Button 
+              variant="primary" size="sm" 
               className="h-8 gap-2 text-xs" 
               onClick={handleSaveTask}
               disabled={isSaving}
@@ -498,14 +525,16 @@ export default function TaskPage() {
 function Button({ 
   className, variant, size, ...props 
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "outline"; 
+  variant?: "primary" | "outline" | "destructive"; 
   size?: "sm" | "md" 
 }) {
   return (
     <button
       className={cn(
         "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
-        variant === "outline" ? "border border-border bg-background hover:bg-muted" : "bg-primary text-primary-foreground hover:opacity-90",
+        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
+        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
+        "bg-primary text-primary-foreground hover:opacity-90",
         size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
         className
       )}
