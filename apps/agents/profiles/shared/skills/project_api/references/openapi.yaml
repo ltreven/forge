@@ -1,8 +1,8 @@
 openapi: 3.0.0
 info:
   title: Forge Project Management API
-  version: 1.0.0
-  description: Internal API for managing projects, issues, and team tasks.
+  version: 1.1.0
+  description: Internal API for managing high-level projects and individual kanban tasks.
 
 servers:
   - url: http://forge-api.forge.svc.cluster.local:4000
@@ -18,6 +18,7 @@ components:
     Project:
       type: object
       required: [title]
+      description: "A high-level container for multiple issues. Use for major features."
       properties:
         id: { type: string, format: uuid }
         teamId: { type: string, format: uuid }
@@ -34,20 +35,11 @@ components:
           description: "0=none, 1=low, 2=medium, 3=high, 4=urgent"
         leadId: { type: string, format: uuid, description: "Agent ID (must be in your team)" }
         health: { type: string, enum: [unknown, on_track, at_risk, off_track] }
-        startAt:
-          type: object
-          properties:
-            kind: { type: string }
-            value: { type: string }
-        endAt:
-          type: object
-          properties:
-            kind: { type: string }
-            value: { type: string }
 
     ProjectIssue:
       type: object
       required: [title]
+      description: "A specific task belonging to a parent project folder."
       properties:
         id: { type: string, format: uuid }
         projectId: { type: string, format: uuid }
@@ -68,6 +60,7 @@ components:
     TeamTask:
       type: object
       required: [title]
+      description: "A standalone individual work item on the team kanban board. Use for most tasks."
       properties:
         id: { type: string, format: uuid }
         teamId: { type: string, format: uuid }
@@ -91,17 +84,26 @@ components:
       properties:
         newHealth: { type: string, enum: [on_track, at_risk, off_track] }
         reason: { type: string }
-        happenedAt: { type: string, format: date-time }
 
 security:
   - bearerAuth: []
 
 paths:
+  /tasks:
+    get:
+      summary: List team kanban tasks (individual work)
+    post:
+      summary: Create a team kanban task (individual work)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeamTask' }
+
   /projects:
     get:
-      summary: List team projects
+      summary: List major project folders
     post:
-      summary: Create a project
+      summary: Create a major project folder (organization only)
       requestBody:
         content:
           application/json:
@@ -111,29 +113,15 @@ paths:
     get:
       summary: Get project details
     put:
-      summary: Update a project
-      requestBody:
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/Project' }
+      summary: Update project folder
     delete:
-      summary: Delete a project
-
-  /projects/{id}/updates:
-    get:
-      summary: List project health updates
-    post:
-      summary: Create a health update
-      requestBody:
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ProjectHealthUpdate' }
+      summary: Delete project folder
 
   /projects/{id}/issues:
     get:
-      summary: List project issues
+      summary: List issues inside this project
     post:
-      summary: Create a project issue
+      summary: Create an issue inside this project
       requestBody:
         content:
           application/json:
@@ -143,28 +131,10 @@ paths:
     get:
       summary: Get issue details
     put:
-      summary: Update an issue
-      requestBody:
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ProjectIssue' }
+      summary: Update project issue
     delete:
-      summary: Delete an issue
+      summary: Delete project issue
 
-  /tasks:
+  /activities:
     get:
-      summary: List team tasks (kanban)
-    post:
-      summary: Create a team task
-      requestBody:
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/TeamTask' }
-
-  /tasks/{id}:
-    get:
-      summary: Get task details
-    put:
-      summary: Update a task
-    delete:
-      summary: Delete a task
+      summary: View team activity feed

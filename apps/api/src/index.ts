@@ -49,11 +49,8 @@ app.get("/health", (_req, res) => {
 app.use("/internal", internalRouter);
 
 // Unified Actors Endpoints (Agentes e Humanos usam os mesmos caminhos)
-app.use("/projects", projectsRouter);
-app.use("/tasks", projectsRouter);
-app.use("/issues", projectsRouter);
-app.use("/activities", projectsRouter);
 app.use("/team", teamManagementRouter);
+app.use("/", projectsRouter);
 
 // Legacy/Core routers (predominantly for humans or specific lifecycle)
 app.use("/auth", authRouter);

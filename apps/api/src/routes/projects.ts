@@ -30,8 +30,7 @@ import { logActivity } from "../lib/activity-logger";
 
 export const projectsRouter = Router();
 
-// ── Unified Auth Guard ────────────────────────────────────────────────────────
-projectsRouter.use(authMiddleware);
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
  * Helper to normalize payload for projects/issues/tasks.
@@ -58,7 +57,6 @@ async function assertHasTeamAccess(req: Request, teamId: string, res: Response):
     return true;
   }
 
-  // Human: Check workspace ownership
   const [row] = await db
     .select({ id: teams.id })
     .from(teams)
@@ -88,7 +86,6 @@ async function getProjectTeamId(req: Request, projectId: string): Promise<string
     return row?.teamId ?? null;
   }
 
-  // Human: check via workspace
   const [row] = await db
     .select({ teamId: projects.teamId })
     .from(projects)
@@ -100,19 +97,15 @@ async function getProjectTeamId(req: Request, projectId: string): Promise<string
   return row?.teamId ?? null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Projects
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Projects ─────────────────────────────────────────────────────────────────
 
 /**
  * POST /projects
  */
-projectsRouter.post("/", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.post("/projects", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = normalizePayload(req.body);
     const actor = req.actor!;
-    
-    // For agents, we force the teamId from their token.
     const effectiveTeamId = actor.type === "agent" ? actor.teamId! : String(payload.teamId || "");
     
     if (!effectiveTeamId) {
@@ -163,14 +156,11 @@ projectsRouter.post("/", async (req: Request, res: Response, next: NextFunction)
 /**
  * GET /projects
  */
-projectsRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/projects", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const actor = req.actor!;
     let teamId = String(req.query.teamId || "");
-
-    if (actor.type === "agent") {
-      teamId = actor.teamId!;
-    }
+    if (actor.type === "agent") teamId = actor.teamId!;
 
     if (!teamId) {
       res.status(400).json(failure("teamId query parameter is required for humans"));
@@ -195,7 +185,7 @@ projectsRouter.get("/", async (req: Request, res: Response, next: NextFunction) 
 /**
  * GET /projects/:id
  */
-projectsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/projects/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
     const actor = req.actor!;
@@ -231,7 +221,7 @@ projectsRouter.get("/:id", async (req: Request, res: Response, next: NextFunctio
 /**
  * PUT /projects/:id
  */
-projectsRouter.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.put("/projects/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
     const teamId = await getProjectTeamId(req, projectId);
@@ -282,7 +272,7 @@ projectsRouter.put("/:id", async (req: Request, res: Response, next: NextFunctio
 /**
  * DELETE /projects/:id
  */
-projectsRouter.delete("/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.delete("/projects/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
     const teamId = await getProjectTeamId(req, projectId);
@@ -302,14 +292,12 @@ projectsRouter.delete("/:id", async (req: Request, res: Response, next: NextFunc
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Project Issues
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Project Issues ───────────────────────────────────────────────────────────
 
 /**
  * POST /projects/:id/issues
  */
-projectsRouter.post("/:id/issues", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.post("/projects/:id/issues", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
     const teamId = await getProjectTeamId(req, projectId);
@@ -355,7 +343,7 @@ projectsRouter.post("/:id/issues", async (req: Request, res: Response, next: Nex
 /**
  * GET /projects/:id/issues
  */
-projectsRouter.get("/:id/issues", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/projects/:id/issues", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
     const teamId = await getProjectTeamId(req, projectId);
@@ -379,7 +367,7 @@ projectsRouter.get("/:id/issues", async (req: Request, res: Response, next: Next
 /**
  * GET /issues/:id
  */
-projectsRouter.get("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/issues/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const issueId = String(req.params.id);
     const actor = req.actor!;
@@ -417,7 +405,7 @@ projectsRouter.get("/issues/:id", async (req: Request, res: Response, next: Next
 /**
  * PUT /issues/:id
  */
-projectsRouter.put("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.put("/issues/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const issueId = String(req.params.id);
     const actor = req.actor!;
@@ -464,7 +452,7 @@ projectsRouter.put("/issues/:id", async (req: Request, res: Response, next: Next
 /**
  * DELETE /issues/:id
  */
-projectsRouter.delete("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.delete("/issues/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const issueId = String(req.params.id);
     const [row] = await db
@@ -488,14 +476,12 @@ projectsRouter.delete("/issues/:id", async (req: Request, res: Response, next: N
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Team Tasks
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Team Tasks ───────────────────────────────────────────────────────────────
 
 /**
- * GET /teams/:id/tasks
+ * GET /teams/:id/tasks (Human only usually)
  */
-projectsRouter.get("/teams/:id/tasks", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/teams/:id/tasks", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const teamId = String(req.params.id);
     const hasAccess = await assertHasTeamAccess(req, teamId, res);
@@ -514,9 +500,9 @@ projectsRouter.get("/teams/:id/tasks", async (req: Request, res: Response, next:
 });
 
 /**
- * POST /tasks
+ * POST /tasks OR POST /
  */
-projectsRouter.post("/tasks", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.post(["/tasks", "/"], authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = normalizePayload(req.body);
     const actor = req.actor!;
@@ -566,7 +552,7 @@ projectsRouter.post("/tasks", async (req: Request, res: Response, next: NextFunc
 /**
  * GET /tasks
  */
-projectsRouter.get("/tasks", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/tasks", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const actor = req.actor!;
     let teamId = String(req.query.teamId || "");
@@ -595,7 +581,7 @@ projectsRouter.get("/tasks", async (req: Request, res: Response, next: NextFunct
 /**
  * GET /tasks/:id
  */
-projectsRouter.get("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/tasks/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const taskId = String(req.params.id);
     const actor = req.actor!;
@@ -631,7 +617,7 @@ projectsRouter.get("/tasks/:id", async (req: Request, res: Response, next: NextF
 /**
  * PUT /tasks/:id
  */
-projectsRouter.put("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.put("/tasks/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const taskId = String(req.params.id);
     const actor = req.actor!;
@@ -677,7 +663,7 @@ projectsRouter.put("/tasks/:id", async (req: Request, res: Response, next: NextF
 /**
  * DELETE /tasks/:id
  */
-projectsRouter.delete("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.delete("/tasks/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const taskId = String(req.params.id);
     const [existing] = await db.select().from(teamTasks).where(eq(teamTasks.id, taskId)).limit(1);
@@ -696,14 +682,12 @@ projectsRouter.delete("/tasks/:id", async (req: Request, res: Response, next: Ne
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Activity Feed
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Activity Feed ─────────────────────────────────────────────────────────────
 
 /**
  * GET /activities
  */
-projectsRouter.get("/activities", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/activities", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const actor = req.actor!;
     let teamId = String(req.query.teamId || "");
@@ -729,14 +713,12 @@ projectsRouter.get("/activities", async (req: Request, res: Response, next: Next
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Comments
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Comments ─────────────────────────────────────────────────────────────────
 
 /**
  * GET /projects/:id/comments
  */
-projectsRouter.get("/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/projects/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
     const teamId = await getProjectTeamId(req, projectId);
@@ -760,7 +742,7 @@ projectsRouter.get("/:id/comments", async (req: Request, res: Response, next: Ne
 /**
  * POST /projects/:id/comments
  */
-projectsRouter.post("/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.post("/projects/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
     const teamId = await getProjectTeamId(req, projectId);
@@ -791,7 +773,7 @@ projectsRouter.post("/:id/comments", async (req: Request, res: Response, next: N
 /**
  * GET /issues/:id/comments
  */
-projectsRouter.get("/issues/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/issues/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const issueId = String(req.params.id);
     const [row] = await db
@@ -823,7 +805,7 @@ projectsRouter.get("/issues/:id/comments", async (req: Request, res: Response, n
 /**
  * POST /issues/:id/comments
  */
-projectsRouter.post("/issues/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.post("/issues/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const issueId = String(req.params.id);
     const [row] = await db
@@ -862,7 +844,7 @@ projectsRouter.post("/issues/:id/comments", async (req: Request, res: Response, 
 /**
  * GET /tasks/:id/comments
  */
-projectsRouter.get("/tasks/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/tasks/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const taskId = String(req.params.id);
     const [task] = await db.select().from(teamTasks).where(eq(teamTasks.id, taskId));
@@ -890,7 +872,7 @@ projectsRouter.get("/tasks/:id/comments", async (req: Request, res: Response, ne
 /**
  * POST /tasks/:id/comments
  */
-projectsRouter.post("/tasks/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.post("/tasks/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const taskId = String(req.params.id);
     const [task] = await db.select().from(teamTasks).where(eq(teamTasks.id, taskId));
@@ -925,7 +907,7 @@ projectsRouter.post("/tasks/:id/comments", async (req: Request, res: Response, n
 /**
  * PUT /comments/:id
  */
-projectsRouter.put("/comments/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.put("/comments/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const commentId = String(req.params.id);
     const actor = req.actor!;
@@ -960,7 +942,7 @@ projectsRouter.put("/comments/:id", async (req: Request, res: Response, next: Ne
 /**
  * DELETE /comments/:id
  */
-projectsRouter.delete("/comments/:id", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.delete("/comments/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const commentId = String(req.params.id);
     const actor = req.actor!;
@@ -982,14 +964,10 @@ projectsRouter.delete("/comments/:id", async (req: Request, res: Response, next:
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Project Health Updates
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
  * POST /projects/:id/updates
  */
-projectsRouter.post("/:id/updates", async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.post("/projects/:id/updates", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
     const actor = req.actor!;
