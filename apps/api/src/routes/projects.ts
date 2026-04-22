@@ -6,6 +6,7 @@ import {
   updateProjectSchema, 
   createIssueSchema, 
   updateIssueSchema,
+  createTaskSchema,
   updateTaskSchema
 } from "../schemas/project-management.schema";
 import { success, failure } from "../lib/response";
