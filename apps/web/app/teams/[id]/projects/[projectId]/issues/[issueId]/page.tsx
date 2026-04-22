@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import { Project, ProjectIssue, Agent, Comment } from "@/lib/types";
 import { StatusIcon, PriorityIcon, Button, CommentsList } from "@/components/shared-ui";
 
