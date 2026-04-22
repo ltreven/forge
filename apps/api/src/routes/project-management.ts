@@ -8,6 +8,7 @@ import {
   projectIssues,
   projectActivities,
   teamTasks,
+  comments,
   type ProjectHealth,
 } from "../db/schema";
 import {
@@ -19,6 +20,8 @@ import {
   updateProjectUpdateSchema,
   createTaskSchema,
   updateTaskSchema,
+  createCommentSchema,
+  updateCommentSchema,
 } from "../schemas/project-management.schema";
 import { failure, success } from "../lib/response";
 import { agentAuthMiddleware } from "../middleware/agentAuthMiddleware";
@@ -818,6 +821,201 @@ projectManagementRouter.get("/activities", async (req: Request, res: Response, n
       .orderBy(desc(projectActivities.createdAt));
 
     res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Comments ─────────────────────────────────────────────────────────────────
+
+/**
+ * GET /project-management/tasks/:id/comments
+ */
+projectManagementRouter.get("/tasks/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const taskId = String(req.params.id);
+
+    const [task] = await db
+      .select()
+      .from(teamTasks)
+      .where(and(eq(teamTasks.id, taskId), eq(teamTasks.teamId, req.agent!.teamId)));
+
+    if (!task) {
+      res.status(404).json(failure("Task not found"));
+      return;
+    }
+
+    const rows = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.teamTaskId, taskId))
+      .orderBy(comments.createdAt);
+
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /project-management/tasks/:id/comments
+ */
+projectManagementRouter.post("/tasks/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const taskId = String(req.params.id);
+
+    const [task] = await db
+      .select()
+      .from(teamTasks)
+      .where(and(eq(teamTasks.id, taskId), eq(teamTasks.teamId, req.agent!.teamId)));
+
+    if (!task) {
+      res.status(404).json(failure("Task not found"));
+      return;
+    }
+
+    const input = createCommentSchema.parse({ ...req.body, teamTaskId: taskId });
+
+    const [comment] = await db
+      .insert(comments)
+      .values({
+        teamId: req.agent!.teamId,
+        teamTaskId: taskId,
+        actorId: req.agent!.id,
+        actorType: "agent",
+        content: input.content,
+      })
+      .returning();
+
+    res.status(201).json(success(comment));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /project-management/issues/:id/comments
+ */
+projectManagementRouter.get("/issues/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const issueId = String(req.params.id);
+
+    const [row] = await db
+      .select({ issue: projectIssues })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+      .where(and(eq(projectIssues.id, issueId), eq(projects.teamId, req.agent!.teamId)));
+
+    if (!row) {
+      res.status(404).json(failure("Issue not found"));
+      return;
+    }
+
+    const rows = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.projectIssueId, issueId))
+      .orderBy(comments.createdAt);
+
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /project-management/issues/:id/comments
+ */
+projectManagementRouter.post("/issues/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const issueId = String(req.params.id);
+
+    const [row] = await db
+      .select({ issue: projectIssues })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+      .where(and(eq(projectIssues.id, issueId), eq(projects.teamId, req.agent!.teamId)));
+
+    if (!row) {
+      res.status(404).json(failure("Issue not found"));
+      return;
+    }
+
+    const input = createCommentSchema.parse({ ...req.body, projectIssueId: issueId });
+
+    const [comment] = await db
+      .insert(comments)
+      .values({
+        teamId: req.agent!.teamId,
+        projectIssueId: issueId,
+        actorId: req.agent!.id,
+        actorType: "agent",
+        content: input.content,
+      })
+      .returning();
+
+    res.status(201).json(success(comment));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /project-management/comments/:id
+ */
+projectManagementRouter.put("/comments/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const commentId = String(req.params.id);
+
+    // Must belong to the agent
+    const [existing] = await db
+      .select()
+      .from(comments)
+      .where(and(eq(comments.id, commentId), eq(comments.actorId, req.agent!.id), eq(comments.actorType, "agent")));
+
+    if (!existing) {
+      res.status(404).json(failure("Comment not found or access denied"));
+      return;
+    }
+
+    const input = updateCommentSchema.parse(req.body);
+
+    const [updated] = await db
+      .update(comments)
+      .set({
+        content: input.content,
+        updatedAt: new Date(),
+      })
+      .where(eq(comments.id, existing.id))
+      .returning();
+
+    res.json(success(updated));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /project-management/comments/:id
+ */
+projectManagementRouter.delete("/comments/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const commentId = String(req.params.id);
+
+    // Must belong to the agent
+    const [existing] = await db
+      .select()
+      .from(comments)
+      .where(and(eq(comments.id, commentId), eq(comments.actorId, req.agent!.id), eq(comments.actorType, "agent")));
+
+    if (!existing) {
+      res.status(404).json(failure("Comment not found or access denied"));
+      return;
+    }
+
+    await db.delete(comments).where(eq(comments.id, existing.id));
+
+    res.json(success({ deleted: true, id: existing.id }));
   } catch (err) {
     next(err);
   }

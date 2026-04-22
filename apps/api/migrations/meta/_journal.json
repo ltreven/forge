@@ -57,6 +57,27 @@
       "when": 1776800000000,
       "tag": "0010_team_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776825535868,
+      "tag": "0008_burly_talon",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776831065974,
+      "tag": "0009_optimal_leopardon",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776831153694,
+      "tag": "0010_elite_wallflower",
+      "breakpoints": true
     }
   ]
 }

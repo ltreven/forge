@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Bot, Brain, ChevronRight, Gauge,
   History, Loader2, Send, Settings, ShieldCheck, Wrench, Zap, Plus,
-  AlertCircle
+  AlertCircle, Flag
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type HealthStatus = "online" | "starting" | "offline";
+export type DisplayStatus = "provisioning" | "offline" | "available" | "busy" | "blocked";
 
 interface AgentMetadata {
   avatarColor?: string;
@@ -32,6 +32,7 @@ interface Agent {
   teamId?: string;
   /** Kubernetes provisioning phase — updated by the Agent Controller. */
   k8sStatus?: "pending" | "provisioning" | "running" | "failed" | "terminated" | null;
+  availability?: "available" | "busy" | "blocked";
 }
 
 interface ChatMessage {
@@ -64,31 +65,30 @@ const ROLE_LABELS: Record<string, string> = {
 
 // ── Health helpers ────────────────────────────────────────────────────────────
 
-/**
- * Derives the front-end health status purely from the Kubernetes pod lifecycle.
- * Integration state (Telegram, tools, etc.) is intentionally excluded here —
- * the agent is considered Online as soon as its pod is Running.
- */
-function computeHealth(a: Agent): HealthStatus {
+function computeDisplayStatus(a: Agent): DisplayStatus {
   const k8s = a.k8sStatus;
-  if (k8s === "running") return "online";
   if (k8s === "failed" || k8s === "terminated") return "offline";
-  // pending | provisioning | null → pod is still coming up
-  return "starting";
+  if (k8s !== "running") return "provisioning";
+  
+  return a.availability || "available";
 }
 
-function HealthDot({ status }: { status: HealthStatus }) {
+function StatusIndicator({ status }: { status: DisplayStatus }) {
+  if (status === "busy") {
+    return <Loader2 className="size-4 animate-spin text-blue-500" />;
+  }
+  if (status === "blocked") {
+    return <Flag className="size-4 text-red-500 fill-red-500" />;
+  }
+  
   return (
     <span className={cn(
-      "relative flex size-2 shrink-0 rounded-full",
-      status === "online"   && "bg-emerald-500",
-      status === "starting" && "bg-amber-400",
-      status === "offline"  && "bg-red-500",
+      "relative flex size-2.5 shrink-0 rounded-full",
+      status === "available"    && "bg-emerald-500",
+      status === "provisioning" && "bg-amber-400",
+      status === "offline"      && "bg-red-500",
     )}>
-      {status === "online" && (
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-      )}
-      {status === "starting" && (
+      {status === "provisioning" && (
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
       )}
     </span>
@@ -376,11 +376,19 @@ export default function AgentPage() {
   }), [token]);
 
   useEffect(() => {
-    fetch(`${API_BASE}/agents/${agentId}`, { headers: authHeaders() })
-      .then((r) => r.json())
-      .then((d) => setAgent(d.data))
-      .catch(() => toast.error("Failed to load agent."))
-      .finally(() => setIsLoading(false));
+    const fetchAgent = () => {
+      fetch(`${API_BASE}/agents/${agentId}`, { headers: authHeaders() })
+        .then((r) => r.json())
+        .then((d) => setAgent(d.data))
+        .catch(() => toast.error("Failed to load agent."))
+        .finally(() => setIsLoading(false));
+    };
+
+    fetchAgent(); // Initial fetch
+    
+    // Polling interval
+    const intervalId = setInterval(fetchAgent, 5000);
+    return () => clearInterval(intervalId);
   }, [agentId, authHeaders]);
 
   const patchAgent = useCallback(async (patch: object) => {
@@ -401,14 +409,19 @@ export default function AgentPage() {
 
   const icon        = agent.icon ?? "🤖";
   const color       = agent.metadata?.avatarColor ?? ROLE_COLORS[agent.type] ?? "#6366f1";
-  const health      = computeHealth(agent);
+  const status      = computeDisplayStatus(agent);
   const currentModel = (agent.metadata as Record<string, unknown> | undefined)?.model as string | undefined ?? "auto";
   const ta          = t.agents;
   const roleLabel   = ROLE_LABELS[agent.type] ?? agent.type;
-  const healthLabel =
-    health === "online"   ? ta.healthOnline :
-    health === "starting" ? ta.healthStarting :
-    ta.healthOffline;
+  
+  const statusLabels: Record<DisplayStatus, string> = {
+    available: "Available",
+    busy: "Processing",
+    blocked: "Blocked",
+    provisioning: ta.healthStarting || "Provisioning",
+    offline: ta.healthOffline || "Offline"
+  };
+  const statusLabel = statusLabels[status];
   const backHref    = agent.teamId ? `/teams/${agent.teamId}` : "/teams";
 
   const NAV_ITEMS = [
@@ -444,12 +457,14 @@ export default function AgentPage() {
               {roleLabel}
             </span>
             <div className="flex items-center gap-1.5">
-              <HealthDot status={health} />
+              <StatusIndicator status={status} />
               <span className={cn("text-xs font-medium",
-                health === "online"   && "text-emerald-600 dark:text-emerald-400",
-                health === "starting" && "text-amber-600 dark:text-amber-400",
-                health === "offline"  && "text-red-600 dark:text-red-400"
-              )}>{healthLabel}</span>
+                status === "available"    && "text-emerald-600 dark:text-emerald-400",
+                status === "provisioning" && "text-amber-600 dark:text-amber-400",
+                status === "offline"      && "text-red-600 dark:text-red-400",
+                status === "busy"         && "text-blue-600 dark:text-blue-400",
+                status === "blocked"      && "text-red-600 dark:text-red-400"
+              )}>{statusLabel}</span>
             </div>
           </div>
         </div>
@@ -503,10 +518,12 @@ export default function AgentPage() {
             <div className="flex justify-between">
               <span className="font-medium">Status</span>
               <span className={cn("font-bold",
-                health === "online"   && "text-emerald-600",
-                health === "starting" && "text-amber-600",
-                health === "offline"  && "text-red-600"
-              )}>{healthLabel}</span>
+                status === "available"    && "text-emerald-600",
+                status === "provisioning" && "text-amber-600",
+                status === "offline"      && "text-red-600",
+                status === "busy"         && "text-blue-600",
+                status === "blocked"      && "text-red-600"
+              )}>{statusLabel}</span>
             </div>
           </div>
         </div>

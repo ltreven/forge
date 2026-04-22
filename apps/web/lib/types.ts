@@ -9,6 +9,7 @@ export interface Agent {
   id: string; name: string; type: AgentType;
   icon?: string; metadata?: { avatarColor?: string };
   k8sStatus?: "pending" | "provisioning" | "running" | "failed" | "terminated" | null;
+  availability?: "available" | "busy" | "blocked";
 }
 
 export interface Team {
@@ -58,5 +59,61 @@ export interface TeamTask {
   status: number;
   priority: number;
   assignedToId?: string | null;
+  updatedAt: string;
+}
+
+export type RequestStatus = "created" | "processing" | "responded";
+
+export interface TeamRequest {
+  id: string;
+  teamId: string;
+  requesterId: string;
+  requesterType: "human" | "agent";
+  targetAgentId: string;
+  teamTaskId?: string | null;
+  projectIssueId?: string | null;
+  inputData?: any | null;
+  responseContract?: string | null;
+  status: RequestStatus;
+  responseStatusCode?: number | null;
+  responseMetadata?: any | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ActivityType =
+  | "request_created"
+  | "request_received"
+  | "request_responded"
+  | "project_created"
+  | "task_created"
+  | "project_issue_created"
+  | "project_issue_blocked"
+  | "project_issue_unblocked"
+  | "task_blocked"
+  | "task_unblocked"
+  | "task_finished";
+
+export interface TeamActivity {
+  id: string;
+  teamId: string;
+  actorId: string;
+  actorType: "human" | "agent";
+  type: ActivityType;
+  entityType: string;
+  entityId: string;
+  payload?: any | null;
+  createdAt: string;
+}
+
+export interface Comment {
+  id: string;
+  teamId: string;
+  teamTaskId?: string | null;
+  projectIssueId?: string | null;
+  actorId: string;
+  actorType: "human" | "agent";
+  content: string;
+  createdAt: string;
   updatedAt: string;
 }

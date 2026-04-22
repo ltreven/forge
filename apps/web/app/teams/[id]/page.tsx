@@ -29,20 +29,24 @@ import {
   SignalMedium,
   SignalHigh,
   Flame,
-  AlertTriangle
+  AlertTriangle,
+  Flag
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { Team, Project, ProjectIssue, TeamTask, Agent, AgentType, HealthStatus } from "@/lib/types";
+import { Team, Project, ProjectIssue, TeamTask, Agent, AgentType, HealthStatus, TeamActivity } from "@/lib/types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function computeHealth(a: Agent): HealthStatus {
+export type DisplayStatus = "provisioning" | "offline" | "available" | "busy" | "blocked";
+
+function computeDisplayStatus(a: Agent): DisplayStatus {
   const k8s = a.k8sStatus;
-  if (k8s === "running") return "online";
   if (k8s === "failed" || k8s === "terminated") return "offline";
-  return "starting";
+  if (k8s !== "running") return "provisioning";
+  
+  return a.availability || "available";
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -103,14 +107,16 @@ function PriorityIcon({ priority, className }: { priority: number; className?: s
 function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) {
   const color  = agent.metadata?.avatarColor ?? ROLE_COLORS[agent.type] ?? "#6366f1";
   const isLead = agent.type === "team_lead";
-  const health = computeHealth(agent);
+  const status = computeDisplayStatus(agent);
 
-  const healthLabels = {
-    online: "Online",
-    starting: "Provisioning",
+  const statusLabels: Record<DisplayStatus, string> = {
+    available: "Available",
+    busy: "Processing",
+    blocked: "Blocked",
+    provisioning: "Provisioning",
     offline: "Offline"
   };
-  const healthLabel = healthLabels[health];
+  const statusLabel = statusLabels[status];
 
   return (
     <button
@@ -150,21 +156,24 @@ function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) {
         <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           Open →
         </span>
-        <div className="flex items-center gap-1">
-          <span className={cn(
-            "relative flex size-2 shrink-0 rounded-full",
-            health === "online"   && "bg-emerald-500",
-            health === "starting" && "bg-amber-400",
-            health === "offline"  && "bg-red-500",
-          )}>
-            {health === "online" && (
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-            )}
-            {health === "starting" && (
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
-            )}
-          </span>
-          <span className="text-[10px] text-muted-foreground/50">{healthLabel}</span>
+        <div className="flex items-center gap-1.5">
+          {status === "busy" ? (
+            <Loader2 className="size-3 animate-spin text-blue-500" />
+          ) : status === "blocked" ? (
+            <Flag className="size-3 text-red-500 fill-red-500" />
+          ) : (
+            <span className={cn(
+              "relative flex size-2 shrink-0 rounded-full",
+              status === "available"    && "bg-emerald-500",
+              status === "provisioning" && "bg-amber-400",
+              status === "offline"      && "bg-red-500",
+            )}>
+              {status === "provisioning" && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
+              )}
+            </span>
+          )}
+          <span className="text-[10px] font-medium text-muted-foreground/70">{statusLabel}</span>
         </div>
       </div>
     </button>
@@ -362,6 +371,7 @@ export default function TeamDetailPage() {
   const [projects, setProjects]   = useState<Project[]>([]);
   const [issues, setIssues]       = useState<ProjectIssue[]>([]);
   const [tasks, setTasks]         = useState<TeamTask[]>([]);
+  const [activities, setActivities] = useState<TeamActivity[]>([]);
   
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [showAllTasks, setShowAllTasks] = useState(false);
@@ -380,25 +390,11 @@ export default function TeamDetailPage() {
       Authorization: `Bearer ${token}`,
     };
 
-    Promise.all([
-      fetch(`${API_BASE}/teams/${teamId}`, { headers }),
-      fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers }),
-      fetch(`${API_BASE}/teams/${teamId}/projects`, { headers }),
-      fetch(`${API_BASE}/teams/${teamId}/issues`, { headers }),
-      fetch(`${API_BASE}/teams/${teamId}/tasks`, { headers }),
-    ])
-      .then(async ([teamRes, agentsRes, projectsRes, issuesRes, tasksRes]) => {
-        if (teamRes.ok) {
-          const d = await teamRes.json();
-          const t: Team = d.data;
-          setTeam(t);
-        } else {
-          toast.error("Team not found.");
-          router.replace("/teams");
-        }
+    const fetchAgents = async () => {
+      try {
+        const agentsRes = await fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers });
         if (agentsRes.ok) {
           const d = await agentsRes.json();
-          // Sort: team_lead first
           const all: Agent[] = d.data ?? [];
           all.sort((a, b) => {
             if (a.type === "team_lead") return -1;
@@ -407,21 +403,53 @@ export default function TeamDetailPage() {
           });
           setAgents(all);
         }
-        if (projectsRes.ok) {
+      } catch (err) {
+        console.error("Failed to poll agents", err);
+      }
+    };
+
+    Promise.all([
+      fetch(`${API_BASE}/teams/${teamId}`, { headers }),
+      fetchAgents(), // Initial fetch
+      fetch(`${API_BASE}/teams/${teamId}/projects`, { headers }),
+      fetch(`${API_BASE}/teams/${teamId}/issues`, { headers }),
+      fetch(`${API_BASE}/teams/${teamId}/tasks`, { headers }),
+      fetch(`${API_BASE}/teams/${teamId}/activities`, { headers }),
+    ])
+      .then(async ([teamRes, _agentsRes, projectsRes, issuesRes, tasksRes, activitiesRes]) => {
+        if (teamRes && teamRes.ok) {
+          const d = await teamRes.json();
+          const t: Team = d.data;
+          setTeam(t);
+        } else if (teamRes && !teamRes.ok) {
+          toast.error("Team not found.");
+          router.replace("/teams");
+        }
+        
+        if (projectsRes && projectsRes.ok) {
           const d = await projectsRes.json();
           setProjects(d.data ?? []);
         }
-        if (issuesRes.ok) {
+        if (issuesRes && issuesRes.ok) {
           const d = await issuesRes.json();
           setIssues(d.data ?? []);
         }
-        if (tasksRes.ok) {
+        if (tasksRes && tasksRes.ok) {
           const d = await tasksRes.json();
           setTasks(d.data ?? []);
+        }
+        if (activitiesRes && activitiesRes.ok) {
+          const d = await activitiesRes.json();
+          setActivities(d.data ?? []);
         }
       })
       .catch(() => toast.error("Failed to load team."))
       .finally(() => setIsLoading(false));
+
+    // Polling interval for agents (every 5 seconds)
+    const intervalId = setInterval(fetchAgents, 5000);
+    return () => clearInterval(intervalId);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
 
@@ -718,24 +746,52 @@ export default function TeamDetailPage() {
           </div>
         </section>
 
-        {/* Recent Activity — placeholder */}
+        {/* Recent Activity */}
         <section id="team-activity" className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <SectionTitle icon={Activity} label="Recent Activity" className="mb-4" />
           <div className="flex flex-col gap-3">
-            {/* Skeleton placeholder rows */}
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/10 px-4 py-3">
-                <div className="size-6 rounded-full bg-muted animate-pulse" />
-                <div className="flex-1 flex flex-col gap-1.5">
-                  <div className="h-2.5 rounded bg-muted animate-pulse" style={{ width: `${60 + i * 10}%` }} />
-                  <div className="h-2 rounded bg-muted animate-pulse" style={{ width: `${30 + i * 5}%` }} />
-                </div>
-                <div className="h-2 w-10 rounded bg-muted animate-pulse" />
+            {activities.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
+                <Activity className="size-6 text-muted-foreground/30" />
+                <p className="text-sm font-medium text-muted-foreground">No recent activity</p>
               </div>
-            ))}
-            <p className="text-center text-xs text-muted-foreground/50 pt-1">
-              Activity feed coming soon
-            </p>
+            ) : (
+              activities.map((act) => {
+                const isHuman = act.actorType === "human";
+                const agent = isHuman ? null : agents.find(a => a.id === act.actorId);
+                const title = act.payload?.title || act.entityId.substring(0, 8);
+                
+                let text = "";
+                switch (act.type) {
+                  case "project_created": text = `created project "${title}"`; break;
+                  case "task_created": text = `created task "${title}"`; break;
+                  case "project_issue_created": text = `created issue "${title}"`; break;
+                  case "request_created": text = `requested a task to be executed`; break;
+                  case "request_received": text = `started processing a request`; break;
+                  case "request_responded": text = `responded to a request`; break;
+                  case "task_blocked": text = `blocked task "${title}"`; break;
+                  case "task_unblocked": text = `unblocked task "${title}"`; break;
+                  case "task_finished": text = `finished task "${title}"`; break;
+                  default: text = `performed ${act.type} on ${act.entityType}`;
+                }
+
+                return (
+                  <div key={act.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-background px-4 py-3 hover:bg-muted/30 transition-colors">
+                    <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px]" title={isHuman ? "Human" : agent?.name}>
+                      {isHuman ? "👤" : (agent?.icon || ROLE_EMOJIS[agent?.type || ""] || "🤖")}
+                    </div>
+                    <div className="flex-1 flex flex-col">
+                      <p className="text-sm text-foreground">
+                        <span className="font-semibold">{isHuman ? "Team Member" : agent?.name || "Unknown Agent"}</span> {text}
+                      </p>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/50 shrink-0">
+                      {formatDate(act.createdAt)}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </section>
       </div>

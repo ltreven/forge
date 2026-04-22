@@ -7,6 +7,8 @@ import { createTeamSchema, updateTeamSchema } from "../schemas/team.schema";
 import { success, failure } from "../lib/response";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { applyCredentialsSecret, applyForgeAgentCR } from "../k8s/provisioner";
+import { requestsRouter } from "./team-requests";
+import { activitiesRouter } from "./team-activities";
 
 export const teamsRouter = Router();
 
@@ -257,3 +259,7 @@ teamsRouter.get("/:id/issues", authMiddleware, async (req: Request, res: Respons
     next(err);
   }
 });
+// ── Team Activities & Requests ──────────────────────────────────────────────────
+
+teamsRouter.use("/:teamId/requests", requestsRouter);
+teamsRouter.use("/:teamId/activities", activitiesRouter);

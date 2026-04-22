@@ -52,48 +52,22 @@ app.use("/agents", agentsRouter);
 app.use("/conversations", conversationsRouter);
 
 /**
- * Project management — authenticated by agent gatewayToken.
- * All routes are scoped to the authenticated agent's team automatically.
- *
- * Key endpoints:
- *   POST   /project-management/projects
- *   GET    /project-management/projects
- *   GET    /project-management/projects/:id
- *   PUT    /project-management/projects/:id
- *   DELETE /project-management/projects/:id
- *   POST   /project-management/projects/:id/updates
- *   GET    /project-management/projects/:id/updates
- *   PUT    /project-management/updates/:id
- *   DELETE /project-management/updates/:id
- *   POST   /project-management/projects/:id/issues
- *   GET    /project-management/projects/:id/issues
- *   GET    /project-management/issues/:id
- *   PUT    /project-management/issues/:id
- *   DELETE /project-management/issues/:id
- *   POST   /project-management/tasks
- *   GET    /project-management/tasks
- *   GET    /project-management/tasks/:id
- *   PUT    /project-management/tasks/:id
- *   DELETE /project-management/tasks/:id
- *   GET    /project-management/activities
+ * Project management for agents — authenticated by gatewayToken.
  */
 app.use("/project-management", projectManagementRouter);
 
+// Resilience aliases for agents who guess the path:
+app.use("/tasks", projectManagementRouter);
+app.use("/issues", projectManagementRouter);
+
 /**
- * Team management — authenticated by agent gatewayToken.
- * This is used by agents to inspect their team and provision new agents.
- * All routes are scoped to the authenticated agent's team automatically.
- *
- * Key endpoints:
- *   GET    /team-management/teams/mine
- *   GET    /team-management/teams/mine/agents
- *   POST   /team-management/teams/mine/agents
+ * Team management for agents — authenticated by gatewayToken.
  */
 app.use("/team-management", teamManagementRouter);
 app.use("/team-api", teamManagementRouter);
 
 /**
- * Project management for human users.
+ * Project & Task management for humans — authenticated by user JWT.
  */
 app.use("/projects", projectsRouter);
 

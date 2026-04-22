@@ -21,6 +21,12 @@ export const agentK8sStatusEnum = pgEnum("agent_k8s_status", [
   "terminated",   // CR deleted, resources being GC'd
 ]);
 
+export const agentAvailabilityEnum = pgEnum("agent_availability", [
+  "available",
+  "busy",
+  "blocked"
+]);
+
 export const integrationProviderEnum = pgEnum("integration_provider", [
   "linear",
   "jira",
@@ -40,6 +46,22 @@ export const projectHealthEnum = pgEnum("project_health", [
   "on_track",
   "at_risk",
   "off_track",
+]);
+
+export const actorTypeEnum = pgEnum("actor_type", ["human", "agent"]);
+export const requestStatusEnum = pgEnum("request_status", ["created", "processing", "responded"]);
+export const activityTypeEnum = pgEnum("activity_type", [
+  "request_created",
+  "request_received",
+  "request_responded",
+  "project_created",
+  "task_created",
+  "project_issue_created",
+  "project_issue_blocked",
+  "project_issue_unblocked",
+  "task_blocked",
+  "task_unblocked",
+  "task_finished"
 ]);
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -120,6 +142,8 @@ export const agents = pgTable("agents", {
   k8sStatus: agentK8sStatusEnum("k8s_status").default("pending"),
   /** Name of the ForgeAgent CR in the cluster (equals agent UUID). */
   k8sResourceName: text("k8s_resource_name"),
+  /** Current availability of the agent. */
+  availability: agentAvailabilityEnum("availability").notNull().default("available"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -283,3 +307,70 @@ export const teamTasks = pgTable("team_tasks", {
 
 export type TeamTask = typeof teamTasks.$inferSelect;
 export type NewTeamTask = typeof teamTasks.$inferInsert;
+
+// ── Team Requests (Agent-to-Agent / Human-to-Agent) ─────────────────────────
+
+export const teamRequests = pgTable("team_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  requesterId: uuid("requester_id").notNull(),
+  requesterType: actorTypeEnum("requester_type").notNull(),
+  targetAgentId: uuid("target_agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  teamTaskId: uuid("team_task_id").references((): AnyPgColumn => teamTasks.id, { onDelete: "set null" }),
+  projectIssueId: uuid("project_issue_id").references((): AnyPgColumn => projectIssues.id, { onDelete: "set null" }),
+  inputData: jsonb("input_data"),
+  responseContract: text("response_contract"),
+  status: requestStatusEnum("status").notNull().default("created"),
+  responseStatusCode: integer("response_status_code"),
+  responseMetadata: jsonb("response_metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TeamRequest = typeof teamRequests.$inferSelect;
+export type NewTeamRequest = typeof teamRequests.$inferInsert;
+
+// ── Team Activities (Log) ───────────────────────────────────────────────────
+
+export const teamActivities = pgTable("team_activities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  actorId: uuid("actor_id").notNull(),
+  actorType: actorTypeEnum("actor_type").notNull(),
+  type: activityTypeEnum("type").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: uuid("entity_id").notNull(),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TeamActivity = typeof teamActivities.$inferSelect;
+export type NewTeamActivity = typeof teamActivities.$inferInsert;
+
+// ── Comments ────────────────────────────────────────────────────────────────
+
+export const comments = pgTable("comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  teamTaskId: uuid("team_task_id").references((): AnyPgColumn => teamTasks.id, { onDelete: "cascade" }),
+  projectIssueId: uuid("project_issue_id").references((): AnyPgColumn => projectIssues.id, { onDelete: "cascade" }),
+  
+  actorId: uuid("actor_id").notNull(),
+  actorType: actorTypeEnum("actor_type").notNull(),
+  
+  content: text("content").notNull(),
+  
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Comment = typeof comments.$inferSelect;
+export type NewComment = typeof comments.$inferInsert;

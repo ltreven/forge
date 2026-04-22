@@ -30,7 +30,7 @@ import {
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { Team, TeamTask, Agent } from "@/lib/types";
+import { Team, TeamTask, Agent, Comment } from "@/lib/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ function PriorityIcon({ priority, className }: { priority: number; className?: s
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TaskPage() {
-  const { token, isLoading: authLoading } = useAuth();
+  const { user, token, isLoading: authLoading } = useAuth();
   const params = useParams();
   const router = useRouter();
   
@@ -92,6 +92,9 @@ export default function TaskPage() {
   const [task, setTask]         = useState<TeamTask | null>(null);
   const [subTasks, setSubTasks] = useState<TeamTask[]>([]);
   const [agents, setAgents]     = useState<Agent[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [isPostingComment, setIsPostingComment] = useState(false);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -114,8 +117,9 @@ export default function TaskPage() {
       fetch(`${API_BASE}/projects/tasks/${taskId}`, { headers: headers() }),
       fetch(`${API_BASE}/teams/${teamId}/tasks`, { headers: headers() }), // To find sub-tasks
       fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers: headers() }),
+      fetch(`${API_BASE}/projects/tasks/${taskId}/comments`, { headers: headers() }),
     ])
-      .then(async ([teamRes, taskRes, allTasksRes, agentsRes]) => {
+      .then(async ([teamRes, taskRes, allTasksRes, agentsRes, commentsRes]) => {
         if (!taskRes.ok) {
           toast.error("Task not found.");
           router.replace(`/teams/${teamId}`);
@@ -125,11 +129,13 @@ export default function TaskPage() {
         const t: TeamTask = (await taskRes.json()).data;
         const all: TeamTask[] = (await allTasksRes.json()).data ?? [];
         const a: Agent[] = (await agentsRes.json()).data ?? [];
+        const c: Comment[] = commentsRes.ok ? (await commentsRes.json()).data ?? [] : [];
 
         setTeam(tm);
         setTask(t);
         setSubTasks(all.filter(x => x.parentTaskId === t.id));
         setAgents(a);
+        setComments(c);
         
         // Populate form
         setTitle(t.title);
@@ -199,6 +205,42 @@ export default function TaskPage() {
       toast.success("Sub-task created");
     } catch {
       toast.error("Failed to create sub-task.");
+    }
+  };
+
+  const handlePostComment = async () => {
+    if (!newComment.trim() || isPostingComment) return;
+    setIsPostingComment(true);
+    try {
+      const res = await fetch(`${API_BASE}/projects/tasks/${taskId}/comments`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ content: newComment.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      const c = (await res.json()).data;
+      setComments(prev => [...prev, c]);
+      setNewComment("");
+      toast.success("Comment posted");
+    } catch {
+      toast.error("Failed to post comment");
+    } finally {
+      setIsPostingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm("Are you sure you want to delete this comment?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/projects/comments/${commentId}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error();
+      setComments(prev => prev.filter(c => c.id !== commentId));
+      toast.success("Comment deleted");
+    } catch {
+      toast.error("Failed to delete comment");
     }
   };
 
@@ -313,6 +355,61 @@ export default function TaskPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Comments section */}
+            <div className="pt-6 space-y-4 border-t border-border/50">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                <MoreHorizontal className="size-3.5" />
+                Comments
+              </div>
+              <div className="space-y-4">
+                {comments.map((c) => (
+                  <div key={c.id} className="flex gap-3">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
+                      {c.actorType === "agent" ? agents.find(a => a.id === c.actorId)?.icon || "🤖" : "👤"}
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-foreground">
+                          {c.actorType === "agent" ? agents.find(a => a.id === c.actorId)?.name || "Agent" : user?.name || "User"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(c.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{c.content}</p>
+                      {user?.id === c.actorId && c.actorType === "human" && (
+                        <button
+                          onClick={() => handleDeleteComment(c.id)}
+                          className="text-xs text-red-500/70 hover:text-red-500 transition-colors mt-1"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="pt-2">
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="min-h-[80px] w-full resize-none rounded-xl border border-border bg-card p-3 text-sm leading-relaxed text-foreground outline-none transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                />
+                <div className="flex justify-end mt-2">
+                  <Button 
+                    size="sm" 
+                    onClick={handlePostComment} 
+                    disabled={isPostingComment || !newComment.trim()}
+                  >
+                    {isPostingComment ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
+                    Post Comment
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

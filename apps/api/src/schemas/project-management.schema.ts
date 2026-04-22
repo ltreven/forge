@@ -71,3 +71,15 @@ export const createTaskSchema = z.object({
 });
 
 export const updateTaskSchema = createTaskSchema.partial().omit({ teamId: true });
+
+export const createCommentSchema = z.object({
+  teamTaskId: z.string().uuid().nullable().optional(),
+  projectIssueId: z.string().uuid().nullable().optional(),
+  content: z.string().min(1),
+}).refine(data => data.teamTaskId || data.projectIssueId, {
+  message: "Must provide either teamTaskId or projectIssueId",
+});
+
+export const updateCommentSchema = z.object({
+  content: z.string().min(1),
+});
