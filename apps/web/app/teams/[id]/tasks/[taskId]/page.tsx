@@ -25,7 +25,8 @@ import {
   Save,
   MoreHorizontal,
   Target,
-  Users
+  Users,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
