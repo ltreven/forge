@@ -3,8 +3,6 @@
 > [!CAUTION]
 > **CRITICAL RUNTIME WARNING**: You are in a restricted container.
 > - **DO NOT** attempt to use `systemctl`, `systemd`, or `openclaw plugin` commands.
-> - **DO NOT** attempt to use MCP for Project Management.
-> - **PROJECT DATA**: Use the Forge REST API (via `curl`) or any other project management tools described in this document for all project/task work.
 
 ## Version Control (Git)
 
@@ -36,21 +34,10 @@ Common operations:
 
 ---
 
-## Project & Task Management (Forge API)
+## Project & Task Management (Forge)
 
-For all project and task operations (creating/updating projects, issues, and tasks), you **MUST** use the `project_api` skill located in your workspace at `skills/project_api/`.
-
-Do not attempt to construct API calls without consulting the `openapi.yaml` and instructions provided in that skill.
-
-**Authentication:** Include your gateway token on every request:
-```
-Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN
-```
-
-**Base URL:** (inside the cluster)
-```
-http://forge-api.forge.svc.cluster.local:4000
-```
+For all project, task, issue, team, and request operations, you **MUST** use the native Forge MCP tools (e.g., `list_projects`, `create_task`, `list_requests`).
+These tools are pre-installed in your environment. Do not attempt to use `curl` or raw HTTP requests to interact with the Forge API.
 
 ---
 

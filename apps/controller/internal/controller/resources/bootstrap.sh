@@ -187,6 +187,12 @@ Use these tools for repository discovery, issue triage, and pull-request workflo
 SKILL_EOF
   fi
 
+  # ── Forge API MCP ─────────────────────────────────────────────────────────
+  echo "==> Configuring Forge API MCP"
+  FORGE_API_URL="http://forge-api.forge.svc.cluster.local:4000/mcp/sse?token=${OPENCLAW_GATEWAY_TOKEN:-}"
+  FORGE_JSON_ARG="{\"type\":\"sse\",\"url\":\"$FORGE_API_URL\",\"headers\":{\"Authorization\":\"Bearer ${OPENCLAW_GATEWAY_TOKEN:-}\"}}"
+  openclaw mcp set forge "$FORGE_JSON_ARG"
+
   # ── Seed profile files (FIRST BOOT ONLY) ─────────────────────────────────
   # Source: /opt/forge/profiles/{AGENT_PROFILE}/ (baked into the image)
   # Destination: $OPENCLAW_CONFIG_DIR/workspace/

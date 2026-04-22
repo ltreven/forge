@@ -10,6 +10,7 @@ import { internalRouter } from "./routes/internal";
 import { errorHandler } from "./middleware/errorHandler";
 import { projectsRouter } from "./routes/projects";
 import { teamManagementRouter } from "./routes/team-management";
+import { mcpRouter } from "./routes/mcp";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -23,10 +24,20 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-app.use(express.json());
+app.use((req, res, next) => {
+  // Bypass express.json() for MCP messages route because the SDK needs the raw HTTP stream
+  if (req.originalUrl.startsWith('/mcp/messages') || req.path === '/mcp/messages') {
+    return next();
+  }
+  express.json()(req, res, next);
+});
 
 // Enforce Content-Type for mutations to help agents/users debug missing headers
 app.use((req, res, next) => {
+  // Bypass this enforcement for MCP messages
+  if (req.originalUrl.startsWith('/mcp/messages') || req.path === '/mcp/messages') {
+    return next();
+  }
   if ((req.method === "POST" || req.method === "PUT") && !req.is("application/json")) {
     res.status(415).json({
       success: false,
@@ -58,6 +69,7 @@ app.use("/teams", teamsRouter); // Legacy team listing for humans
 app.use("/agents", agentsRouter); // Lifecycle management (creation/deletion)
 app.use("/conversations", conversationsRouter);
 app.use("/teams/:id/integrations", integrationsRouter);
+app.use("/mcp", mcpRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 

@@ -35,22 +35,27 @@ export async function authMiddleware(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+  let token = "";
+  
   const header = req.headers.authorization;
-
-  if (!header) {
-    res.status(401).json(failure("Missing Authorization header"));
-    return;
+  if (header) {
+    const isBearer = /^bearer\s+/i.test(header);
+    if (!isBearer) {
+      res.status(401).json(failure("Malformed Authorization header: Prefix must be 'Bearer '"));
+      return;
+    }
+    // Node.js concatenates multiple headers with commas. We just want the first token.
+    const rawToken = header.split(/\s+/)[1]?.trim() || "";
+    token = rawToken.split(',')[0];
+  } else if (req.query.token) {
+    const t = req.query.token;
+    token = Array.isArray(t) ? String(t[0]) : String(t);
+    // Ensure the header is set for downstream logic (like internalFetch)
+    req.headers.authorization = `Bearer ${token}`;
   }
 
-  const isBearer = /^bearer\s+/i.test(header);
-  if (!isBearer) {
-    res.status(401).json(failure("Malformed Authorization header: Prefix must be 'Bearer '"));
-    return;
-  }
-
-  const token = header.split(/\s+/)[1]?.trim();
   if (!token) {
-    res.status(401).json(failure("Empty bearer token"));
+    res.status(401).json(failure("Missing Authorization header or token query parameter"));
     return;
   }
 
@@ -76,11 +81,14 @@ export async function authMiddleware(
     if (agent) {
       req.actor = { id: agent.id, type: "agent", teamId: agent.teamId };
       return next();
+    } else {
+      console.warn(`[auth] Agent token not found in DB: "${token}"`);
     }
   } catch (err) {
     return next(err);
   }
 
   // ── 3. Both failed ──────────────────────────────────────────────────────
+  console.warn(`[auth] Both human and agent auth failed for token: "${token}"`);
   res.status(401).json(failure("Invalid or expired token"));
 }

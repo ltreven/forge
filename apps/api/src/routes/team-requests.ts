@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/client";
 import { teamRequests, teamTasks, agents } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { z } from "zod";
 import { logActivity } from "../lib/activity-logger";
@@ -17,7 +17,7 @@ const requestSchema = z.object({
   inputData: z.any().optional(),
   responseContract: z.string().optional(),
   status: z.enum(["created", "processing", "responded"]).optional(),
-  responseStatusCode: z.number().optional(),
+  responseStatusCode: z.coerce.number().optional(),
   responseMetadata: z.any().optional(),
 });
 
@@ -94,6 +94,49 @@ requestsRouter.post("/", authMiddleware, async (req, res) => {
     );
 
     res.status(201).json({ data: newRequest });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Invalid input" });
+  }
+});
+
+// GET /teams/:teamId/requests
+requestsRouter.get("/", authMiddleware, async (req, res) => {
+  try {
+    const teamId = String(req.params.teamId);
+    let statusFilter = req.query.status as string | undefined;
+
+    const conditions: any[] = [eq(teamRequests.teamId, teamId)];
+    if (statusFilter) {
+      conditions.push(eq(teamRequests.status, statusFilter as "created" | "processing" | "responded"));
+    }
+
+    const rows = await db.query.teamRequests.findMany({
+      where: and(...conditions),
+      orderBy: (teamRequests, { desc }) => [desc(teamRequests.createdAt)],
+    });
+
+    res.json({ data: rows });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Invalid input" });
+  }
+});
+
+// GET /teams/:teamId/requests/:requestId
+requestsRouter.get("/:requestId", authMiddleware, async (req, res) => {
+  try {
+    const teamId = String(req.params.teamId);
+    const requestId = String(req.params.requestId);
+
+    const [request] = await db
+      .select()
+      .from(teamRequests)
+      .where(and(eq(teamRequests.id, requestId), eq(teamRequests.teamId, teamId)));
+
+    if (!request) {
+      return res.status(404).json({ error: "Request not found." });
+    }
+
+    res.json({ data: request });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Invalid input" });
   }
