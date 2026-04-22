@@ -688,3 +688,92 @@ projectsRouter.delete("/comments/:id", authMiddleware, async (req: Request, res:
     next(err);
   }
 });
+
+/**
+ * DELETE /projects/:id
+ */
+projectsRouter.delete("/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = String(req.params.id);
+    const userId = req.user!.userId;
+
+    const hasAccess = await assertUserHasProjectAccess(userId, projectId);
+    if (!hasAccess) {
+      res.status(404).json(failure("Project not found or access denied"));
+      return;
+    }
+
+    const [deleted] = await db
+      .delete(projects)
+      .where(eq(projects.id, projectId))
+      .returning();
+
+    res.json(success({ deleted: true, id: deleted.id }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /issues/:id
+ */
+projectsRouter.delete("/issues/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const issueId = String(req.params.id);
+    const userId = req.user!.userId;
+
+    // Join to verify ownership
+    const [row] = await db
+      .select({ id: projectIssues.id })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+      .innerJoin(teams, eq(projects.teamId, teams.id))
+      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+      .where(and(eq(workspaces.userId, userId), eq(projectIssues.id, issueId)));
+
+    if (!row) {
+      res.status(404).json(failure("Issue not found or access denied"));
+      return;
+    }
+
+    const [deleted] = await db
+      .delete(projectIssues)
+      .where(eq(projectIssues.id, issueId))
+      .returning();
+
+    res.json(success({ deleted: true, id: deleted.id }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /tasks/:id
+ */
+projectsRouter.delete("/tasks/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const taskId = String(req.params.id);
+    const userId = req.user!.userId;
+
+    const [row] = await db
+      .select({ id: teamTasks.id })
+      .from(teamTasks)
+      .innerJoin(teams, eq(teamTasks.teamId, teams.id))
+      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+      .where(and(eq(workspaces.userId, userId), eq(teamTasks.id, taskId)));
+
+    if (!row) {
+      res.status(404).json(failure("Task not found or access denied"));
+      return;
+    }
+
+    const [deleted] = await db
+      .delete(teamTasks)
+      .where(eq(teamTasks.id, taskId))
+      .returning();
+
+    res.json(success({ deleted: true, id: deleted.id }));
+  } catch (err) {
+    next(err);
+  }
+});
