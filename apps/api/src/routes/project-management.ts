@@ -28,9 +28,11 @@ import { agentAuthMiddleware } from "../middleware/agentAuthMiddleware";
 
 export const projectManagementRouter = Router();
 
-// All project-management routes require agent authentication.
-// req.agent.teamId is the authoritative scope — callers cannot override it.
-projectManagementRouter.use(agentAuthMiddleware);
+// Guard: If not an agent, pass through to let human routers handle it.
+projectManagementRouter.use((req, res, next) => {
+  if (!req.agent) return next("router");
+  next();
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers

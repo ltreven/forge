@@ -20,6 +20,15 @@ export const teamManagementRouter = Router();
 // All team-management routes require agent authentication via gatewayToken.
 teamManagementRouter.use(agentAuthMiddleware);
 
+// Mandatory Agent Guard
+teamManagementRouter.use((req, res, next) => {
+  if (!req.agent) {
+    res.status(401).json(failure("Agent gateway token required for this route"));
+    return;
+  }
+  next();
+});
+
 /**
  * GET / (when mounted at /team)
  * Returns metadata for the agent's own team.
