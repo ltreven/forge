@@ -50,7 +50,7 @@ const PRIORITY_LABELS: Record<number, string> = {
   4: "Urgent",
 };
 
-// ── Shared Components ─────────────────────────────────────────────────────────
+// ── UI Components ───────────────────────────────────────────────────────────
 
 function StatusIcon({ status }: { status: number }) {
   switch (status) {
@@ -73,6 +73,27 @@ function PriorityIcon({ priority, className }: { priority: number; className?: s
     case 4: return <Flame className={cn("size-3 text-red-500", className)} />;
     default: return null;
   }
+}
+
+function Button({ 
+  className, variant, size, ...props 
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
+  variant?: "primary" | "outline" | "destructive"; 
+  size?: "sm" | "md" 
+}) {
+  return (
+    <button
+      className={cn(
+        "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
+        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
+        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
+        "bg-primary text-primary-foreground hover:opacity-90",
+        size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
+        className
+      )}
+      {...props}
+    />
+  );
 }
 
 function CommentsList({ 
@@ -134,27 +155,6 @@ function CommentsList({
   );
 }
 
-function Button({ 
-  className, variant, size, ...props 
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "outline" | "destructive"; 
-  size?: "sm" | "md" 
-}) {
-  return (
-    <button
-      className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
-        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
-        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
-        "bg-primary text-primary-foreground hover:opacity-90",
-        size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
@@ -211,7 +211,6 @@ export default function ProjectPage() {
         setAgents(a);
         setComments(c);
         
-        // Populate form
         setTitle(p.title);
         setDescription(p.descriptionMarkdown || "");
         setStatus(p.status);
@@ -383,7 +382,6 @@ export default function ProjectPage() {
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
           
-          {/* ── Left Column: Details ────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-8">
             <div className="space-y-4">
               <input
@@ -441,7 +439,6 @@ export default function ProjectPage() {
             </div>
           </div>
 
-          {/* ── Right Column: Sidebar ───────────────────────────────────── */}
           <div className="space-y-6">
             <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Properties</h3>
@@ -519,7 +516,6 @@ export default function ProjectPage() {
           </div>
         </div>
 
-        {/* ── Issues List ─────────────────────────── */}
         <div className="mt-16 space-y-8">
           <div className="flex items-center justify-between">
              <div className="flex items-center gap-2">
@@ -588,88 +584,6 @@ export default function ProjectPage() {
           </div>
         </div>
       </main>
-    </div>
-  );
-}
-
-// ── UI Components ───────────────────────────────────────────────────────────
-
-function Button({ 
-  className, variant, size, ...props 
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "outline" | "destructive"; 
-  size?: "sm" | "md" 
-}) {
-  return (
-    <button
-      className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50",
-        variant === "outline" ? "border border-border bg-background hover:bg-muted" : 
-        variant === "destructive" ? "bg-destructive text-destructive-foreground hover:opacity-90" :
-        "bg-primary text-primary-foreground hover:opacity-90",
-        size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function CommentsList({ 
-  comments, agents, onDelete 
-}: { 
-  comments: Comment[]; 
-  agents: Agent[]; 
-  onDelete: (id: string) => void 
-}) {
-  const { user } = useAuth();
-
-  if (comments.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-        <p className="text-xs text-muted-foreground/40 italic">No comments yet.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {comments.map((c) => {
-        const isHuman = c.actorType === "human";
-        const agent = isHuman ? null : agents.find((a) => a.id === c.actorId);
-        const canDelete = isHuman && c.actorId === user?.userId;
-
-        return (
-          <div key={c.id} className="group flex gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
-              {isHuman ? "👤" : (agent?.icon || "🤖")}
-            </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground">
-                    {isHuman ? "You" : agent?.name || "Unknown Agent"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/60">
-                    {new Date(c.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                {canDelete && (
-                  <button 
-                    onClick={() => onDelete(c.id)}
-                    className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {c.content}
-              </p>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
