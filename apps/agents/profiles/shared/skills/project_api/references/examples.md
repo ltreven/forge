@@ -4,7 +4,7 @@
 
 ### Create a Project
 ```bash
-curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/projects \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -18,18 +18,18 @@ curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management
 
 ### List My Team's Projects
 ```bash
-curl -s http://forge-api.forge.svc.cluster.local:4000/project-management/projects \
+curl -s http://forge-api.forge.svc.cluster.local:4000/projects \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN"
 ```
 
 ## Issue Tracking
 
 ### Create a Project Issue
-**IMPORTANT**: You must replace `{PROJECT_UUID}` with a real `id` (UUID format) obtained from the `GET /project-management/projects` endpoint. Never send literal angle brackets or braces.
+**IMPORTANT**: You must replace `{PROJECT_UUID}` with a real `id` (UUID format) obtained from the `GET /projects` endpoint.
 
 ```bash
 # 1. Provide the REAL project id in the URL
-curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects/{PROJECT_UUID}/issues \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/projects/{PROJECT_UUID}/issues \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -44,8 +44,7 @@ curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management
 **IMPORTANT**: Replace `{ISSUE_UUID}` with a real `id` obtained when listing or creating the issue.
 
 ```bash
-# 1. Update the issue
-curl -s -X PUT http://forge-api.forge.svc.cluster.local:4000/project-management/issues/{ISSUE_UUID} \
+curl -s -X PUT http://forge-api.forge.svc.cluster.local:4000/issues/{ISSUE_UUID} \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -57,7 +56,7 @@ curl -s -X PUT http://forge-api.forge.svc.cluster.local:4000/project-management/
 
 ### Create a Standalone Task
 ```bash
-curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/tasks \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/tasks \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -68,13 +67,19 @@ curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management
   }'
 ```
 
+### List All Team Tasks
+```bash
+curl -s http://forge-api.forge.svc.cluster.local:4000/tasks \
+  -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN"
+```
+
 ## Health Updates
 
 ### Post a Health Update
 **IMPORTANT**: Replace `{PROJECT_UUID}` with a real `id` obtained when listing or creating the project.
 
 ```bash
-curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/project-management/projects/{PROJECT_UUID}/updates \
+curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/projects/{PROJECT_UUID}/updates \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

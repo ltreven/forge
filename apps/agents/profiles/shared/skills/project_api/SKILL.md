@@ -26,7 +26,11 @@ This skill provides you with the knowledge and standards required to interact wi
 ## API Fundamentals
 
 - **Base URL**: `http://forge-api.forge.svc.cluster.local:4000`
-- **CRITICAL ROUTE PREFIX**: All routes MUST start with `/project-management`. For example, use `GET /project-management/projects`. **Never** guess or use `GET /projects`.
+- **Simplified Routes (Preferred)**: Use direct, intuitive paths for all operations:
+    - `/projects`: Manage team projects.
+    - `/issues`: Manage project issues.
+    - `/tasks`: Manage team kanban tasks.
+    - `/project-management`: Also supported (legacy/full path).
 - **Authentication**: All requests MUST include the gateway token:
   `Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN`
 - **MANDATORY CONTENT-TYPE (CRITICAL)**: All `POST` and `PUT` requests **MUST** include the header:
@@ -48,9 +52,9 @@ Always use these integer values for the `status` field in Projects, Issues, and 
 
 ## HTTP Methods & Operations
 
-- **GET**: Used to list resources or fetch details. (e.g., `GET /project-management/projects`)
-- **POST**: Used to create **new** resources. Returns `201 Created`. (e.g., `POST /project-management/tasks`)
-- **PUT**: Used to update **existing** resources. **Do not use PATCH.** (e.g., `PUT /project-management/issues/{id}`)
+- **GET**: Used to list resources or fetch details. (e.g., `GET /projects`)
+- **POST**: Used to create **new** resources. Returns `201 Created`. (e.g., `POST /tasks`)
+- **PUT**: Used to update **existing** resources. **Do not use PATCH.** (e.g., `PUT /issues/{id}`)
 - **DELETE**: Used to remove resources. Returns `200 OK` with a deletion confirmation.
 
 ## Execution Guidelines & Common Errors

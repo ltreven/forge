@@ -2,7 +2,7 @@ openapi: 3.0.0
 info:
   title: Forge Project Management API
   version: 1.0.0
-  description: Internal API for managing projects, issues, and team tasks within the Forge ecosystem.
+  description: Internal API for managing projects, issues, and team tasks.
 
 servers:
   - url: http://forge-api.forge.svc.cluster.local:4000
@@ -79,23 +79,17 @@ security:
   - bearerAuth: []
 
 paths:
-  /project-management/projects:
+  /projects:
     get:
       summary: List team projects
-      responses:
-        200:
-          description: List of projects
     post:
       summary: Create a project
       requestBody:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/Project' }
-      responses:
-        201:
-          description: Project created
 
-  /project-management/projects/{id}:
+  /projects/{id}:
     get:
       summary: Get project details
     put:
@@ -107,7 +101,7 @@ paths:
     delete:
       summary: Delete a project
 
-  /project-management/projects/{id}/updates:
+  /projects/{id}/updates:
     get:
       summary: List project health updates
     post:
@@ -117,7 +111,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/ProjectHealthUpdate' }
 
-  /project-management/projects/{id}/issues:
+  /projects/{id}/issues:
     get:
       summary: List project issues
     post:
@@ -127,7 +121,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/ProjectIssue' }
 
-  /project-management/issues/{id}:
+  /issues/{id}:
     get:
       summary: Get issue details
     put:
@@ -139,7 +133,7 @@ paths:
     delete:
       summary: Delete an issue
 
-  /project-management/tasks:
+  /tasks:
     get:
       summary: List team tasks (kanban)
     post:
@@ -149,14 +143,10 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/TeamTask' }
 
-  /project-management/tasks/{id}:
+  /tasks/{id}:
     get:
       summary: Get task details
     put:
       summary: Update a task
     delete:
       summary: Delete a task
-
-  /project-management/activities:
-    get:
-      summary: Get team activity feed
