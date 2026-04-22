@@ -86,6 +86,7 @@ export type ActivityType =
   | "request_received"
   | "request_responded"
   | "project_created"
+  | "project_updated"
   | "task_created"
   | "project_issue_created"
   | "project_issue_blocked"

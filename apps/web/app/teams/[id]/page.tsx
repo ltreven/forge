@@ -764,6 +764,7 @@ export default function TeamDetailPage() {
                 let text = "";
                 switch (act.type) {
                   case "project_created": text = `created project "${title}"`; break;
+                  case "project_updated": text = `updated project "${title}"`; break;
                   case "task_created": text = `created task "${title}"`; break;
                   case "project_issue_created": text = `created issue "${title}"`; break;
                   case "request_created": text = `requested a task to be executed`; break;
