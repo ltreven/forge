@@ -51,17 +51,15 @@ app.use("/teams", teamsRouter);
 app.use("/agents", agentsRouter);
 app.use("/conversations", conversationsRouter);
 
+// Internal routes — not exposed via Ingress; protected by NetworkPolicy.
+// Only reachable by the Agent Controller pod within the cluster.
+app.use("/internal", internalRouter);
+
 /**
  * Team management for agents — authenticated by gatewayToken.
  * Endpoints: GET /team, GET /team/members, POST /team/members
  */
 app.use("/team", teamManagementRouter);
-
-/**
- * Project management for agents — authenticated by gatewayToken.
- * Endpoints: /projects, /tasks, /issues, /activities
- */
-app.use("/", projectManagementRouter);
 
 /**
  * Project & Task management for humans — authenticated by user JWT.
@@ -71,9 +69,12 @@ app.use("/projects", projectsRouter);
 // Nested: /teams/:id/integrations
 app.use("/teams/:id/integrations", integrationsRouter);
 
-// Internal routes — not exposed via Ingress; protected by NetworkPolicy.
-// Only reachable by the Agent Controller pod within the cluster.
-app.use("/internal", internalRouter);
+/**
+ * Project management for agents — authenticated by gatewayToken.
+ * Endpoints: /projects, /tasks, /issues, /activities
+ * This is mounted at root for resilient agent access, so it MUST be last.
+ */
+app.use("/", projectManagementRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 
