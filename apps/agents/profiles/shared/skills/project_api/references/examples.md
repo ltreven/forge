@@ -74,18 +74,3 @@ curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/tasks \
 curl -s http://forge-api.forge.svc.cluster.local:4000/tasks \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN"
 ```
-
-## Health Updates
-
-### Post a Health Update
-**IMPORTANT**: Replace `{PROJECT_UUID}` with a real `id` obtained when listing or creating the project.
-
-```bash
-curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/projects/{PROJECT_UUID}/updates \
-  -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "newHealth": "at_risk",
-    "reason": "Wait for external API approval is taking longer than expected"
-  }'
-```

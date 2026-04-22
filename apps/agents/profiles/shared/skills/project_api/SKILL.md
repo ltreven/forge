@@ -26,11 +26,11 @@ This skill provides you with the knowledge and standards required to interact wi
 ## API Fundamentals
 
 - **Base URL**: `http://forge-api.forge.svc.cluster.local:4000`
-- **Simplified Routes (Preferred)**: Use direct, intuitive paths for all operations:
+- **Standard Routes**:
     - `/projects`: Manage team projects.
     - `/issues`: Manage project issues.
     - `/tasks`: Manage team kanban tasks.
-    - `/project-management`: Also supported (legacy/full path).
+    - `/activities`: View team activity feed.
 - **Authentication**: All requests MUST include the gateway token:
   `Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN`
 - **MANDATORY CONTENT-TYPE (CRITICAL)**: All `POST` and `PUT` requests **MUST** include the header:

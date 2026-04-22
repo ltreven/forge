@@ -30,19 +30,15 @@ This skill provides you with the knowledge to inspect your own team and manage t
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/mine` | `GET` | Get your team's metadata (name, mission, etc.) |
-| `/info` | `GET` | Alias for metadata (name, mission, etc.) |
-| `/agents` | `GET` | List all agents in your team (roster) |
-| `/members` | `GET` | Alias for listing team members (roster) |
-| `/agents` | `POST` | Create a new agent in your team |
+| `/team` | `GET` | Get your team's metadata (name, mission, etc.) |
+| `/team/members` | `GET` | List all agents in your team (roster) |
+| `/team/members` | `POST` | Create a new agent in your team |
 
-**Aliases**: 
-- **Prefixes**: `/team`, `/team-api`, and `/team-management` are all supported (e.g., `/team/members` or `/team/info`).
-- **Endpoints**: `/roster` is an alias for `/members`, and `/details` is an alias for `/info`.
+**Note**: All routes are scoped to your team automatically. Use `/team` for info and `/team/members` for the roster.
 
 
 ## Execution Guidelines
 
-1.  **Identify Gaps**: If a task requires specialized knowledge (e.g., Security, Architecture) not present in the current roster, use `POST /team-management/teams/mine/agents` to provision a new agent.
+1.  **Identify Gaps**: If a task requires specialized knowledge (e.g., Security, Architecture) not present in the current roster, use `POST /team/members` to provision a new agent.
 2.  **Consult the Contract**: Read `references/openapi.yaml` for exact field names and types.
 3.  **Use Examples**: Refer to `references/examples.md` for `curl` templates.

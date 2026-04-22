@@ -17,14 +17,14 @@ import { provisionTenant } from "../lib/rabbitmq";
 
 export const teamManagementRouter = Router();
 
-// All team-management routes require agent authentication.
-// req.agent.teamId is the authoritative scope — callers cannot override it.
+// All team-management routes require agent authentication via gatewayToken.
 teamManagementRouter.use(agentAuthMiddleware);
 
-// ── GET /teams/mine OR /mine OR /info OR /details ──────────────────────────
-// Returns metadata for the agent's own team.
-
-teamManagementRouter.get(["/teams/mine", "/mine", "/info", "/details"], async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * GET / (when mounted at /team)
+ * Returns metadata for the agent's own team.
+ */
+teamManagementRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const teamId = req.agent!.teamId;
 
@@ -44,10 +44,11 @@ teamManagementRouter.get(["/teams/mine", "/mine", "/info", "/details"], async (r
   }
 });
 
-// ── GET /teams/mine/agents OR /agents ──────────────────────────────────
-// Returns the list of agents in the same team (roster).
-
-teamManagementRouter.get(["/teams/mine/agents", "/agents", "/members", "/roster"], async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * GET /members
+ * Returns the list of agents in the same team.
+ */
+teamManagementRouter.get("/members", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const teamId = req.agent!.teamId;
 
@@ -57,7 +58,6 @@ teamManagementRouter.get(["/teams/mine/agents", "/agents", "/members", "/roster"
       .where(eq(agents.teamId, teamId))
       .orderBy(agents.createdAt);
 
-    // Sanitize: remove gatewayToken and sensitive metadata
     const sanitized = rows.map((a: any) => {
       const { gatewayToken: _gt, ...safeAgent } = a;
       if (safeAgent.metadata) {
@@ -73,15 +73,15 @@ teamManagementRouter.get(["/teams/mine/agents", "/agents", "/members", "/roster"
   }
 });
 
-// ── POST /teams/mine/agents OR /agents ─────────────────────────────────
-// Allows an agent to provision a new agent into their own team.
-
-teamManagementRouter.post(["/teams/mine/agents", "/agents", "/members", "/roster"], async (req: Request, res: Response, next: NextFunction) => {
+/**
+ * POST /members
+ * Allows an agent to provision a new agent into their own team.
+ */
+teamManagementRouter.post("/members", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const teamId = req.agent!.teamId;
     const input = createAgentSchema.parse({ ...req.body, teamId });
 
-    // ── 1. Resolve workspace ────────────────────────────────────────────────
     const [team] = await db.select().from(teams).where(eq(teams.id, teamId));
     if (!team) {
       res.status(404).json(failure("Team not found"));
@@ -97,7 +97,6 @@ teamManagementRouter.post(["/teams/mine/agents", "/agents", "/members", "/roster
       return;
     }
 
-    // ── 2. Provisioning Logic (Mirroring agentsRouter.post) ──────────────────
     const namespace = workspace.k8sNamespace ?? workspaceNamespace(workspace.id);
     const gatewayToken = randomBytes(32).toString("base64url");
 
@@ -105,7 +104,7 @@ teamManagementRouter.post(["/teams/mine/agents", "/agents", "/members", "/roster
       .insert(agents)
       .values({
         ...input,
-        teamId, // Enforced
+        teamId,
         gatewayToken,
         k8sStatus: "pending",
       })
@@ -136,7 +135,6 @@ teamManagementRouter.post(["/teams/mine/agents", "/agents", "/members", "/roster
       newAgent.k8sStatus = "failed";
     }
 
-    // Remove sensitive token from response
     const { gatewayToken: _gt, ...safeAgent } = newAgent as any;
     res.status(201).json(success(safeAgent));
   } catch (err) {

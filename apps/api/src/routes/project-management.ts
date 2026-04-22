@@ -100,7 +100,7 @@ function normalizePayload(body: any) {
  * Creates a project scoped to the authenticated agent's team.
  * The teamId from the token is used — any teamId in the request body is ignored.
  */
-projectManagementRouter.post(["/projects", "/"], async (req: Request, res: Response, next: NextFunction) => {
+projectManagementRouter.post("/projects", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = normalizePayload(req.body);
     // Inject teamId from token so the schema validation passes
@@ -149,7 +149,7 @@ projectManagementRouter.post(["/projects", "/"], async (req: Request, res: Respo
  * GET /project-management/projects
  * Lists all projects for the authenticated agent's team.
  */
-projectManagementRouter.get(["/projects", "/"], async (req: Request, res: Response, next: NextFunction) => {
+projectManagementRouter.get("/projects", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await db
       .select()
@@ -648,7 +648,7 @@ projectManagementRouter.delete("/issues/:id", async (req: Request, res: Response
  * POST /project-management/tasks
  * Creates a kanban task scoped to the authenticated agent's team.
  */
-projectManagementRouter.post(["/tasks", "/"], async (req: Request, res: Response, next: NextFunction) => {
+projectManagementRouter.post("/tasks", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = normalizePayload(req.body);
     const input = createTaskSchema.parse({ ...payload, teamId: req.agent!.teamId });
@@ -695,7 +695,7 @@ projectManagementRouter.post(["/tasks", "/"], async (req: Request, res: Response
  * GET /project-management/tasks
  * Lists all team tasks for the authenticated agent's team.
  */
-projectManagementRouter.get(["/tasks", "/"], async (req: Request, res: Response, next: NextFunction) => {
+projectManagementRouter.get("/tasks", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await db
       .select()
@@ -812,7 +812,7 @@ projectManagementRouter.delete("/tasks/:id", async (req: Request, res: Response,
  * GET /project-management/activities
  * Returns the project activity feed for the authenticated agent's team.
  */
-projectManagementRouter.get(["/activities", "/"], async (req: Request, res: Response, next: NextFunction) => {
+projectManagementRouter.get("/activities", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await db
       .select()

@@ -52,20 +52,16 @@ app.use("/agents", agentsRouter);
 app.use("/conversations", conversationsRouter);
 
 /**
- * Project management for agents — authenticated by gatewayToken.
+ * Team management for agents — authenticated by gatewayToken.
+ * Endpoints: GET /team, GET /team/members, POST /team/members
  */
-app.use("/project-management", projectManagementRouter);
-
-// Resilience aliases for agents who guess the path:
-app.use("/tasks", projectManagementRouter);
-app.use("/issues", projectManagementRouter);
+app.use("/team", teamManagementRouter);
 
 /**
- * Team management for agents — authenticated by gatewayToken.
+ * Project management for agents — authenticated by gatewayToken.
+ * Endpoints: /projects, /tasks, /issues, /activities
  */
-app.use("/team-management", teamManagementRouter);
-app.use("/team-api", teamManagementRouter);
-app.use("/team", teamManagementRouter);
+app.use("/", projectManagementRouter);
 
 /**
  * Project & Task management for humans — authenticated by user JWT.
