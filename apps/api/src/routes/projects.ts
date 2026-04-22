@@ -1,11 +1,12 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { and, eq, desc } from "drizzle-orm";
 import { db } from "../db/client";
-import { projects, projectIssues, teams, workspaces } from "../db/schema";
+import { projects, projectIssues, teams, workspaces, teamTasks } from "../db/schema";
 import { 
   updateProjectSchema, 
   createIssueSchema, 
-  updateIssueSchema 
+  updateIssueSchema,
+  updateTaskSchema
 } from "../schemas/project-management.schema";
 import { success, failure } from "../lib/response";
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -177,6 +178,95 @@ projectsRouter.put("/issues/:id", authMiddleware, async (req: Request, res: Resp
       .update(projectIssues)
       .set({ ...input, updatedAt: new Date() })
       .where(eq(projectIssues.id, issueId))
+      .returning();
+
+    res.json(success(updated));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /issues/:id
+ */
+projectsRouter.get("/issues/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const issueId = String(req.params.id);
+    const userId = req.user!.userId;
+
+    const [row] = await db
+      .select({ issue: projectIssues })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+      .innerJoin(teams, eq(projects.teamId, teams.id))
+      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+      .where(and(eq(workspaces.userId, userId), eq(projectIssues.id, issueId)));
+
+    if (!row) {
+      res.status(404).json(failure("Issue not found or access denied"));
+      return;
+    }
+
+    res.json(success(row.issue));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Team Task Operations (Human) ─────────────────────────────────────────────
+
+/**
+ * GET /tasks/:id
+ */
+projectsRouter.get("/tasks/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const taskId = String(req.params.id);
+    const userId = req.user!.userId;
+
+    const [row] = await db
+      .select({ task: teamTasks })
+      .from(teamTasks)
+      .innerJoin(teams, eq(teamTasks.teamId, teams.id))
+      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+      .where(and(eq(workspaces.userId, userId), eq(teamTasks.id, taskId)));
+
+    if (!row) {
+      res.status(404).json(failure("Task not found or access denied"));
+      return;
+    }
+
+    res.json(success(row.task));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /tasks/:id
+ */
+projectsRouter.put("/tasks/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const taskId = String(req.params.id);
+    const userId = req.user!.userId;
+
+    const [row] = await db
+      .select({ id: teamTasks.id })
+      .from(teamTasks)
+      .innerJoin(teams, eq(teamTasks.teamId, teams.id))
+      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+      .where(and(eq(workspaces.userId, userId), eq(teamTasks.id, taskId)));
+
+    if (!row) {
+      res.status(404).json(failure("Task not found or access denied"));
+      return;
+    }
+
+    const input = updateTaskSchema.parse(req.body);
+
+    const [updated] = await db
+      .update(teamTasks)
+      .set({ ...input, updatedAt: new Date() })
+      .where(eq(teamTasks.id, taskId))
       .returning();
 
     res.json(success(updated));

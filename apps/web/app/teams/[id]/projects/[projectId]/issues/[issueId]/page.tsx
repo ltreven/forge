@@ -23,7 +23,8 @@ import {
   Calendar,
   User,
   Save,
-  MoreHorizontal
+  MoreHorizontal,
+  Target
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
@@ -65,29 +66,31 @@ function StatusIcon({ status }: { status: number }) {
 
 function PriorityIcon({ priority, className }: { priority: number; className?: string }) {
   switch (priority) {
-    case 0: return <Circle className={cn("size-3.5 text-muted-foreground/20", className)} />;
-    case 1: return <SignalLow className={cn("size-3.5 text-blue-500/70", className)} />;
-    case 2: return <SignalMedium className={cn("size-3.5 text-amber-500/70", className)} />;
-    case 3: return <SignalHigh className={cn("size-3.5 text-orange-500", className)} />;
-    case 4: return <Flame className={cn("size-3.5 text-red-500", className)} />;
+    case 0: return <Circle className={cn("size-3 text-muted-foreground/20", className)} />;
+    case 1: return <SignalLow className={cn("size-3 text-blue-500/70", className)} />;
+    case 2: return <SignalMedium className={cn("size-3 text-amber-500/70", className)} />;
+    case 3: return <SignalHigh className={cn("size-3 text-orange-500", className)} />;
+    case 4: return <Flame className={cn("size-3 text-red-500", className)} />;
     default: return null;
   }
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function ProjectPage() {
+export default function IssuePage() {
   const { token, isLoading: authLoading } = useAuth();
   const params = useParams();
   const router = useRouter();
   
   const teamId = String(params.id);
   const projectId = String(params.projectId);
+  const issueId = String(params.issueId);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [project, setProject]   = useState<Project | null>(null);
-  const [issues, setIssues]     = useState<ProjectIssue[]>([]);
+  const [issue, setIssue]       = useState<ProjectIssue | null>(null);
+  const [subIssues, setSubIssues] = useState<ProjectIssue[]>([]);
   const [agents, setAgents]     = useState<Agent[]>([]);
 
   // Form state
@@ -95,6 +98,7 @@ export default function ProjectPage() {
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState(0);
   const [priority, setPriority] = useState(0);
+  const [assignedToId, setAssignedToId] = useState<string | null>(null);
 
   const headers = useCallback((): HeadersInit => ({
     "Content-Type": "application/json",
@@ -107,101 +111,93 @@ export default function ProjectPage() {
 
     Promise.all([
       fetch(`${API_BASE}/projects/${projectId}`, { headers: headers() }),
-      fetch(`${API_BASE}/projects/${projectId}/issues`, { headers: headers() }),
+      fetch(`${API_BASE}/projects/issues/${issueId}`, { headers: headers() }),
+      fetch(`${API_BASE}/projects/${projectId}/issues`, { headers: headers() }), // To find sub-issues
       fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers: headers() }),
     ])
-      .then(async ([projRes, issuesRes, agentsRes]) => {
-        if (!projRes.ok) {
-          toast.error("Project not found.");
-          router.replace(`/teams/${teamId}`);
+      .then(async ([projRes, issueRes, allIssuesRes, agentsRes]) => {
+        if (!issueRes.ok) {
+          toast.error("Issue not found.");
+          router.replace(`/teams/${teamId}/projects/${projectId}`);
           return;
         }
         const p: Project = (await projRes.json()).data;
-        const i: ProjectIssue[] = (await issuesRes.json()).data ?? [];
+        const i: ProjectIssue = (await issueRes.json()).data;
+        const all: ProjectIssue[] = (await allIssuesRes.json()).data ?? [];
         const a: Agent[] = (await agentsRes.json()).data ?? [];
 
         setProject(p);
-        setIssues(i);
+        setIssue(i);
+        setSubIssues(all.filter(x => x.parentIssueId === i.id));
         setAgents(a);
         
         // Populate form
-        setTitle(p.title);
-        setDescription(p.descriptionMarkdown || "");
-        setStatus(p.status);
-        setPriority(p.priority);
+        setTitle(i.title);
+        setDescription(i.descriptionMarkdown || "");
+        setStatus(i.status);
+        setPriority(i.priority);
+        setAssignedToId(i.assignedToId || null);
       })
       .catch((err) => {
-        console.error("Failed to load project data:", err);
-        toast.error("Failed to load project details.");
+        console.error("Failed to load issue data:", err);
+        toast.error("Failed to load issue details.");
       })
       .finally(() => setIsLoading(false));
-  }, [projectId, teamId, token, headers, router]);
+  }, [projectId, issueId, teamId, token, headers, router]);
 
   useEffect(() => {
     if (!authLoading) loadData();
   }, [authLoading, loadData]);
 
-  const handleSaveProject = async () => {
-    if (!project || isSaving) return;
+  const handleSaveIssue = async () => {
+    if (!issue || isSaving) return;
     setIsSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const res = await fetch(`${API_BASE}/projects/issues/${issueId}`, {
         method: "PUT",
         headers: headers(),
         body: JSON.stringify({
           title,
           descriptionMarkdown: description,
           status,
-          priority
+          priority,
+          assignedToId
         }),
       });
 
       if (!res.ok) throw new Error();
       const updated = (await res.json()).data;
-      setProject(updated);
-      toast.success("Project updated successfully");
+      setIssue(updated);
+      toast.success("Issue updated successfully");
     } catch {
-      toast.error("Failed to save project changes");
+      toast.error("Failed to save issue changes");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleCreateIssue = async (targetStatus: number) => {
-    const issueTitle = prompt("Issue title:");
-    if (!issueTitle) return;
+  const handleCreateSubIssue = async () => {
+    const subTitle = prompt("Sub-issue title:");
+    if (!subTitle) return;
 
     try {
       const res = await fetch(`${API_BASE}/projects/${projectId}/issues`, {
         method: "POST",
         headers: headers(),
         body: JSON.stringify({
-          title: issueTitle,
-          status: targetStatus,
-          priority: 1 // Default
+          title: subTitle,
+          parentIssueId: issueId,
+          status: 1, // To Do
+          priority: 1
         }),
       });
 
       if (!res.ok) throw new Error();
-      const newIssue = (await res.json()).data;
-      setIssues(p => [newIssue, ...p]);
-      toast.success("Issue created");
+      const newSub = (await res.json()).data;
+      setSubIssues(p => [newSub, ...p]);
+      toast.success("Sub-issue created");
     } catch {
-      toast.error("Failed to create issue");
-    }
-  };
-
-  const handleUpdateIssueStatus = async (id: string, newStatus: number) => {
-    try {
-      const res = await fetch(`${API_BASE}/projects/issues/${id}`, {
-        method: "PUT",
-        headers: headers(),
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!res.ok) throw new Error();
-      setIssues(p => p.map(i => i.id === id ? { ...i, status: newStatus } : i));
-    } catch {
-      toast.error("Failed to update issue");
+      toast.error("Failed to create sub-issue");
     }
   };
 
@@ -213,7 +209,7 @@ export default function ProjectPage() {
     );
   }
 
-  if (!project) return null;
+  if (!issue || !project) return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -221,14 +217,14 @@ export default function ProjectPage() {
       <div className="border-b border-border bg-card/50 px-6 py-3">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href={`/teams/${teamId}`} 
+            <Link href={`/teams/${teamId}/projects/${projectId}`} 
               className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
               <ArrowLeft className="size-3.5" />
-              Back to Team
+              {project.title}
             </Link>
             <div className="h-4 w-px bg-border" />
             <span className="text-[10px] font-mono font-medium text-muted-foreground uppercase tracking-widest">
-              PRJ-{project.id.substring(0,4).toUpperCase()}
+              ISS-{issue.id.substring(0,4).toUpperCase()}
             </span>
           </div>
           
@@ -236,7 +232,7 @@ export default function ProjectPage() {
             <Button 
               variant="outline" size="sm" 
               className="h-8 gap-2 text-xs" 
-              onClick={handleSaveProject}
+              onClick={handleSaveIssue}
               disabled={isSaving}
             >
               {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
@@ -257,8 +253,8 @@ export default function ProjectPage() {
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Project title..."
-                className="w-full bg-transparent text-4xl font-bold tracking-tight text-foreground outline-none focus:ring-0 placeholder:text-muted-foreground/30"
+                placeholder="Issue title..."
+                className="w-full bg-transparent text-3xl font-bold tracking-tight text-foreground outline-none focus:ring-0 placeholder:text-muted-foreground/30"
               />
               
               <div className="space-y-2">
@@ -270,9 +266,52 @@ export default function ProjectPage() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Add a detailed description for the agents..."
-                  className="min-h-[300px] w-full resize-none rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground outline-none transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
+                  className="min-h-[250px] w-full resize-none rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground outline-none transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                 />
-                <p className="text-[10px] text-muted-foreground">Markdown is supported and interpreted by the agents.</p>
+                <p className="text-[10px] text-muted-foreground">Markdown is supported.</p>
+              </div>
+            </div>
+
+            {/* Sub-issues section */}
+            <div className="pt-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                  <Target className="size-3.5" />
+                  Sub-issues
+                </div>
+                <button onClick={handleCreateSubIssue} className="text-muted-foreground hover:text-foreground">
+                  <Plus className="size-3.5" />
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card/30 overflow-hidden">
+                {subIssues.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <p className="text-xs text-muted-foreground/50">No sub-issues yet.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/50">
+                    {subIssues.map(sub => (
+                      <Link 
+                        key={sub.id}
+                        href={`/teams/${teamId}/projects/${projectId}/issues/${sub.id}`}
+                        className="flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors group"
+                      >
+                        <StatusIcon status={sub.status} />
+                        <span className="text-[9px] font-mono text-muted-foreground/50 w-14 shrink-0">
+                          ISS-{sub.id.substring(0,4).toUpperCase()}
+                        </span>
+                        <p className={cn("text-sm flex-1 truncate", sub.status === 4 && "line-through text-muted-foreground")}>
+                          {sub.title}
+                        </p>
+                        <PriorityIcon priority={sub.priority} />
+                        <div className="flex size-5 items-center justify-center rounded-full bg-muted text-[10px]">
+                          {agents.find(a => a.id === sub.assignedToId)?.icon || "🤖"}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -313,117 +352,45 @@ export default function ProjectPage() {
 
                 <div className="h-px bg-border my-2" />
 
-                {/* Health Display */}
+                {/* Assignee Picker */}
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">Health</label>
-                  <div className="flex items-center gap-1.5">
-                    <span className={cn(
-                      "size-2 rounded-full",
-                      project.health === "on_track" ? "bg-emerald-500" :
-                      project.health === "at_risk" ? "bg-amber-500" :
-                      project.health === "off_track" ? "bg-red-500" : "bg-muted"
-                    )} />
-                    <span className="text-xs font-semibold text-foreground capitalize">
-                      {project.health.replace("_", " ")}
-                    </span>
-                  </div>
+                  <label className="text-xs font-medium text-muted-foreground">Assignee</label>
+                  <select 
+                    value={assignedToId || ""}
+                    onChange={(e) => setAssignedToId(e.target.value || null)}
+                    className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer max-w-[120px]"
+                  >
+                    <option value="">Unassigned</option>
+                    {agents.map(a => (
+                      <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">Updated</label>
                   <span className="text-xs font-semibold text-foreground">
-                    {new Date(project.updatedAt).toLocaleDateString()}
+                    {new Date(issue.updatedAt).toLocaleDateString()}
                   </span>
                 </div>
               </div>
             </section>
 
             <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Project Lead</h3>
-                <User className="size-3.5 text-muted-foreground" />
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-lg">
-                  {agents.find(a => a.id === project.leadId)?.icon || "🤖"}
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Project</h3>
+              <Link 
+                href={`/teams/${teamId}/projects/${projectId}`}
+                className="flex items-center gap-3 p-2 -m-2 rounded-xl hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <LayoutGrid className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold truncate text-foreground">
-                    {agents.find(a => a.id === project.leadId)?.name || "Unassigned"}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">Project Lead</p>
+                  <p className="text-sm font-semibold truncate text-foreground">{project.title}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase font-mono">PRJ-{project.id.substring(0,4)}</p>
                 </div>
-              </div>
+              </Link>
             </section>
-          </div>
-        </div>
-
-        {/* ── Issues List (Simple Grouped View) ─────────────────────────── */}
-        <div className="mt-16 space-y-8">
-          <div className="flex items-center justify-between">
-             <div className="flex items-center gap-2">
-               <LayoutGrid className="size-5 text-primary" />
-               <h2 className="text-xl font-bold tracking-tight">Project Issues</h2>
-             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-            {[0, 1, 2, 3, 4].map(statusVal => {
-              const statusIssues = issues.filter(i => i.status === statusVal);
-              return (
-                <div key={statusVal} className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between px-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
-                        {STATUS_LABELS[statusVal]}
-                      </span>
-                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/60">
-                        {statusIssues.length}
-                      </span>
-                    </div>
-                    <button 
-                      onClick={() => handleCreateIssue(statusVal)}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <Plus className="size-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    {statusIssues.map(issue => (
-                      <Link 
-                        key={issue.id}
-                        href={`/teams/${teamId}/projects/${projectId}/issues/${issue.id}`}
-                        className="group relative flex flex-col gap-2 rounded-xl border border-border bg-card p-3 shadow-sm transition-all hover:border-primary/40 hover:shadow-md cursor-pointer"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-[8px] font-mono font-medium text-muted-foreground/50">
-                            ISS-{issue.id.substring(0,4).toUpperCase()}
-                          </span>
-                          <PriorityIcon priority={issue.priority} />
-                        </div>
-                        <p className={cn("text-xs font-medium leading-snug text-foreground", issue.status === 4 && "text-muted-foreground line-through")}>
-                          {issue.title}
-                        </p>
-                        <div className="mt-1 flex items-center justify-between">
-                          <div className="flex size-5 items-center justify-center rounded-full bg-muted text-[10px]">
-                            {agents.find(a => a.id === issue.assignedToId)?.icon || "🤖"}
-                          </div>
-                          <span className="text-[8px] text-muted-foreground">
-                            {new Date(issue.updatedAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </Link>
-                    ))}
-                    {statusIssues.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-border/50 p-6 flex items-center justify-center">
-                        <p className="text-[10px] text-muted-foreground/40 italic">Empty</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
       </main>

@@ -299,6 +299,8 @@ function ProjectListItem({ project, issues, agents }: { project: Project, issues
 
 function IssueItem({ issue, allIssues, agents, level }: { issue: ProjectIssue, allIssues: ProjectIssue[], agents: Agent[], level: number }) {
   const subIssues = allIssues.filter(i => i.parentIssueId === issue.id);
+  const params = useParams();
+  const teamId = String(params.id);
   
   return (
     <ItemRow 
@@ -306,6 +308,7 @@ function IssueItem({ issue, allIssues, agents, level }: { issue: ProjectIssue, a
       status={issue.status} priority={issue.priority} 
       updatedAt={issue.updatedAt} assignedToId={issue.assignedToId}
       level={level} agents={agents}
+      href={`/teams/${teamId}/projects/${issue.projectId}/issues/${issue.id}`}
     >
       {level < 2 && subIssues.map(sub => (
         <IssueItem key={sub.id} issue={sub} allIssues={allIssues} agents={agents} level={level + 1} />
@@ -316,6 +319,8 @@ function IssueItem({ issue, allIssues, agents, level }: { issue: ProjectIssue, a
 
 function TaskListItem({ task, allTasks, agents, level = 0 }: { task: TeamTask, allTasks: TeamTask[], agents: Agent[], level?: number }) {
   const subTasks = allTasks.filter(t => t.parentTaskId === task.id);
+  const params = useParams();
+  const teamId = String(params.id);
 
   return (
     <ItemRow 
@@ -323,6 +328,7 @@ function TaskListItem({ task, allTasks, agents, level = 0 }: { task: TeamTask, a
       status={task.status} priority={task.priority} 
       updatedAt={task.updatedAt} assignedToId={task.assignedToId}
       level={level} agents={agents}
+      href={`/teams/${teamId}/tasks/${task.id}`}
     >
       {level < 2 && subTasks.map(sub => (
         <TaskListItem key={sub.id} task={sub} allTasks={allTasks} agents={agents} level={level + 1} />
