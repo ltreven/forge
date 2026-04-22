@@ -408,15 +408,27 @@ export default function TeamDetailPage() {
       }
     };
 
+    const fetchActivities = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/teams/${teamId}/activities`, { headers });
+        if (res.ok) {
+          const d = await res.json();
+          setActivities(d.data ?? []);
+        }
+      } catch (err) {
+        console.error("Failed to poll activities", err);
+      }
+    };
+
     Promise.all([
       fetch(`${API_BASE}/teams/${teamId}`, { headers }),
-      fetchAgents(), // Initial fetch
+      fetchAgents(),
+      fetchActivities(),
       fetch(`${API_BASE}/teams/${teamId}/projects`, { headers }),
       fetch(`${API_BASE}/teams/${teamId}/issues`, { headers }),
       fetch(`${API_BASE}/teams/${teamId}/tasks`, { headers }),
-      fetch(`${API_BASE}/teams/${teamId}/activities`, { headers }),
     ])
-      .then(async ([teamRes, _agentsRes, projectsRes, issuesRes, tasksRes, activitiesRes]) => {
+      .then(async ([teamRes, _agentsRes, _actRes, projectsRes, issuesRes, tasksRes]) => {
         if (teamRes && teamRes.ok) {
           const d = await teamRes.json();
           const t: Team = d.data;
@@ -438,16 +450,15 @@ export default function TeamDetailPage() {
           const d = await tasksRes.json();
           setTasks(d.data ?? []);
         }
-        if (activitiesRes && activitiesRes.ok) {
-          const d = await activitiesRes.json();
-          setActivities(d.data ?? []);
-        }
       })
       .catch(() => toast.error("Failed to load team."))
       .finally(() => setIsLoading(false));
 
-    // Polling interval for agents (every 5 seconds)
-    const intervalId = setInterval(fetchAgents, 5000);
+    // Polling interval for agents and activities (every 5 seconds)
+    const intervalId = setInterval(() => {
+      fetchAgents();
+      fetchActivities();
+    }, 5000);
     return () => clearInterval(intervalId);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
