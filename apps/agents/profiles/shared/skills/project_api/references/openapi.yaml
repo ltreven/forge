@@ -24,8 +24,14 @@ components:
         title: { type: string }
         shortSummary: { type: string }
         descriptionMarkdown: { type: string }
-        status: { type: integer, description: "0=backlog, 1=todo, 2=in_progress, 3=in_review, 4=done, 5=cancelled" }
-        priority: { type: integer, description: "0=none, 1=low, 2=medium, 3=high, 4=urgent" }
+        status: 
+          type: integer
+          enum: [0, 1, 2, 3, 4, 5]
+          description: "0=backlog, 1=todo, 2=in_progress, 3=in_review, 4=done, 5=cancelled"
+        priority:
+          type: integer
+          enum: [0, 1, 2, 3, 4]
+          description: "0=none, 1=low, 2=medium, 3=high, 4=urgent"
         leadId: { type: string, format: uuid, description: "Agent ID (must be in your team)" }
         health: { type: string, enum: [unknown, on_track, at_risk, off_track] }
         startAt:
@@ -49,8 +55,14 @@ components:
         title: { type: string }
         shortSummary: { type: string }
         descriptionMarkdown: { type: string }
-        status: { type: integer, description: "0=backlog, 1=todo, 2=in_progress, 3=in_review, 4=done, 5=cancelled" }
-        priority: { type: integer, description: "0=none, 1=low, 2=medium, 3=high, 4=urgent" }
+        status: 
+          type: integer
+          enum: [0, 1, 2, 3, 4, 5]
+          description: "0=backlog, 1=todo, 2=in_progress, 3=in_review, 4=done, 5=cancelled"
+        priority:
+          type: integer
+          enum: [0, 1, 2, 3, 4]
+          description: "0=none, 1=low, 2=medium, 3=high, 4=urgent"
         assignedToId: { type: string, format: uuid, description: "Agent ID (must be in your team)" }
 
     TeamTask:
@@ -63,8 +75,14 @@ components:
         title: { type: string }
         shortSummary: { type: string }
         descriptionMarkdown: { type: string }
-        status: { type: integer, description: "0=backlog, 1=todo, 2=in_progress, 3=in_review, 4=done, 5=cancelled" }
-        priority: { type: integer, description: "0=none, 1=low, 2=medium, 3=high, 4=urgent" }
+        status: 
+          type: integer
+          enum: [0, 1, 2, 3, 4, 5]
+          description: "0=backlog, 1=todo, 2=in_progress, 3=in_review, 4=done, 5=cancelled"
+        priority:
+          type: integer
+          enum: [0, 1, 2, 3, 4]
+          description: "0=none, 1=low, 2=medium, 3=high, 4=urgent"
         assignedToId: { type: string, format: uuid, description: "Agent ID (must be in your team)" }
 
     ProjectHealthUpdate:

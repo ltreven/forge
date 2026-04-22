@@ -37,18 +37,30 @@ This skill provides you with the knowledge and standards required to interact wi
   `Content-Type: application/json`
   If you omit this header, the server will not parse your JSON body and will return a "Validation Error: title Required" because it sees an empty request.
 
-### Canonical Status Mapping
+### Canonical Status Mapping (MUST USE INTEGERS)
 
-Always use these integer values for the `status` field in Projects, Issues, and Tasks:
+**CRITICAL**: You must send the **Integer Value**, never the string label. Sending "To Do" or "Done" will fail validation.
 
 | Value | Label       | Description                       |
 |-------|-------------|-----------------------------------|
-| 0     | Backlog     | Idea, not yet committed           |
-| 1     | To Do       | Committed, not started            |
-| 2     | In Progress | Actively being worked on          |
-| 3     | In Review   | Work done, waiting for validation |
-| 4     | Done        | Completed and closed              |
-| 5     | Cancelled   | Abandoned                         |
+| **0** | Backlog     | Idea, not yet committed           |
+| **1** | To Do       | Committed, not started            |
+| **2** | In Progress | Actively being worked on          |
+| **3** | In Review   | Work done, waiting for validation |
+| **4** | Done        | Completed and closed              |
+| **5** | Cancelled   | Abandoned                         |
+
+### Priority Mapping (MUST USE INTEGERS)
+
+**CRITICAL**: You must send the **Integer Value**, never strings like "High" or "ALTA".
+
+| Value | Label       |
+|-------|-------------|
+| **0** | None        |
+| **1** | Low         |
+| **2** | Medium      |
+| **3** | High        |
+| **4** | Urgent      |
 
 ## HTTP Methods & Operations
 

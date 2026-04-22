@@ -4,6 +4,7 @@
 
 ### Create a Project
 ```bash
+# status: 2 (In Progress), priority: 3 (High)
 curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/projects \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
@@ -56,6 +57,7 @@ curl -s -X PUT http://forge-api.forge.svc.cluster.local:4000/issues/{ISSUE_UUID}
 
 ### Create a Standalone Task
 ```bash
+# status: 1 (To Do), priority: 1 (Low)
 curl -s -X POST http://forge-api.forge.svc.cluster.local:4000/tasks \
   -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
