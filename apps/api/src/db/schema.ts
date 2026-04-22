@@ -360,6 +360,7 @@ export const comments = pgTable("comments", {
   teamId: uuid("team_id")
     .notNull()
     .references(() => teams.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id").references((): AnyPgColumn => projects.id, { onDelete: "cascade" }),
   teamTaskId: uuid("team_task_id").references((): AnyPgColumn => teamTasks.id, { onDelete: "cascade" }),
   projectIssueId: uuid("project_issue_id").references((): AnyPgColumn => projectIssues.id, { onDelete: "cascade" }),
   
