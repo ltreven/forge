@@ -1,7 +1,17 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, type SQL } from "drizzle-orm";
 import { db } from "../db/client";
-import { projects, projectIssues, teams, workspaces, teamTasks, comments } from "../db/schema";
+import { 
+  projects, 
+  projectIssues, 
+  teams, 
+  workspaces, 
+  teamTasks, 
+  comments,
+  projectActivities,
+  projectUpdates,
+  type ProjectHealth
+} from "../db/schema";
 import { 
   createProjectSchema,
   updateProjectSchema, 
@@ -10,13 +20,18 @@ import {
   createTaskSchema,
   updateTaskSchema,
   createCommentSchema,
-  updateCommentSchema
+  updateCommentSchema,
+  createProjectUpdateSchema,
+  updateProjectUpdateSchema
 } from "../schemas/project-management.schema";
 import { success, failure } from "../lib/response";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { logActivity } from "../lib/activity-logger";
 
 export const projectsRouter = Router();
+
+// ── Unified Auth Guard ────────────────────────────────────────────────────────
+projectsRouter.use(authMiddleware);
 
 /**
  * Helper to normalize payload for projects/issues/tasks.
@@ -30,68 +45,109 @@ function normalizePayload(body: any) {
 }
 
 /**
- * Validates that the authenticated user has access to a team.
+ * Validates that the authenticated actor has access to a team.
  */
-async function assertUserHasTeamAccess(userId: string, teamId: string): Promise<boolean> {
+async function assertHasTeamAccess(req: Request, teamId: string, res: Response): Promise<boolean> {
+  const actor = req.actor!;
+  
+  if (actor.type === "agent") {
+    if (actor.teamId !== teamId) {
+      res.status(403).json(failure("Agents can only access their own team's data"));
+      return false;
+    }
+    return true;
+  }
+
+  // Human: Check workspace ownership
   const [row] = await db
     .select({ id: teams.id })
     .from(teams)
     .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-    .where(and(eq(workspaces.userId, userId), eq(teams.id, teamId)))
+    .where(and(eq(workspaces.userId, actor.id), eq(teams.id, teamId)))
     .limit(1);
-  return !!row;
+    
+  if (!row) {
+    res.status(403).json(failure("Access denied to this team"));
+    return false;
+  }
+  return true;
 }
-async function assertUserHasProjectAccess(userId: string, projectId: string): Promise<boolean> {
+
+/**
+ * Resolves the teamId for a given project, ensuring the actor has access.
+ */
+async function getProjectTeamId(req: Request, projectId: string): Promise<string | null> {
+  const actor = req.actor!;
+  
+  if (actor.type === "agent") {
+    const [row] = await db
+      .select({ teamId: projects.teamId })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.teamId, actor.teamId!)))
+      .limit(1);
+    return row?.teamId ?? null;
+  }
+
+  // Human: check via workspace
   const [row] = await db
-    .select({ id: projects.id })
+    .select({ teamId: projects.teamId })
     .from(projects)
     .innerJoin(teams, eq(projects.teamId, teams.id))
     .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-    .where(and(eq(workspaces.userId, userId), eq(projects.id, projectId)))
+    .where(and(eq(workspaces.userId, actor.id), eq(projects.id, projectId)))
     .limit(1);
-  return !!row;
+
+  return row?.teamId ?? null;
 }
 
-// ── Projects ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Projects
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * POST /
+ * POST /projects
  */
-projectsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.post("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = normalizePayload(req.body);
-    const input = createProjectSchema.parse(payload);
-    const userId = req.user!.userId;
-
-    const hasAccess = await assertUserHasTeamAccess(userId, input.teamId);
-    if (!hasAccess) {
-      res.status(403).json(failure("Access denied to this team"));
+    const actor = req.actor!;
+    
+    // For agents, we force the teamId from their token.
+    const effectiveTeamId = actor.type === "agent" ? actor.teamId! : String(payload.teamId || "");
+    
+    if (!effectiveTeamId) {
+      res.status(400).json(failure("teamId is required"));
       return;
     }
+
+    const hasAccess = await assertHasTeamAccess(req, effectiveTeamId, res);
+    if (!hasAccess) return;
+
+    const input = createProjectSchema.parse({ ...payload, teamId: effectiveTeamId });
 
     const [project] = await db
       .insert(projects)
       .values({
-        teamId: String(input.teamId),
-        title: String(input.title),
-        shortSummary: input.shortSummary ? String(input.shortSummary) : null,
-        descriptionMarkdown: input.descriptionMarkdown ? String(input.descriptionMarkdown) : null,
-        descriptionRichText: input.descriptionRichText ?? null,
+        teamId: effectiveTeamId,
+        title: input.title,
+        shortSummary: input.shortSummary,
+        descriptionMarkdown: input.descriptionMarkdown,
+        descriptionRichText: input.descriptionRichText,
         startDateKind: input.startAt?.kind,
         startDateValue: input.startAt?.value,
         endDateKind: input.endAt?.kind,
         endDateValue: input.endAt?.value,
-        status: Number(input.status ?? 0),
-        priority: Number(input.priority ?? 0),
-        leadId: input.leadId ? String(input.leadId) : null,
+        status: input.status,
+        priority: input.priority,
+        leadId: input.leadId,
         health: input.health,
       })
       .returning();
 
     await logActivity(
-      String(input.teamId),
-      userId,
-      "human",
+      effectiveTeamId,
+      actor.id,
+      actor.type,
       "project_created",
       "project",
       project.id,
@@ -105,26 +161,68 @@ projectsRouter.post("/", authMiddleware, async (req: Request, res: Response, nex
 });
 
 /**
- * GET /projects/:id
+ * GET /projects
  */
-projectsRouter.get("/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const projectId = String(req.params.id);
-    const userId = req.user!.userId;
+    const actor = req.actor!;
+    let teamId = String(req.query.teamId || "");
 
-    const [row] = await db
+    if (actor.type === "agent") {
+      teamId = actor.teamId!;
+    }
+
+    if (!teamId) {
+      res.status(400).json(failure("teamId query parameter is required for humans"));
+      return;
+    }
+
+    const hasAccess = await assertHasTeamAccess(req, teamId, res);
+    if (!hasAccess) return;
+
+    const rows = await db
       .select()
       .from(projects)
-      .innerJoin(teams, eq(projects.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(projects.id, projectId)));
+      .where(eq(projects.teamId, teamId))
+      .orderBy(desc(projects.updatedAt));
+
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /projects/:id
+ */
+projectsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = String(req.params.id);
+    const actor = req.actor!;
+
+    let row;
+    if (actor.type === "human") {
+      [row] = await db
+        .select({ project: projects })
+        .from(projects)
+        .innerJoin(teams, eq(projects.teamId, teams.id))
+        .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+        .where(and(eq(workspaces.userId, actor.id), eq(projects.id, projectId)))
+        .limit(1);
+    } else {
+      [row] = await db
+        .select({ project: projects })
+        .from(projects)
+        .where(and(eq(projects.teamId, actor.teamId!), eq(projects.id, projectId)))
+        .limit(1);
+    }
 
     if (!row) {
       res.status(404).json(failure("Project not found or access denied"));
       return;
     }
 
-    res.json(success(row.projects));
+    res.json(success(row.project));
   } catch (err) {
     next(err);
   }
@@ -133,13 +231,11 @@ projectsRouter.get("/:id", authMiddleware, async (req: Request, res: Response, n
 /**
  * PUT /projects/:id
  */
-projectsRouter.put("/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const hasAccess = await assertUserHasProjectAccess(userId, projectId);
-    if (!hasAccess) {
+    const teamId = await getProjectTeamId(req, projectId);
+    if (!teamId) {
       res.status(404).json(failure("Project not found or access denied"));
       return;
     }
@@ -167,24 +263,103 @@ projectsRouter.put("/:id", authMiddleware, async (req: Request, res: Response, n
       .where(eq(projects.id, projectId))
       .returning();
 
+    await logActivity(
+      teamId,
+      req.actor!.id,
+      req.actor!.type,
+      "project_updated",
+      "project",
+      projectId,
+      { title: updated.title, updatedFields: Object.keys(input) }
+    );
+
     res.json(success(updated));
   } catch (err) {
     next(err);
   }
 });
 
-// ── Project Issues ───────────────────────────────────────────────────────────
+/**
+ * DELETE /projects/:id
+ */
+projectsRouter.delete("/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = String(req.params.id);
+    const teamId = await getProjectTeamId(req, projectId);
+    if (!teamId) {
+      res.status(404).json(failure("Project not found or access denied"));
+      return;
+    }
+
+    const [deleted] = await db
+      .delete(projects)
+      .where(eq(projects.id, projectId))
+      .returning();
+
+    res.json(success({ deleted: true, id: deleted.id }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Project Issues
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /projects/:id/issues
+ */
+projectsRouter.post("/:id/issues", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = String(req.params.id);
+    const teamId = await getProjectTeamId(req, projectId);
+    if (!teamId) {
+      res.status(404).json(failure("Project not found or access denied"));
+      return;
+    }
+
+    const payload = normalizePayload(req.body);
+    const input = createIssueSchema.parse({ ...payload, projectId });
+
+    const [issue] = await db
+      .insert(projectIssues)
+      .values({
+        projectId,
+        parentIssueId: input.parentIssueId,
+        title: input.title,
+        shortSummary: input.shortSummary,
+        descriptionMarkdown: input.descriptionMarkdown,
+        descriptionRichText: input.descriptionRichText,
+        status: input.status,
+        priority: input.priority,
+        assignedToId: input.assignedToId,
+      })
+      .returning();
+
+    await logActivity(
+      teamId,
+      req.actor!.id,
+      req.actor!.type,
+      "project_issue_created",
+      "project_issue",
+      issue.id,
+      { title: issue.title }
+    );
+
+    res.status(201).json(success(issue));
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * GET /projects/:id/issues
  */
-projectsRouter.get("/:id/issues", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/:id/issues", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const hasAccess = await assertUserHasProjectAccess(userId, projectId);
-    if (!hasAccess) {
+    const teamId = await getProjectTeamId(req, projectId);
+    if (!teamId) {
       res.status(404).json(failure("Project not found or access denied"));
       return;
     }
@@ -202,80 +377,64 @@ projectsRouter.get("/:id/issues", authMiddleware, async (req: Request, res: Resp
 });
 
 /**
- * POST /projects/:id/issues
+ * GET /issues/:id
  */
-projectsRouter.post("/:id/issues", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const projectId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const hasAccess = await assertUserHasProjectAccess(userId, projectId);
-    if (!hasAccess) {
-      res.status(404).json(failure("Project not found or access denied"));
-      return;
-    }
-
-    const payload = normalizePayload(req.body);
-    const input = createIssueSchema.parse({ ...payload, projectId });
-
-    const [issue] = await db
-      .insert(projectIssues)
-      .values({
-        projectId: String(input.projectId),
-        parentIssueId: input.parentIssueId ? String(input.parentIssueId) : null,
-        title: String(input.title),
-        shortSummary: input.shortSummary ? String(input.shortSummary) : null,
-        descriptionMarkdown: input.descriptionMarkdown ? String(input.descriptionMarkdown) : null,
-        descriptionRichText: input.descriptionRichText ?? null,
-        status: Number(input.status ?? 0),
-        priority: Number(input.priority ?? 0),
-        assignedToId: input.assignedToId ? String(input.assignedToId) : null,
-      })
-      .returning();
-
-    const [proj] = await db.select({ teamId: projects.teamId }).from(projects).where(eq(projects.id, issue.projectId)).limit(1);
-
-    if (proj) {
-      await logActivity(
-        proj.teamId,
-        userId,
-        "human",
-        "project_issue_created",
-        "project_issue",
-        issue.id,
-        { title: issue.title }
-      );
-    }
-
-    res.status(201).json(success(issue));
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ── Global Issue Operations ──────────────────────────────────────────────────
-
-/**
- * PUT /issues/:id
- */
-projectsRouter.put("/issues/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const issueId = String(req.params.id);
-    const userId = req.user!.userId;
+    const actor = req.actor!;
 
-    // Join to verify ownership
-    const [row] = await db
-      .select({ issue: projectIssues })
-      .from(projectIssues)
-      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
-      .innerJoin(teams, eq(projects.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(projectIssues.id, issueId)));
+    let row;
+    if (actor.type === "human") {
+      [row] = await db
+        .select({ issue: projectIssues, teamId: projects.teamId })
+        .from(projectIssues)
+        .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+        .innerJoin(teams, eq(projects.teamId, teams.id))
+        .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+        .where(and(eq(workspaces.userId, actor.id), eq(projectIssues.id, issueId)))
+        .limit(1);
+    } else {
+      [row] = await db
+        .select({ issue: projectIssues, teamId: projects.teamId })
+        .from(projectIssues)
+        .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+        .where(and(eq(projects.teamId, actor.teamId!), eq(projectIssues.id, issueId)))
+        .limit(1);
+    }
 
     if (!row) {
       res.status(404).json(failure("Issue not found or access denied"));
       return;
     }
+
+    res.json(success(row.issue));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /issues/:id
+ */
+projectsRouter.put("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const issueId = String(req.params.id);
+    const actor = req.actor!;
+
+    const [row] = await db
+      .select({ issue: projectIssues, teamId: projects.teamId })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+      .where(eq(projectIssues.id, issueId));
+
+    if (!row) {
+      res.status(404).json(failure("Issue not found"));
+      return;
+    }
+
+    const hasAccess = await assertHasTeamAccess(req, row.teamId, res);
+    if (!hasAccess) return;
 
     const payload = normalizePayload(req.body);
     const input = updateIssueSchema.parse(payload);
@@ -303,47 +462,123 @@ projectsRouter.put("/issues/:id", authMiddleware, async (req: Request, res: Resp
 });
 
 /**
- * GET /issues/:id
+ * DELETE /issues/:id
  */
-projectsRouter.get("/issues/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.delete("/issues/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const issueId = String(req.params.id);
-    const userId = req.user!.userId;
-
     const [row] = await db
-      .select({ issue: projectIssues })
+      .select({ teamId: projects.teamId })
       .from(projectIssues)
       .innerJoin(projects, eq(projectIssues.projectId, projects.id))
-      .innerJoin(teams, eq(projects.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(projectIssues.id, issueId)));
+      .where(eq(projectIssues.id, issueId));
 
     if (!row) {
-      res.status(404).json(failure("Issue not found or access denied"));
+      res.status(404).json(failure("Issue not found"));
       return;
     }
 
-    res.json(success(row.issue));
+    const hasAccess = await assertHasTeamAccess(req, row.teamId, res);
+    if (!hasAccess) return;
+
+    await db.delete(projectIssues).where(eq(projectIssues.id, issueId));
+    res.json(success({ deleted: true, id: issueId }));
   } catch (err) {
     next(err);
   }
 });
 
-// ── Team Task Operations (Human) ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Team Tasks
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * GET /teams/:id/tasks
  */
-projectsRouter.get("/teams/:id/tasks", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/teams/:id/tasks", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const teamId = String(req.params.id);
-    const userId = req.user!.userId;
+    const hasAccess = await assertHasTeamAccess(req, teamId, res);
+    if (!hasAccess) return;
 
-    const hasAccess = await assertUserHasTeamAccess(userId, teamId);
-    if (!hasAccess) {
-      res.status(403).json(failure("Access denied to this team"));
+    const rows = await db
+      .select()
+      .from(teamTasks)
+      .where(eq(teamTasks.teamId, teamId))
+      .orderBy(desc(teamTasks.createdAt));
+
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /tasks
+ */
+projectsRouter.post("/tasks", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = normalizePayload(req.body);
+    const actor = req.actor!;
+    const effectiveTeamId = actor.type === "agent" ? actor.teamId! : String(payload.teamId || "");
+
+    if (!effectiveTeamId) {
+      res.status(400).json(failure("teamId is required"));
       return;
     }
+
+    const hasAccess = await assertHasTeamAccess(req, effectiveTeamId, res);
+    if (!hasAccess) return;
+
+    const input = createTaskSchema.parse({ ...payload, teamId: effectiveTeamId });
+
+    const [task] = await db
+      .insert(teamTasks)
+      .values({
+        teamId: effectiveTeamId,
+        parentTaskId: input.parentTaskId,
+        title: input.title,
+        shortSummary: input.shortSummary,
+        descriptionMarkdown: input.descriptionMarkdown,
+        descriptionRichText: input.descriptionRichText,
+        status: input.status,
+        priority: input.priority,
+        assignedToId: input.assignedToId,
+      })
+      .returning();
+
+    await logActivity(
+      effectiveTeamId,
+      actor.id,
+      actor.type,
+      "task_created",
+      "task",
+      task.id,
+      { title: task.title }
+    );
+
+    res.status(201).json(success(task));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /tasks
+ */
+projectsRouter.get("/tasks", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actor = req.actor!;
+    let teamId = String(req.query.teamId || "");
+    if (actor.type === "agent") teamId = actor.teamId!;
+
+    if (!teamId) {
+      res.status(400).json(failure("teamId is required"));
+      return;
+    }
+
+    const hasAccess = await assertHasTeamAccess(req, teamId, res);
+    if (!hasAccess) return;
 
     const rows = await db
       .select()
@@ -360,17 +595,27 @@ projectsRouter.get("/teams/:id/tasks", authMiddleware, async (req: Request, res:
 /**
  * GET /tasks/:id
  */
-projectsRouter.get("/tasks/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const taskId = String(req.params.id);
-    const userId = req.user!.userId;
+    const actor = req.actor!;
 
-    const [row] = await db
-      .select({ task: teamTasks })
-      .from(teamTasks)
-      .innerJoin(teams, eq(teamTasks.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(teamTasks.id, taskId)));
+    let row;
+    if (actor.type === "human") {
+      [row] = await db
+        .select({ task: teamTasks })
+        .from(teamTasks)
+        .innerJoin(teams, eq(teamTasks.teamId, teams.id))
+        .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
+        .where(and(eq(workspaces.userId, actor.id), eq(teamTasks.id, taskId)))
+        .limit(1);
+    } else {
+      [row] = await db
+        .select({ task: teamTasks })
+        .from(teamTasks)
+        .where(and(eq(teamTasks.teamId, actor.teamId!), eq(teamTasks.id, taskId)))
+        .limit(1);
+    }
 
     if (!row) {
       res.status(404).json(failure("Task not found or access denied"));
@@ -386,22 +631,23 @@ projectsRouter.get("/tasks/:id", authMiddleware, async (req: Request, res: Respo
 /**
  * PUT /tasks/:id
  */
-projectsRouter.put("/tasks/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.put("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const taskId = String(req.params.id);
-    const userId = req.user!.userId;
+    const actor = req.actor!;
 
-    const [row] = await db
-      .select({ id: teamTasks.id })
+    const [existing] = await db
+      .select()
       .from(teamTasks)
-      .innerJoin(teams, eq(teamTasks.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(teamTasks.id, taskId)));
+      .where(eq(teamTasks.id, taskId));
 
-    if (!row) {
-      res.status(404).json(failure("Task not found or access denied"));
+    if (!existing) {
+      res.status(404).json(failure("Task not found"));
       return;
     }
+
+    const hasAccess = await assertHasTeamAccess(req, existing.teamId, res);
+    if (!hasAccess) return;
 
     const payload = normalizePayload(req.body);
     const input = updateTaskSchema.parse(payload);
@@ -429,365 +675,72 @@ projectsRouter.put("/tasks/:id", authMiddleware, async (req: Request, res: Respo
 });
 
 /**
- * POST /tasks
- */
-projectsRouter.post("/tasks", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const payload = normalizePayload(req.body);
-    const input = createTaskSchema.parse(payload);
-
-    const hasAccess = await db
-      .select({ id: teams.id })
-      .from(teams)
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(teams.id, input.teamId)))
-      .limit(1);
-
-    if (hasAccess.length === 0) {
-      res.status(403).json(failure("Access denied to this team"));
-      return;
-    }
-
-    const [task] = await db
-      .insert(teamTasks)
-      .values({
-        teamId: input.teamId,
-        parentTaskId: input.parentTaskId ? String(input.parentTaskId) : null,
-        title: String(input.title),
-        shortSummary: input.shortSummary ? String(input.shortSummary) : null,
-        descriptionMarkdown: input.descriptionMarkdown ? String(input.descriptionMarkdown) : null,
-        descriptionRichText: input.descriptionRichText ?? null,
-        status: Number(input.status ?? 0),
-        priority: Number(input.priority ?? 0),
-        assignedToId: input.assignedToId ? String(input.assignedToId) : null,
-      })
-      .returning();
-
-    await logActivity(
-      input.teamId,
-      userId,
-      "human",
-      "task_created",
-      "task",
-      task.id,
-      { title: task.title }
-    );
-
-    res.status(201).json(success(task));
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ── Comments ─────────────────────────────────────────────────────────────────
-
-/**
- * GET /tasks/:id/comments
- */
-projectsRouter.get("/tasks/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const taskId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const [row] = await db
-      .select({ id: teamTasks.id })
-      .from(teamTasks)
-      .innerJoin(teams, eq(teamTasks.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(teamTasks.id, taskId)));
-
-    if (!row) {
-      res.status(404).json(failure("Task not found or access denied"));
-      return;
-    }
-
-    const rows = await db
-      .select()
-      .from(comments)
-      .where(eq(comments.teamTaskId, taskId))
-      .orderBy(comments.createdAt);
-
-    res.json(success(rows));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * POST /tasks/:id/comments
- */
-projectsRouter.post("/tasks/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const taskId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const [row] = await db
-      .select({ id: teamTasks.id, teamId: teamTasks.teamId })
-      .from(teamTasks)
-      .innerJoin(teams, eq(teamTasks.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(teamTasks.id, taskId)));
-
-    if (!row) {
-      res.status(404).json(failure("Task not found or access denied"));
-      return;
-    }
-
-    const input = createCommentSchema.parse({ ...req.body, teamTaskId: taskId });
-
-    const [comment] = await db
-      .insert(comments)
-      .values({
-        teamId: row.teamId,
-        teamTaskId: taskId,
-        actorId: userId,
-        actorType: "human",
-        content: input.content,
-      })
-      .returning();
-
-    res.status(201).json(success(comment));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * GET /issues/:id/comments
- */
-projectsRouter.get("/issues/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const issueId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const [row] = await db
-      .select({ id: projectIssues.id })
-      .from(projectIssues)
-      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
-      .innerJoin(teams, eq(projects.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(projectIssues.id, issueId)));
-
-    if (!row) {
-      res.status(404).json(failure("Issue not found or access denied"));
-      return;
-    }
-
-    const rows = await db
-      .select()
-      .from(comments)
-      .where(eq(comments.projectIssueId, issueId))
-      .orderBy(comments.createdAt);
-
-    res.json(success(rows));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * POST /issues/:id/comments
- */
-projectsRouter.post("/issues/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const issueId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const [row] = await db
-      .select({ id: projectIssues.id, teamId: projects.teamId })
-      .from(projectIssues)
-      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
-      .innerJoin(teams, eq(projects.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(projectIssues.id, issueId)));
-
-    if (!row) {
-      res.status(404).json(failure("Issue not found or access denied"));
-      return;
-    }
-
-    const input = createCommentSchema.parse({ ...req.body, projectIssueId: issueId });
-
-    const [comment] = await db
-      .insert(comments)
-      .values({
-        teamId: row.teamId,
-        projectIssueId: issueId,
-        actorId: userId,
-        actorType: "human",
-        content: input.content,
-      })
-      .returning();
-
-    res.status(201).json(success(comment));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * PUT /comments/:id
- */
-projectsRouter.put("/comments/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const commentId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    // Must belong to the user
-    const [existing] = await db
-      .select()
-      .from(comments)
-      .where(and(eq(comments.id, commentId), eq(comments.actorId, userId), eq(comments.actorType, "human")));
-
-    if (!existing) {
-      res.status(404).json(failure("Comment not found or access denied"));
-      return;
-    }
-
-    const input = updateCommentSchema.parse(req.body);
-
-    const [updated] = await db
-      .update(comments)
-      .set({
-        content: input.content,
-        updatedAt: new Date(),
-      })
-      .where(eq(comments.id, existing.id))
-      .returning();
-
-    res.json(success(updated));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * DELETE /comments/:id
- */
-projectsRouter.delete("/comments/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const commentId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    // Must belong to the user
-    const [existing] = await db
-      .select()
-      .from(comments)
-      .where(and(eq(comments.id, commentId), eq(comments.actorId, userId), eq(comments.actorType, "human")));
-
-    if (!existing) {
-      res.status(404).json(failure("Comment not found or access denied"));
-      return;
-    }
-
-    await db.delete(comments).where(eq(comments.id, existing.id));
-
-    res.json(success({ deleted: true, id: existing.id }));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * DELETE /projects/:id
- */
-projectsRouter.delete("/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const projectId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const hasAccess = await assertUserHasProjectAccess(userId, projectId);
-    if (!hasAccess) {
-      res.status(404).json(failure("Project not found or access denied"));
-      return;
-    }
-
-    const [deleted] = await db
-      .delete(projects)
-      .where(eq(projects.id, projectId))
-      .returning();
-
-    res.json(success({ deleted: true, id: deleted.id }));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * DELETE /issues/:id
- */
-projectsRouter.delete("/issues/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const issueId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    // Join to verify ownership
-    const [row] = await db
-      .select({ id: projectIssues.id })
-      .from(projectIssues)
-      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
-      .innerJoin(teams, eq(projects.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(projectIssues.id, issueId)));
-
-    if (!row) {
-      res.status(404).json(failure("Issue not found or access denied"));
-      return;
-    }
-
-    const [deleted] = await db
-      .delete(projectIssues)
-      .where(eq(projectIssues.id, issueId))
-      .returning();
-
-    res.json(success({ deleted: true, id: deleted.id }));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
  * DELETE /tasks/:id
  */
-projectsRouter.delete("/tasks/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.delete("/tasks/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const taskId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const [row] = await db
-      .select({ id: teamTasks.id })
-      .from(teamTasks)
-      .innerJoin(teams, eq(teamTasks.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(teamTasks.id, taskId)));
-
-    if (!row) {
-      res.status(404).json(failure("Task not found or access denied"));
+    const [existing] = await db.select().from(teamTasks).where(eq(teamTasks.id, taskId)).limit(1);
+    if (!existing) {
+      res.status(404).json(failure("Task not found"));
       return;
     }
 
-    const [deleted] = await db
-      .delete(teamTasks)
-      .where(eq(teamTasks.id, taskId))
-      .returning();
+    const hasAccess = await assertHasTeamAccess(req, existing.teamId, res);
+    if (!hasAccess) return;
 
-    res.json(success({ deleted: true, id: deleted.id }));
+    await db.delete(teamTasks).where(eq(teamTasks.id, taskId));
+    res.json(success({ deleted: true, id: taskId }));
   } catch (err) {
     next(err);
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Activity Feed
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /activities
+ */
+projectsRouter.get("/activities", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actor = req.actor!;
+    let teamId = String(req.query.teamId || "");
+    if (actor.type === "agent") teamId = actor.teamId!;
+
+    if (!teamId) {
+      res.status(400).json(failure("teamId is required"));
+      return;
+    }
+
+    const hasAccess = await assertHasTeamAccess(req, teamId, res);
+    if (!hasAccess) return;
+
+    const rows = await db
+      .select()
+      .from(projectActivities)
+      .where(eq(projectActivities.teamId, teamId))
+      .orderBy(desc(projectActivities.createdAt));
+
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Comments
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * GET /projects/:id/comments
  */
-projectsRouter.get("/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.get("/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const hasAccess = await assertUserHasProjectAccess(userId, projectId);
-    if (!hasAccess) {
+    const teamId = await getProjectTeamId(req, projectId);
+    if (!teamId) {
       res.status(404).json(failure("Project not found or access denied"));
       return;
     }
@@ -807,37 +760,275 @@ projectsRouter.get("/:id/comments", authMiddleware, async (req: Request, res: Re
 /**
  * POST /projects/:id/comments
  */
-projectsRouter.post("/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+projectsRouter.post("/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const projectId = String(req.params.id);
-    const userId = req.user!.userId;
-
-    const [row] = await db
-      .select({ id: projects.id, teamId: projects.teamId })
-      .from(projects)
-      .innerJoin(teams, eq(projects.teamId, teams.id))
-      .innerJoin(workspaces, eq(teams.workspaceId, workspaces.id))
-      .where(and(eq(workspaces.userId, userId), eq(projects.id, projectId)));
-
-    if (!row) {
+    const teamId = await getProjectTeamId(req, projectId);
+    if (!teamId) {
       res.status(404).json(failure("Project not found or access denied"));
       return;
     }
 
-    const input = createCommentSchema.parse({ ...req.body, projectId });
+    const input = createCommentSchema.parse(req.body);
 
     const [comment] = await db
       .insert(comments)
       .values({
-        teamId: row.teamId,
-        projectId: projectId,
-        actorId: userId,
-        actorType: "human",
+        teamId,
+        projectId,
+        actorId: req.actor!.id,
+        actorType: req.actor!.type,
         content: input.content,
       })
       .returning();
 
     res.status(201).json(success(comment));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /issues/:id/comments
+ */
+projectsRouter.get("/issues/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const issueId = String(req.params.id);
+    const [row] = await db
+      .select({ teamId: projects.teamId })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+      .where(eq(projectIssues.id, issueId));
+
+    if (!row) {
+      res.status(404).json(failure("Issue not found"));
+      return;
+    }
+
+    const hasAccess = await assertHasTeamAccess(req, row.teamId, res);
+    if (!hasAccess) return;
+
+    const rows = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.projectIssueId, issueId))
+      .orderBy(comments.createdAt);
+
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /issues/:id/comments
+ */
+projectsRouter.post("/issues/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const issueId = String(req.params.id);
+    const [row] = await db
+      .select({ teamId: projects.teamId })
+      .from(projectIssues)
+      .innerJoin(projects, eq(projectIssues.projectId, projects.id))
+      .where(eq(projectIssues.id, issueId));
+
+    if (!row) {
+      res.status(404).json(failure("Issue not found"));
+      return;
+    }
+
+    const hasAccess = await assertHasTeamAccess(req, row.teamId, res);
+    if (!hasAccess) return;
+
+    const input = createCommentSchema.parse(req.body);
+
+    const [comment] = await db
+      .insert(comments)
+      .values({
+        teamId: row.teamId,
+        projectIssueId: issueId,
+        actorId: req.actor!.id,
+        actorType: req.actor!.type,
+        content: input.content,
+      })
+      .returning();
+
+    res.status(201).json(success(comment));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /tasks/:id/comments
+ */
+projectsRouter.get("/tasks/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const taskId = String(req.params.id);
+    const [task] = await db.select().from(teamTasks).where(eq(teamTasks.id, taskId));
+
+    if (!task) {
+      res.status(404).json(failure("Task not found"));
+      return;
+    }
+
+    const hasAccess = await assertHasTeamAccess(req, task.teamId, res);
+    if (!hasAccess) return;
+
+    const rows = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.teamTaskId, taskId))
+      .orderBy(comments.createdAt);
+
+    res.json(success(rows));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /tasks/:id/comments
+ */
+projectsRouter.post("/tasks/:id/comments", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const taskId = String(req.params.id);
+    const [task] = await db.select().from(teamTasks).where(eq(teamTasks.id, taskId));
+
+    if (!task) {
+      res.status(404).json(failure("Task not found"));
+      return;
+    }
+
+    const hasAccess = await assertHasTeamAccess(req, task.teamId, res);
+    if (!hasAccess) return;
+
+    const input = createCommentSchema.parse(req.body);
+
+    const [comment] = await db
+      .insert(comments)
+      .values({
+        teamId: task.teamId,
+        teamTaskId: taskId,
+        actorId: req.actor!.id,
+        actorType: req.actor!.type,
+        content: input.content,
+      })
+      .returning();
+
+    res.status(201).json(success(comment));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /comments/:id
+ */
+projectsRouter.put("/comments/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const commentId = String(req.params.id);
+    const actor = req.actor!;
+
+    const [existing] = await db
+      .select()
+      .from(comments)
+      .where(and(eq(comments.id, commentId), eq(comments.actorId, actor.id), eq(comments.actorType, actor.type)));
+
+    if (!existing) {
+      res.status(404).json(failure("Comment not found or access denied"));
+      return;
+    }
+
+    const input = updateCommentSchema.parse(req.body);
+
+    const [updated] = await db
+      .update(comments)
+      .set({
+        content: input.content,
+        updatedAt: new Date(),
+      })
+      .where(eq(comments.id, commentId))
+      .returning();
+
+    res.json(success(updated));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /comments/:id
+ */
+projectsRouter.delete("/comments/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const commentId = String(req.params.id);
+    const actor = req.actor!;
+
+    const [existing] = await db
+      .select()
+      .from(comments)
+      .where(and(eq(comments.id, commentId), eq(comments.actorId, actor.id), eq(comments.actorType, actor.type)));
+
+    if (!existing) {
+      res.status(404).json(failure("Comment not found or access denied"));
+      return;
+    }
+
+    await db.delete(comments).where(eq(comments.id, commentId));
+    res.json(success({ deleted: true, id: commentId }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Project Health Updates
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /projects/:id/updates
+ */
+projectsRouter.post("/:id/updates", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = String(req.params.id);
+    const actor = req.actor!;
+    
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    if (!project) {
+      res.status(404).json(failure("Project not found"));
+      return;
+    }
+
+    const hasAccess = await assertHasTeamAccess(req, project.teamId, res);
+    if (!hasAccess) return;
+
+    const input = createProjectUpdateSchema.parse({ ...req.body, projectId });
+
+    const [update] = await db
+      .insert(projectUpdates)
+      .values({
+        projectId,
+        happenedAt: input.happenedAt ?? new Date(),
+        oldHealth: project.health as ProjectHealth,
+        newHealth: input.newHealth as ProjectHealth,
+        reason: input.reason,
+      })
+      .returning();
+
+    await db.update(projects).set({ health: input.newHealth as ProjectHealth, updatedAt: new Date() }).where(eq(projects.id, projectId));
+
+    await logActivity(
+      project.teamId,
+      actor.id,
+      actor.type,
+      "project_updated",
+      "update",
+      update.id,
+      { oldHealth: update.oldHealth, newHealth: update.newHealth }
+    );
+
+    res.status(201).json(success(update));
   } catch (err) {
     next(err);
   }

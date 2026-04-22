@@ -85,6 +85,13 @@
       "when": 1776836564071,
       "tag": "0011_big_groot",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1776845875294,
+      "tag": "0012_peaceful_thundra",
+      "breakpoints": true
     }
   ]
 }

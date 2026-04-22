@@ -194,7 +194,7 @@ authRouter.get("/me", authMiddleware, async (req: Request, res: Response, next: 
     const [user] = await db
       .select({ id: users.id, name: users.name, email: users.email, createdAt: users.createdAt })
       .from(users)
-      .where(eq(users.id, req.user!.userId));
+      .where(eq(users.id, req.actor!.id));
 
     if (!user) {
       res.status(404).json(failure("User not found"));

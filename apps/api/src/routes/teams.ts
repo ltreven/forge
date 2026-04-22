@@ -21,7 +21,7 @@ teamsRouter.get("/mine", authMiddleware, async (req: Request, res: Response, nex
     const [workspace] = await db
       .select({ id: workspaces.id, name: workspaces.name })
       .from(workspaces)
-      .where(eq(workspaces.userId, req.user!.userId))
+      .where(eq(workspaces.userId, req.actor!.id))
       .limit(1);
 
     if (!workspace) {
@@ -67,7 +67,7 @@ teamsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: 
       const [workspace] = await db
         .select({ id: workspaces.id })
         .from(workspaces)
-        .where(eq(workspaces.userId, req.user!.userId))
+        .where(eq(workspaces.userId, req.actor!.id))
         .limit(1);
       if (!workspace) {
         res.status(400).json(failure("No workspace found for this user."));

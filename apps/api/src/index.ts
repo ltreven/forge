@@ -8,9 +8,8 @@ import { integrationsRouter } from "./routes/integrations";
 import { conversationsRouter } from "./routes/conversations";
 import { internalRouter } from "./routes/internal";
 import { errorHandler } from "./middleware/errorHandler";
-import { projectManagementRouter } from "./routes/project-management";
-import { teamManagementRouter } from "./routes/team-management";
 import { projectsRouter } from "./routes/projects";
+import { teamManagementRouter } from "./routes/team-management";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -46,34 +45,21 @@ app.get("/health", (_req, res) => {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-// Internal routes — NOT protected by agent gatewayToken.
+// Internal routes — system level, no auth required (protected by NetworkPolicy)
 app.use("/internal", internalRouter);
 
-/**
- * Agent-facing endpoints (resilient paths).
- * These must come BEFORE human endpoints if they share the same path.
- */
-app.use(
-  ["/projects", "/tasks", "/issues", "/activities"], 
-  agentAuthMiddleware, 
-  projectManagementRouter
-);
-
-/**
- * Agent-facing team info.
- */
-app.use("/team", agentAuthMiddleware, teamManagementRouter);
-
-/**
- * Human-facing endpoints (User JWT).
- */
+// Unified Actors Endpoints (Agentes e Humanos usam os mesmos caminhos)
 app.use("/projects", projectsRouter);
-app.use("/teams", teamsRouter);
-app.use("/agents", agentsRouter);
-app.use("/conversations", conversationsRouter);
-app.use("/auth", authRouter);
+app.use("/tasks", projectsRouter);
+app.use("/issues", projectsRouter);
+app.use("/activities", projectsRouter);
+app.use("/team", teamManagementRouter);
 
-// Nested: /teams/:id/integrations
+// Legacy/Core routers (predominantly for humans or specific lifecycle)
+app.use("/auth", authRouter);
+app.use("/teams", teamsRouter); // Legacy team listing for humans
+app.use("/agents", agentsRouter); // Lifecycle management (creation/deletion)
+app.use("/conversations", conversationsRouter);
 app.use("/teams/:id/integrations", integrationsRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
@@ -82,20 +68,12 @@ app.use(errorHandler);
 
 // ── Listen ────────────────────────────────────────────────────────────────────
 
-// Bind to loopback by default per security policy (GEMINI.md: "Bind to loopback only").
-// In Kubernetes, liveness/readiness probes use exec (curl on loopback) — not httpGet —
-// so the kubelet never needs to reach the pod IP directly.
-// Override with HOST=0.0.0.0 only if an explicit network exposure is required.
 const HOST = process.env.HOST ?? "127.0.0.1";
 
 app.listen(PORT, HOST, () => {
   console.log(`🚀 Forge API running on http://${HOST}:${PORT}`);
 
-  // ── Startup: RabbitMQ tenant safety net ──────────────────────────────────
-  // Re-provisions RabbitMQ vhosts/users/secrets for all existing workspaces.
-  // Runs after a short delay to give RabbitMQ time to become ready after
-  // cluster restarts (e.g. tilt down && tilt up) before provisioning starts.
-  // Idempotent — safe to run on every startup, even if tenants already exist.
+  // Startup: RabbitMQ reprovisioning safety net
   if (process.env.DISABLE_RABBIT_STARTUP_REPROVISION !== "true") {
     const delayMs = Number(process.env.RABBIT_STARTUP_DELAY_MS ?? 30_000);
     setTimeout(async () => {
@@ -128,7 +106,6 @@ app.listen(PORT, HOST, () => {
             const creds = await provisionTenant(ws.id);
             await applyRabbitMQCredentialsSecret(ws.k8sNamespace, creds);
 
-            // Restart any agents whose consumer has been retrying (no connection yet)
             const wsAgents = await db
               .select({ id: agents.id })
               .from(agents)
@@ -138,18 +115,14 @@ app.listen(PORT, HOST, () => {
             for (const agent of wsAgents) {
               try {
                 await rolloutRestartDeployment(ws.k8sNamespace, agent.id);
-              } catch {
-                // Pod may not exist yet — non-fatal
-              }
+              } catch { }
             }
             provisioned++;
             console.log(`[startup] RabbitMQ re-provisioned for workspace ${ws.id}`);
           } catch (err) {
             failed++;
-            console.warn(`[startup] RabbitMQ reprovision failed for workspace ${ws.id}:`, err instanceof Error ? err.message : err);
           }
         }
-
         console.log(`[startup] RabbitMQ reprovision complete — ok: ${provisioned}, failed: ${failed}`);
       } catch (err) {
         console.error("[startup] RabbitMQ reprovision hook crashed:", err);
@@ -158,6 +131,4 @@ app.listen(PORT, HOST, () => {
   }
 });
 
-
 export default app;
-

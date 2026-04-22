@@ -5,7 +5,7 @@ import { db } from "../db/client";
 import { agents, teams, workspaces } from "../db/schema";
 import { createAgentSchema } from "../schemas/agent.schema";
 import { success, failure } from "../lib/response";
-import { agentAuthMiddleware } from "../middleware/agentAuthMiddleware";
+import { authMiddleware } from "../middleware/authMiddleware";
 import {
   applyCredentialsSecret,
   applyForgeAgentCR,
@@ -17,25 +17,26 @@ import { provisionTenant } from "../lib/rabbitmq";
 
 export const teamManagementRouter = Router();
 
-// All team-management routes require agent authentication via gatewayToken.
-teamManagementRouter.use(agentAuthMiddleware);
-
-// Mandatory Agent Guard
-teamManagementRouter.use((req, res, next) => {
-  if (!req.agent) {
-    res.status(401).json(failure("Agent gateway token required for this route"));
-    return;
-  }
-  next();
-});
+// Use unified auth
+teamManagementRouter.use(authMiddleware);
 
 /**
  * GET / (when mounted at /team)
- * Returns metadata for the agent's own team.
+ * Returns metadata for the authenticated agent's team OR the requested team for humans.
  */
 teamManagementRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const teamId = req.agent!.teamId;
+    const actor = req.actor!;
+    let teamId = String(req.query.teamId || "");
+
+    if (actor.type === "agent") {
+      teamId = actor.teamId!;
+    }
+
+    if (!teamId) {
+      res.status(400).json(failure("teamId is required for humans"));
+      return;
+    }
 
     const [team] = await db
       .select()
@@ -47,6 +48,19 @@ teamManagementRouter.get("/", async (req: Request, res: Response, next: NextFunc
       return;
     }
 
+    // Security check for humans
+    if (actor.type === "human") {
+      const [ws] = await db
+        .select()
+        .from(workspaces)
+        .where(and(eq(workspaces.id, team.workspaceId), eq(workspaces.userId, actor.id)));
+      
+      if (!ws) {
+        res.status(403).json(failure("Access denied to this team"));
+        return;
+      }
+    }
+
     res.json(success(team));
   } catch (err) {
     next(err);
@@ -55,11 +69,17 @@ teamManagementRouter.get("/", async (req: Request, res: Response, next: NextFunc
 
 /**
  * GET /members
- * Returns the list of agents in the same team.
  */
 teamManagementRouter.get("/members", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const teamId = req.agent!.teamId;
+    const actor = req.actor!;
+    let teamId = String(req.query.teamId || "");
+    if (actor.type === "agent") teamId = actor.teamId!;
+
+    if (!teamId) {
+      res.status(400).json(failure("teamId is required for humans"));
+      return;
+    }
 
     const rows = await db
       .select()
@@ -84,11 +104,17 @@ teamManagementRouter.get("/members", async (req: Request, res: Response, next: N
 
 /**
  * POST /members
- * Allows an agent to provision a new agent into their own team.
  */
 teamManagementRouter.post("/members", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const teamId = req.agent!.teamId;
+    const actor = req.actor!;
+    const teamId = actor.type === "agent" ? actor.teamId! : req.body.teamId;
+
+    if (!teamId) {
+      res.status(400).json(failure("teamId is required"));
+      return;
+    }
+
     const input = createAgentSchema.parse({ ...req.body, teamId });
 
     const [team] = await db.select().from(teams).where(eq(teams.id, teamId));
@@ -97,10 +123,24 @@ teamManagementRouter.post("/members", async (req: Request, res: Response, next: 
       return;
     }
 
+    // Security check for humans
+    if (actor.type === "human") {
+      const [ws] = await db
+        .select()
+        .from(workspaces)
+        .where(and(eq(workspaces.id, team.workspaceId), eq(workspaces.userId, actor.id)));
+      
+      if (!ws) {
+        res.status(403).json(failure("Access denied to this team"));
+        return;
+      }
+    }
+
     const [workspace] = await db
       .select()
       .from(workspaces)
       .where(eq(workspaces.id, team.workspaceId));
+    
     if (!workspace) {
       res.status(404).json(failure("Workspace not found"));
       return;
@@ -150,3 +190,6 @@ teamManagementRouter.post("/members", async (req: Request, res: Response, next: 
     next(err);
   }
 });
+
+// Import helpers for join logic
+import { and } from "drizzle-orm";

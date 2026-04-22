@@ -106,11 +106,9 @@ requestsRouter.patch("/:requestId", authMiddleware, async (req, res) => {
     const requestId = String(req.params.requestId);
     const body = requestSchema.partial().parse(req.body);
     
-    // We need to know who is updating the request for the activity log
-    // Ideally passed in headers or body if an agent, or from req.user if a human
-    // We'll extract actor info from the request. This might need standardizing.
-    const actorId = req.headers["x-actor-id"] as string || req.user?.userId;
-    const actorType = (req.headers["x-actor-type"] as "human" | "agent") || "human";
+    // Use unified actor context for logging
+    const actorId = req.actor!.id;
+    const actorType = req.actor!.type;
 
     if (!actorId) {
        return res.status(400).json({ error: "Actor ID is required for logging." });
