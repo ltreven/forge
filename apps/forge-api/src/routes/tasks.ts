@@ -29,80 +29,83 @@ tasksRouter.get("/by-team/:teamId", authMiddleware, async (req: Request, res: Re
   }
 });
 
+export async function createTaskInternal(input: any, actor: { id: string, type: "human" | "agent" }) {
+  return await db.transaction(async (tx) => {
+    // Get the team to find the identifier prefix
+    const [team] = await tx.select({ identifierPrefix: teams.identifierPrefix }).from(teams).where(eq(teams.id, input.teamId));
+    if (!team) {
+      throw new Error("Team not found");
+    }
+
+    // If no taskTypeId is provided, find the default one for the team
+    let taskTypeId = input.taskTypeId;
+    if (!taskTypeId) {
+      const [defaultType] = await tx.select().from(taskTypes).where(and(eq(taskTypes.teamId, input.teamId), eq(taskTypes.isDefault, true))).limit(1);
+      if (defaultType) {
+        taskTypeId = defaultType.id;
+      } else {
+        // fallback to any
+        const [anyType] = await tx.select().from(taskTypes).where(eq(taskTypes.teamId, input.teamId)).limit(1);
+        if (anyType) taskTypeId = anyType.id;
+      }
+    }
+
+    // Generate the next number for this team
+    // To prevent race conditions, we can use a query that locks the max or inserts and returns
+    const nextNumResult = await tx.execute(sql`
+      SELECT COALESCE(MAX(number), 0) + 1 as next_number FROM ${tasks} WHERE team_id = ${input.teamId}
+    `);
+    const nextNumber = Number((nextNumResult.rows[0] as any).next_number);
+    const identifier = `${team.identifierPrefix}-${nextNumber}`;
+
+    const [task] = await tx
+      .insert(tasks)
+      .values({
+        teamId: input.teamId,
+        parentTaskId: input.parentTaskId,
+        taskTypeId,
+        number: nextNumber,
+        identifier,
+        title: input.title,
+        shortSummary: input.shortSummary,
+        descriptionMarkdown: input.descriptionMarkdown,
+        descriptionRichText: input.descriptionRichText,
+        status: input.status,
+        priority: input.priority,
+        assignedToId: input.assignedToId,
+      })
+      .returning();
+
+    // Insert labels if provided
+    if (input.labels && input.labels.length > 0) {
+      const labelInserts = input.labels.map((labelId: string) => ({
+        taskId: task.id,
+        labelId
+      }));
+      await tx.insert(taskLabels).values(labelInserts);
+    }
+
+    // Log activity
+    await tx.insert(teamActivities).values({
+      teamId: input.teamId,
+      actorId: actor.id,
+      actorType: actor.type,
+      type: "task_created",
+      entityType: "task",
+      entityId: task.id,
+      payload: { identifier: task.identifier, title: task.title },
+    });
+
+    return task;
+  });
+}
+
 // ── POST /tasks ───────────────────────────────────────────────────────────────
 
 tasksRouter.post("/", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createTaskSchema.parse(req.body);
-
-    const result = await db.transaction(async (tx) => {
-      // Get the team to find the identifier prefix
-      const [team] = await tx.select({ identifierPrefix: teams.identifierPrefix }).from(teams).where(eq(teams.id, input.teamId));
-      if (!team) {
-        throw new Error("Team not found");
-      }
-
-      // If no taskTypeId is provided, find the default one for the team
-      let taskTypeId = input.taskTypeId;
-      if (!taskTypeId) {
-        const [defaultType] = await tx.select().from(taskTypes).where(and(eq(taskTypes.teamId, input.teamId), eq(taskTypes.isDefault, true))).limit(1);
-        if (defaultType) {
-          taskTypeId = defaultType.id;
-        } else {
-          // fallback to any
-          const [anyType] = await tx.select().from(taskTypes).where(eq(taskTypes.teamId, input.teamId)).limit(1);
-          if (anyType) taskTypeId = anyType.id;
-        }
-      }
-
-      // Generate the next number for this team
-      // To prevent race conditions, we can use a query that locks the max or inserts and returns
-      const nextNumResult = await tx.execute(sql`
-        SELECT COALESCE(MAX(number), 0) + 1 as next_number FROM ${tasks} WHERE team_id = ${input.teamId}
-      `);
-      const nextNumber = Number((nextNumResult.rows[0] as any).next_number);
-      const identifier = `${team.identifierPrefix}-${nextNumber}`;
-
-      const [task] = await tx
-        .insert(tasks)
-        .values({
-          teamId: input.teamId,
-          parentTaskId: input.parentTaskId,
-          taskTypeId,
-          number: nextNumber,
-          identifier,
-          title: input.title,
-          shortSummary: input.shortSummary,
-          descriptionMarkdown: input.descriptionMarkdown,
-          descriptionRichText: input.descriptionRichText,
-          status: input.status,
-          priority: input.priority,
-          assignedToId: input.assignedToId,
-        })
-        .returning();
-
-      // Insert labels if provided
-      if (input.labels && input.labels.length > 0) {
-        const labelInserts = input.labels.map(labelId => ({
-          taskId: task.id,
-          labelId
-        }));
-        await tx.insert(taskLabels).values(labelInserts);
-      }
-
-      // Log activity
-      await tx.insert(teamActivities).values({
-        teamId: input.teamId,
-        actorId: req.actor!.id,
-        actorType: req.actor!.type,
-        type: "task_created",
-        entityType: "task",
-        entityId: task.id,
-        payload: { identifier: task.identifier, title: task.title },
-      });
-
-      return task;
-    });
+    const result = await createTaskInternal(input, req.actor!);
 
     res.status(201).json(success(result));
   } catch (err) {

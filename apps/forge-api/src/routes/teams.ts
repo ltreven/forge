@@ -127,7 +127,7 @@ teamsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: 
             teamId: team.id,
             name: cap.name,
             triggers: cap.triggers,
-            description: cap.description,
+            instructions: cap.instructions,
             inputsDescription: cap.inputsDescription,
             expectedOutputsDescription: cap.expectedOutputsDescription,
             expectedEventsOutput: cap.expectedEventsOutput,
@@ -353,20 +353,65 @@ teamsRouter.get("/:id/capabilities", authMiddleware, async (req: Request, res: R
   } catch (err) { next(err); }
 });
 
+teamsRouter.post("/:id/capabilities", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { teamCapabilities } = await import("../db/schema");
+    
+    const [created] = await db.insert(teamCapabilities).values({
+      teamId: String(req.params.id),
+      name: String(req.body.name || "New Capability"),
+      instructions: String(req.body.instructions || ""),
+      inputsDescription: req.body.inputsDescription ? String(req.body.inputsDescription) : null,
+      expectedOutputsDescription: req.body.expectedOutputsDescription ? String(req.body.expectedOutputsDescription) : null,
+      assignedAgentId: req.body.assignedAgentId ? String(req.body.assignedAgentId) : null,
+      assignedRole: req.body.assignedRole ? String(req.body.assignedRole) : null,
+      isEnabled: Boolean(req.body.isEnabled ?? true),
+      scheduleConfig: req.body.scheduleConfig || null
+    }).returning();
+    
+    // Sync K8s CronJob
+    const { workspaces, teams } = await import("../db/schema");
+    const [team] = await db.select().from(teams).where(eq(teams.id, req.params.id));
+    const [workspace] = team ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId)) : [];
+    if (workspace?.k8sNamespace) {
+      const { upsertCapabilityCronJob } = await import("../k8s/cronjob");
+      await upsertCapabilityCronJob(created, req.params.id, workspace.k8sNamespace);
+    }
+    
+    res.status(201).json(success(created));
+  } catch (err) { next(err); }
+});
+
 teamsRouter.put("/:id/capabilities/:capId", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { teamCapabilities } = await import("../db/schema");
     const { and } = await import("drizzle-orm");
     
-    // We only allow updating isEnabled and scheduleConfig for now from the UI
     const updateData: any = {};
     if (req.body.isEnabled !== undefined) updateData.isEnabled = Boolean(req.body.isEnabled);
     if (req.body.scheduleConfig !== undefined) updateData.scheduleConfig = req.body.scheduleConfig;
+    if (req.body.name !== undefined) updateData.name = String(req.body.name);
+    if (req.body.instructions !== undefined) updateData.instructions = String(req.body.instructions);
+    if (req.body.inputsDescription !== undefined) updateData.inputsDescription = req.body.inputsDescription ? String(req.body.inputsDescription) : null;
+    if (req.body.expectedOutputsDescription !== undefined) updateData.expectedOutputsDescription = req.body.expectedOutputsDescription ? String(req.body.expectedOutputsDescription) : null;
+    if (req.body.assignedAgentId !== undefined) updateData.assignedAgentId = req.body.assignedAgentId ? String(req.body.assignedAgentId) : null;
+    if (req.body.assignedRole !== undefined) updateData.assignedRole = req.body.assignedRole ? String(req.body.assignedRole) : null;
     
     const [updated] = await db.update(teamCapabilities)
       .set({ ...updateData, updatedAt: new Date() })
       .where(and(eq(teamCapabilities.id, String(req.params.capId)), eq(teamCapabilities.teamId, String(req.params.id))))
       .returning();
+      
+    // Sync K8s CronJob
+    if (updated) {
+      const { workspaces, teams } = await import("../db/schema");
+      const [team] = await db.select().from(teams).where(eq(teams.id, req.params.id));
+      const [workspace] = team ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId)) : [];
+      if (workspace?.k8sNamespace) {
+        const { upsertCapabilityCronJob } = await import("../k8s/cronjob");
+        await upsertCapabilityCronJob(updated, req.params.id, workspace.k8sNamespace);
+      }
+    }
       
     res.json(success(updated));
   } catch (err) { next(err); }

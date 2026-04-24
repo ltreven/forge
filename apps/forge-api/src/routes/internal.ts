@@ -5,6 +5,11 @@ import { agents, workspaces, teams, users } from "../db/schema";
 import { success, failure } from "../lib/response";
 import { applyRabbitMQCredentialsSecret, rolloutRestartDeployment, ensureNamespace } from "../k8s/provisioner";
 import { provisionTenant } from "../lib/rabbitmq";
+import { teamCapabilities, tasks, teamRequests, conversations, messages, teamActivities } from "../db/schema";
+import { createTaskInternal } from "./tasks";
+import { randomBytes } from "crypto";
+import { publishToAgent, tenantVhost, tenantExchange } from "../lib/rabbitmq";
+import { desc, and } from "drizzle-orm";
 
 /**
  * Internal routes — NOT exposed via the external Ingress.
@@ -221,3 +226,168 @@ internalRouter.post(
     }
   },
 );
+
+/**
+ * POST /internal/capabilities/:id/trigger
+ * 
+ * Triggered by Kubernetes CronJob to execute a team capability.
+ */
+internalRouter.post(
+  "/capabilities/:id/trigger",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const capabilityId = String(req.params.id);
+
+      const [capability] = await db
+        .select()
+        .from(teamCapabilities)
+        .where(eq(teamCapabilities.id, capabilityId));
+
+      if (!capability || !capability.isEnabled) {
+        res.status(400).json(failure("Capability not found or disabled"));
+        return;
+      }
+
+      // 1. Select Agent
+      let targetAgentId = capability.assignedAgentId;
+      if (!targetAgentId) {
+        // Find available agent
+        let agentQuery = db
+          .select({ id: agents.id })
+          .from(agents)
+          .where(and(eq(agents.teamId, capability.teamId), eq(agents.availability, "available" as any)));
+
+        const availableAgents = await agentQuery;
+        
+        let filteredAgents = availableAgents;
+        if (capability.assignedRole) {
+           const agentsWithRole = await db.select({ id: agents.id }).from(agents).where(and(eq(agents.teamId, capability.teamId), eq(agents.type, capability.assignedRole), eq(agents.availability, "available" as any)));
+           if (agentsWithRole.length > 0) {
+             filteredAgents = agentsWithRole;
+           }
+        }
+
+        if (filteredAgents.length === 0) {
+          // Fallback to any agent in the team if none available
+          const anyAgent = await db.select({ id: agents.id }).from(agents).where(eq(agents.teamId, capability.teamId)).limit(1);
+          if (anyAgent.length > 0) targetAgentId = anyAgent[0].id;
+        } else if (filteredAgents.length === 1) {
+          targetAgentId = filteredAgents[0].id;
+        } else {
+          // Find the one least recently active
+          const agentIds = filteredAgents.map(a => a.id);
+          // Just simple query to find latest activity per agent
+          const recentActivities = await db
+            .select({ actorId: teamActivities.actorId, maxDate: teamActivities.createdAt })
+            .from(teamActivities)
+            .where(eq(teamActivities.teamId, capability.teamId))
+            .orderBy(desc(teamActivities.createdAt));
+            
+          // Find the agent in agentIds that appears LAST in recentActivities, or doesn't appear at all
+          const activeAgentIds = recentActivities.map(a => a.actorId);
+          let selected = agentIds[0];
+          for (const id of agentIds) {
+            if (!activeAgentIds.includes(id)) {
+              selected = id;
+              break; // Has no activities, pick it!
+            }
+          }
+          // If all have activities, pick the one that appears last in activeAgentIds
+          if (selected === agentIds[0]) {
+             const reversed = [...activeAgentIds].reverse();
+             for (const id of reversed) {
+               if (agentIds.includes(id)) {
+                 selected = id;
+                 break;
+               }
+             }
+          }
+          targetAgentId = selected;
+        }
+      }
+
+      if (!targetAgentId) {
+        res.status(400).json(failure("No agent available to assign task"));
+        return;
+      }
+
+      const SYSTEM_ACTOR = { id: "00000000-0000-0000-0000-000000000000", type: "human" as const };
+
+      // 2. Create Task
+      const taskInput = {
+        teamId: capability.teamId,
+        title: capability.name,
+        descriptionMarkdown: `${capability.instructions}\n\n**Inputs to consider:**\n${capability.inputsDescription || 'None'}\n\n**Expected Outputs:**\n${capability.expectedOutputsDescription || 'None'}`,
+        assignedToId: targetAgentId,
+        status: 0,
+        priority: 0
+      };
+      
+      const task = await createTaskInternal(taskInput, SYSTEM_ACTOR);
+
+      // 3. Create Team Request
+      const [teamRequest] = await db.insert(teamRequests).values({
+        teamId: capability.teamId,
+        requesterId: SYSTEM_ACTOR.id,
+        requesterType: SYSTEM_ACTOR.type,
+        targetAgentId: targetAgentId,
+        taskId: task.id,
+        title: `Capability Execution: ${capability.name}`,
+        status: "created" as any
+      }).returning();
+
+      // 4. Create NEW Conversation
+      const [conversation] = await db.insert(conversations).values({
+        agentId: targetAgentId,
+        counterpartType: "external" as any,
+        counterpartId: "system",
+        counterpartName: "System Orchestrator"
+      }).returning();
+
+      // 5. Create Message
+      const messageContent = `You received a new Team Request (ID: ${teamRequest.id}). Please fetch the request and Task ID ${task.identifier}. If accepted, update the request status accordingly and set the task to 'in progress'. Update the task with all findings and conclusions as comments. Follow the task description instructions and consider all available team contexts for decision making.`;
+
+      const [userMessage] = await db.insert(messages).values({
+        conversationId: conversation.id,
+        role: "user" as any,
+        content: messageContent
+      }).returning();
+
+      // 6. Publish to Agent
+      const [agent] = await db.select().from(agents).where(eq(agents.id, targetAgentId));
+      if (agent) {
+         const [team] = await db.select().from(teams).where(eq(teams.id, agent.teamId));
+         const [workspace] = team ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId)) : [];
+         
+         if (workspace) {
+           const rabbitCreds = {
+              host:     process.env.RABBITMQ_AMQP_HOST ?? "localhost",
+              amqpPort: Number(process.env.RABBITMQ_AMQP_PORT ?? 5672),
+              vhost:    tenantVhost(workspace.id),
+              username: process.env.RABBITMQ_ADMIN_USER ?? "admin",
+              password: process.env.RABBITMQ_ADMIN_PASSWORD ?? "admin",
+              exchange: tenantExchange(workspace.id),
+            };
+            
+            try {
+              await publishToAgent(rabbitCreds, {
+                tenantId:   workspace.id,
+                agentId:    agent.id,
+                sessionKey: conversation.id,
+                messageId:  randomBytes(16).toString("hex"),
+                action:     "chat_message",
+                payload:    { role: "user", content: messageContent },
+              });
+            } catch (err) {
+              console.error("[internal] RabbitMQ publish failed for trigger:", err);
+            }
+         }
+      }
+
+      res.status(200).json(success({ task, teamRequest, conversation }));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+

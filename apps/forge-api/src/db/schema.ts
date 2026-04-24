@@ -346,7 +346,7 @@ export const teamMetaCapabilities = pgTable("team_meta_capabilities", {
     .references(() => teamTypes.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   triggers: jsonb("triggers"), // Array of string identifiers
-  description: text("description").notNull(),
+  instructions: text("instructions").notNull(),
   inputsDescription: text("inputs_description"),
   expectedOutputsDescription: text("expected_outputs_description"),
   expectedEventsOutput: jsonb("expected_events_output"), // Array of strings
@@ -364,12 +364,14 @@ export const teamCapabilities = pgTable("team_capabilities", {
     .references(() => teams.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   triggers: jsonb("triggers"),
-  description: text("description").notNull(),
+  instructions: text("instructions").notNull(),
   inputsDescription: text("inputs_description"),
   expectedOutputsDescription: text("expected_outputs_description"),
   expectedEventsOutput: jsonb("expected_events_output"),
   isEnabled: boolean("is_enabled").notNull().default(true),
   scheduleConfig: jsonb("schedule_config"),
+  assignedAgentId: uuid("assigned_agent_id").references(() => agents.id, { onDelete: "set null" }),
+  assignedRole: text("assigned_role"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -41,9 +41,10 @@ interface Integration {
 }
 
 interface Capability {
-  id: string; name: string; description: string; triggers: string[] | null;
+  id: string; name: string; instructions: string; triggers: string[] | null;
   inputsDescription: string | null; expectedOutputsDescription: string | null;
   expectedEventsOutput: string[] | null; isEnabled: boolean; scheduleConfig: Record<string, any> | null;
+  assignedAgentId: string | null; assignedRole: string | null;
 }
 
 interface TaskType { id: string; name: string; emoji: string; backgroundColor: string; isDefault: boolean; }
@@ -244,6 +245,7 @@ export default function TeamSettingsPage() {
 
   // Workflow Settings
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
+  const [agents, setAgents] = useState<{id: string, name: string, type: string}[]>([]);
   const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
   const [capFilter, setCapFilter] = useState<"all" | "scheduled" | "not_scheduled" | "enabled" | "disabled">("all");
@@ -266,12 +268,13 @@ export default function TeamSettingsPage() {
     if (!token) return;
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const [teamRes, capRes, ttRes, lbRes, intRes] = await Promise.all([
+      const [teamRes, capRes, ttRes, lbRes, intRes, agentsRes] = await Promise.all([
         fetch(`${API_BASE}/teams/${teamId}`, { headers }),
         fetch(`${API_BASE}/teams/${teamId}/capabilities`, { headers }),
         fetch(`${API_BASE}/teams/${teamId}/task-types`, { headers }),
         fetch(`${API_BASE}/teams/${teamId}/labels`, { headers }),
-        fetch(`${API_BASE}/teams/${teamId}/integrations`, { headers })
+        fetch(`${API_BASE}/teams/${teamId}/integrations`, { headers }),
+        fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers })
       ]);
 
       if (teamRes.ok) {
@@ -286,6 +289,7 @@ export default function TeamSettingsPage() {
       if (capRes.ok) setCapabilities((await capRes.json()).data || []);
       if (ttRes.ok) setTaskTypes((await ttRes.json()).data || []);
       if (lbRes.ok) setLabels((await lbRes.json()).data || []);
+      if (agentsRes && agentsRes.ok) setAgents((await agentsRes.json()).data || []);
       if (intRes.ok) {
         const ints = (await intRes.json()).data || [];
         setIntegrations(ints);
@@ -322,12 +326,20 @@ export default function TeamSettingsPage() {
   const updateCapability = async (id: string, updates: Partial<Capability>) => {
     if (!token) return;
     try {
-      const res = await fetch(`${API_BASE}/teams/${teamId}/capabilities/${id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      const isNew = id === "new";
+      const url = isNew ? `${API_BASE}/teams/${teamId}/capabilities` : `${API_BASE}/teams/${teamId}/capabilities/${id}`;
+      const method = isNew ? "POST" : "PUT";
+      const res = await fetch(url, {
+        method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(updates)
       });
-      if (res.ok) setCapabilities(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
-    } catch (e) { toast.error("Failed to update capability"); }
+      if (res.ok) {
+        const saved = (await res.json()).data;
+        if (isNew) setCapabilities([...capabilities, saved]);
+        else setCapabilities(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+        toast.success(`Capability ${isNew ? 'created' : 'updated'}`);
+      }
+    } catch (e) { toast.error("Failed to save capability"); }
   };
 
   const saveIntegration = async (provider: IntegrationProvider, data: Partial<Integration>) => {
@@ -392,7 +404,7 @@ export default function TeamSettingsPage() {
   if (authLoading || isLoading) return <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center"><Loader2 className="size-8 animate-spin text-primary" /></div>;
 
   const filteredCapabilities = capabilities.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(capSearch.toLowerCase()) || c.description.toLowerCase().includes(capSearch.toLowerCase());
+    const matchesSearch = c.name.toLowerCase().includes(capSearch.toLowerCase()) || c.instructions.toLowerCase().includes(capSearch.toLowerCase());
     if (!matchesSearch) return false;
     
     if (capFilter === "enabled") return c.isEnabled;
@@ -539,6 +551,9 @@ export default function TeamSettingsPage() {
                     <h2 className="text-lg font-semibold">What this team can do</h2>
                     <p className="text-sm text-muted-foreground">Manage the active capabilities of your agents.</p>
                   </div>
+                  <Button onClick={() => setViewingCap({ id: "new", name: "", instructions: "", inputsDescription: "", expectedOutputsDescription: "", triggers: null, expectedEventsOutput: null, isEnabled: true, scheduleConfig: null, assignedAgentId: null, assignedRole: null } as Capability)}>
+                    <Plus className="size-4 mr-2" /> New Capability
+                  </Button>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row justify-between gap-4">
@@ -565,7 +580,7 @@ export default function TeamSettingsPage() {
                           <span className="font-medium text-sm text-foreground">{cap.name}</span>
                           {cap.scheduleConfig && <span className="text-[9px] uppercase tracking-wider bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">Scheduled</span>}
                         </div>
-                        <span className="text-xs text-muted-foreground truncate max-w-lg">{cap.description}</span>
+                        <span className="text-xs text-muted-foreground truncate max-w-lg">{cap.instructions}</span>
                       </div>
                       <div className="flex items-center gap-4">
                         <button onClick={() => setViewingCap(cap)} className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"><Info className="size-3"/> Details</button>
@@ -667,30 +682,135 @@ export default function TeamSettingsPage() {
       {/* Capability Modal Overlay */}
       {viewingCap && (
         <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border shadow-xl rounded-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-5 border-b flex justify-between items-start">
-              <div>
-                <h3 className="text-lg font-bold flex items-center gap-2">{viewingCap.name} {viewingCap.scheduleConfig && <span className="text-[10px] uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">Scheduled</span>}</h3>
-                <p className="text-sm text-muted-foreground mt-1">{viewingCap.description}</p>
-              </div>
+          <div className="bg-card border shadow-xl rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b flex justify-between items-center bg-muted/20 shrink-0">
+              <h3 className="text-lg font-bold flex items-center gap-2">Edit Capability</h3>
               <button onClick={() => setViewingCap(null)} className="text-muted-foreground hover:bg-muted p-1 rounded-full"><X className="size-4"/></button>
             </div>
-            <div className="p-5 space-y-5 bg-muted/20">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Triggers</h4>
-                <div className="flex flex-wrap gap-2">
-                  {viewingCap.triggers ? viewingCap.triggers.map(t => <span key={t} className="bg-background border shadow-sm px-2 py-1 rounded text-xs font-medium">{t}</span>) : <span className="text-sm text-muted-foreground italic">Manual invocation only</span>}
+            
+            <div className="p-6 space-y-5 overflow-y-auto flex-1 scrollbar-thin">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</label>
+                <Input value={viewingCap.name} onChange={e => setViewingCap({...viewingCap, name: e.target.value})} />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
+                  <span>Instructions</span>
+                  <span className="text-[10px] lowercase font-normal opacity-70">Describe what this capability does and how it behaves</span>
+                </label>
+                <textarea 
+                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[120px]" 
+                  value={viewingCap.instructions} 
+                  onChange={e => setViewingCap({...viewingCap, instructions: e.target.value})} 
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
+                  <span>Inputs</span>
+                  <span className="text-[10px] lowercase font-normal opacity-70">Required/optional inputs and their formats</span>
+                </label>
+                <textarea 
+                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px]" 
+                  value={viewingCap.inputsDescription || ""} 
+                  onChange={e => setViewingCap({...viewingCap, inputsDescription: e.target.value})} 
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
+                  <span>Expected Output</span>
+                  <span className="text-[10px] lowercase font-normal opacity-70">Acceptance criteria or expected result</span>
+                </label>
+                <textarea 
+                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px]" 
+                  value={viewingCap.expectedOutputsDescription || ""} 
+                  onChange={e => setViewingCap({...viewingCap, expectedOutputsDescription: e.target.value})} 
+                />
+              </div>
+
+              <div className="space-y-3 pt-2 border-t">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Who can execute this?</label>
+                <div className="flex gap-2">
+                  <select 
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={viewingCap.assignedAgentId ? 'agent' : (viewingCap.assignedRole ? 'role' : 'any')}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === 'any') setViewingCap({...viewingCap, assignedAgentId: null, assignedRole: null});
+                      else if (val === 'agent') setViewingCap({...viewingCap, assignedAgentId: agents[0]?.id || "", assignedRole: null});
+                      else if (val === 'role') {
+                        const uniqueRoles = Array.from(new Set(agents.map(a => a.type)));
+                        setViewingCap({...viewingCap, assignedAgentId: null, assignedRole: uniqueRoles[0] || ""});
+                      }
+                    }}
+                  >
+                    <option value="any">Anyone (First available)</option>
+                    <option value="agent">Specific Agent</option>
+                    <option value="role">Specific Role</option>
+                  </select>
+                  {viewingCap.assignedAgentId !== null && (
+                    <select
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={viewingCap.assignedAgentId || ""}
+                      onChange={e => setViewingCap({...viewingCap, assignedAgentId: e.target.value, assignedRole: null})}
+                    >
+                      <option value="" disabled>Select agent...</option>
+                      {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  )}
+                  {viewingCap.assignedRole !== null && (
+                    <select
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={viewingCap.assignedRole || ""}
+                      onChange={e => setViewingCap({...viewingCap, assignedRole: e.target.value, assignedAgentId: null})}
+                    >
+                      <option value="" disabled>Select role...</option>
+                      {Array.from(new Set(agents.map(a => a.type))).map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  )}
                 </div>
               </div>
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Expected Outputs</h4>
-                <div className="bg-background border rounded-lg p-3 text-sm text-foreground">
-                  {viewingCap.expectedOutputsDescription || <span className="text-muted-foreground italic">No specific outputs defined.</span>}
+
+              <div className="space-y-3 pt-2 border-t">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Routine Schedule</label>
+                  <label className="flex items-center cursor-pointer">
+                    <div className="relative">
+                      <input type="checkbox" className="sr-only" checked={!!viewingCap.scheduleConfig} onChange={(e) => setViewingCap({...viewingCap, scheduleConfig: e.target.checked ? { cron: "0 0 * * *" } : null})} />
+                      <div className={cn("block w-8 h-5 rounded-full transition-colors", viewingCap.scheduleConfig ? "bg-primary" : "bg-muted-foreground/30")}></div>
+                      <div className={cn("dot absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform", viewingCap.scheduleConfig && "transform translate-x-3")}></div>
+                    </div>
+                  </label>
                 </div>
+                {viewingCap.scheduleConfig && (
+                  <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-200">
+                    <label className="text-xs text-muted-foreground">Cron Expression</label>
+                    <Input 
+                      placeholder="e.g. 0 0 * * * (Daily at midnight)" 
+                      value={viewingCap.scheduleConfig.cron || ""} 
+                      onChange={e => setViewingCap({...viewingCap, scheduleConfig: { ...viewingCap.scheduleConfig, cron: e.target.value }})} 
+                    />
+                  </div>
+                )}
               </div>
             </div>
-            <div className="p-4 border-t bg-card flex justify-end">
-              <Button variant="outline" onClick={() => setViewingCap(null)}>Close</Button>
+
+            <div className="p-4 border-t bg-muted/10 shrink-0 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setViewingCap(null)}>Cancel</Button>
+              <Button onClick={() => {
+                updateCapability(viewingCap.id, {
+                  name: viewingCap.name,
+                  instructions: viewingCap.instructions,
+                  inputsDescription: viewingCap.inputsDescription,
+                  expectedOutputsDescription: viewingCap.expectedOutputsDescription,
+                  scheduleConfig: viewingCap.scheduleConfig,
+                  assignedAgentId: viewingCap.assignedAgentId,
+                  assignedRole: viewingCap.assignedRole
+                });
+                setViewingCap(null);
+              }}>Save Changes</Button>
             </div>
           </div>
         </div>
