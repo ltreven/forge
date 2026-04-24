@@ -1,2 +1,0 @@
-CREATE TYPE "public"."agent_availability" AS ENUM('available', 'busy', 'blocked');--> statement-breakpoint
-ALTER TABLE "agents" ADD COLUMN "availability" "agent_availability" DEFAULT 'available' NOT NULL;

@@ -34,14 +34,17 @@ _env = _parse_dotenv(dotenv)
 
 PLATFORM_OPENAI_KEY    = _env.get("PLATFORM_OPENAI_API_KEY",  "")
 PLATFORM_MODEL_PROVIDER = _env.get("PLATFORM_MODEL_PROVIDER", "openai")
-PLATFORM_MODEL_NAME     = _env.get("PLATFORM_MODEL_NAME",    "gpt-4o-mini")
+PLATFORM_MODEL_NAME     = _env.get("PLATFORM_MODEL_NAME",    "gpt-5.4")
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-NAMESPACE      = "forge"
-HELM_CHART     = "charts/forge"
+NAMESPACE       = "forge"
+ADMIN_NAMESPACE = "forge-admin"
+HELM_CHART      = "charts/forge"
 VALUES_LOCAL   = "charts/forge/values-local.yaml"
 API_IMAGE        = settings.get("api_image",        "forge/api")
-WEB_IMAGE        = settings.get("web_image",        "forge/web")
+ADMIN_API_IMAGE  = settings.get("admin_api_image",  "forge/admin-api")
+FORGE_WEB_IMAGE  = settings.get("forge_web_image",  "forge/web")
+ADMIN_WEB_IMAGE  = settings.get("admin_web_image",  "forge/admin-web")
 AGENT_IMAGE      = settings.get("agent_image",      "forge/agent:local")
 CONSUMER_IMAGE   = settings.get("consumer_image",   "forge/consumer:local")
 CONTROLLER_IMAGE = settings.get("controller_image", "forge/controller")
@@ -89,7 +92,7 @@ local_resource(
 
 local_resource(
   'ensure-namespace',
-  cmd='kubectl create namespace forge --dry-run=client -o yaml | kubectl apply -f -',
+  cmd='kubectl create namespace forge --dry-run=client -o yaml | kubectl apply -f - && kubectl create namespace forge-admin --dry-run=client -o yaml | kubectl apply -f -',
   labels=['setup'],
 )
 
@@ -99,17 +102,39 @@ local_resource(
 # Tilt re-runs this step whenever a new .sql file is added to migrations/.
 local_resource(
   'db-migrate',
-  cmd='cat apps/api/migrations/[0-9]*.sql | kubectl exec -i -n forge forge-postgresql-0 -- psql -U forge -d forge -v ON_ERROR_STOP=0 2>&1 | grep -vE "already exists|^$" | grep -E "^(ERROR|FATAL)" || echo "✓ DB migrations applied"',
+  cmd='cat apps/forge-api/migrations/[0-9]*.sql | kubectl exec -i -n forge forge-postgresql-0 -- psql -U forge -d forge -v ON_ERROR_STOP=0 2>&1 | grep -vE "already exists|^$" | grep -E "^(ERROR|FATAL)" || echo "✓ App DB migrations applied"',
   resource_deps=['forge-postgresql'],
-  deps=['apps/api/migrations'],
+  deps=['apps/forge-api/migrations'],
   labels=['setup'],
 )
 
-# ── 3. Build API image ────────────────────────────────────────────────────────
+local_resource(
+  'admin-db-migrate',
+  cmd='kubectl exec -i -n forge forge-postgresql-0 -- psql -U forge -d postgres -c "CREATE DATABASE forge_admin;" 2>/dev/null || true && cat apps/admin-api/migrations/[0-9]*.sql | kubectl exec -i -n forge forge-postgresql-0 -- psql -U forge -d forge_admin -v ON_ERROR_STOP=0 2>&1 | grep -vE "already exists|^$" | grep -E "^(ERROR|FATAL)" || echo "✓ Admin DB migrations applied"',
+  resource_deps=['forge-postgresql'],
+  deps=['apps/admin-api/migrations'],
+  labels=['setup'],
+)
+
+local_resource(
+  'admin-db-seed',
+  cmd='cd apps/admin-api && npm run db:seed',
+  resource_deps=['admin-db-migrate'],
+  labels=['setup'],
+)
+
+local_resource(
+  'app-db-seed',
+  cmd='cd apps/forge-api && npm run db:seed',
+  resource_deps=['db-migrate', 'admin-db-seed'],
+  labels=['setup'],
+)
+
+# ── 3. Build Forge API image ──────────────────────────────────────────────────
 docker_build(
   API_IMAGE,
-  context='apps/api',
-  dockerfile='apps/api/Dockerfile',
+  context='apps/forge-api',
+  dockerfile='apps/forge-api/Dockerfile',
   # Only-changed files trigger a rebuild (faster)
   ignore=[
     'node_modules',
@@ -121,27 +146,40 @@ docker_build(
   # which cannot write to /app/src. Tilt does a fast Docker layer-cache rebuild instead.
 )
 
-# ── 4. Build Web image with live_update ──────────────────────────────────────
 docker_build(
-  WEB_IMAGE,
-  context='apps/web',
-  dockerfile='apps/web/Dockerfile',
-  # Build args: baked into the Next.js bundle at build time.
-  # NEXT_PUBLIC_API_URL → relative path used by browser, routed through Next.js rewrite proxy.
-  # API_INTERNAL_URL    → ClusterIP used by the Next.js server to reach the API pod.
+  ADMIN_API_IMAGE,
+  context='apps/admin-api',
+  dockerfile='apps/admin-api/Dockerfile',
+  ignore=[
+    'node_modules',
+    'dist',
+    '.env',
+    '*.md',
+  ],
+)
+
+# ── 4a. Build Forge Web image ─────────────────────────────────────────────────
+docker_build(
+  FORGE_WEB_IMAGE,
+  context='apps/forge-web',
+  dockerfile='apps/forge-web/Dockerfile',
   build_args={
     'NEXT_PUBLIC_API_URL': '/api',
     'API_INTERNAL_URL': 'http://forge-api:4000',
   },
-  ignore=[
-    'node_modules',
-    '.next',
-    '*.md',
-  ],
-  # NOTE: live_update is disabled for the web in standalone mode.
-  # Next.js standalone bakes configuration at build time (rewrites, env vars),
-  # so file syncs cannot update them — a full image rebuild is required.
-  # Tilt will trigger a rebuild automatically when files in apps/web/ change.
+  ignore=['node_modules', '.next', '*.md'],
+)
+
+# ── 4b. Build Admin Web image ─────────────────────────────────────────────────
+docker_build(
+  ADMIN_WEB_IMAGE,
+  context='apps/admin-web',
+  dockerfile='apps/forge-web/Dockerfile', # Reuse same generic Dockerfile
+  build_args={
+    'NEXT_PUBLIC_API_URL': '/admin-api',
+    'API_INTERNAL_URL': 'http://forge-admin-api.forge-admin:4001',
+  },
+  ignore=['node_modules', '.next', '*.md'],
 )
 
 # ── 5a. Build forge-agent image ──────────────────────────────────────────────
@@ -385,17 +423,22 @@ k8s_yaml(
     namespace=NAMESPACE,
     values=[VALUES_LOCAL],
     set=[
-      'api.image.repository=' + API_IMAGE,
-      'api.image.tag=local',
-      'web.image.repository=' + WEB_IMAGE,
-      'web.image.tag=local',
+      'forgeApi.image.repository=' + API_IMAGE,
+      'forgeApi.image.tag=local',
+      'adminApi.image.repository=' + ADMIN_API_IMAGE,
+      'adminApi.image.tag=local',
+      'forgeWeb.image.repository=' + FORGE_WEB_IMAGE,
+      'forgeWeb.image.tag=local',
+      'adminWeb.image.repository=' + ADMIN_WEB_IMAGE,
+      'adminWeb.image.tag=local',
       'controller.image.repository=' + CONTROLLER_IMAGE,
       'controller.image.tag=local',
       'ingress.host=' + TILT_HOST,
       # Platform AI credentials — read from .env (gitignored)
-      'api.env.PLATFORM_OPENAI_API_KEY=' + PLATFORM_OPENAI_KEY,
-      'api.env.PLATFORM_MODEL_PROVIDER=' + PLATFORM_MODEL_PROVIDER,
-      'api.env.PLATFORM_MODEL_NAME=' + PLATFORM_MODEL_NAME,
+      'forgeApi.env.PLATFORM_OPENAI_API_KEY=' + PLATFORM_OPENAI_KEY,
+      'forgeApi.env.PLATFORM_MODEL_PROVIDER=' + PLATFORM_MODEL_PROVIDER,
+      'forgeApi.env.PLATFORM_MODEL_NAME=' + PLATFORM_MODEL_NAME,
+      'adminApi.env.FORGE_API_INTERNAL_URL=http://forge-api.forge:4000',
     ],
   )
 )
@@ -431,6 +474,19 @@ k8s_resource(
   ],
 )
 
+k8s_resource(
+  'forge-admin-api',
+  resource_deps=['forge-postgresql', 'admin-db-migrate', 'ensure-namespace'],
+  labels=['app'],
+  port_forwards=['4001:4001'],
+  extra_pod_selectors=[
+    {'app.kubernetes.io/name': 'forge-admin-api'},
+  ],
+  links=[
+    link('http://localhost:4001/health', 'Admin API Health'),
+  ],
+)
+
 # Web depends on the API
 k8s_resource(
   'forge-web',
@@ -438,8 +494,20 @@ k8s_resource(
   labels=['app'],
   port_forwards=['3000:3000'],
   links=[
-    link('http://' + TILT_HOST, 'Forge Web (via Ingress)'),
-    link('http://localhost:3000', 'Forge Web (direct)'),
+    link('http://localhost:3000', 'Forge Web (Client Portal)'),
+  ],
+)
+
+k8s_resource(
+  'forge-admin-web',
+  resource_deps=['forge-admin-api'],
+  labels=['app'],
+  port_forwards=['3001:3001'],
+  extra_pod_selectors=[
+    {'app.kubernetes.io/name': 'forge-admin-web'},
+  ],
+  links=[
+    link('http://localhost:3001', 'Admin/Marketing Portal'),
   ],
 )
 
@@ -463,17 +531,17 @@ local_resource(
 )
 
 local_resource(
-  'api-typecheck',
-  cmd='cd apps/api && npx tsc --noEmit',
-  deps=['apps/api/src', 'apps/api/tsconfig.json'],
+  'forge-api-typecheck',
+  cmd='cd apps/forge-api && npx tsc --noEmit',
+  deps=['apps/forge-api/src', 'apps/forge-api/tsconfig.json'],
   labels=['validation'],
   auto_init=False,
 )
 
 local_resource(
-  'web-typecheck',
-  cmd='cd apps/web && npx tsc --noEmit',
-  deps=['apps/web/app', 'apps/web/components', 'apps/web/tsconfig.json'],
+  'forge-web-typecheck',
+  cmd='cd apps/forge-web && npx tsc --noEmit',
+  deps=['apps/forge-web/app', 'apps/forge-web/components', 'apps/forge-web/tsconfig.json'],
   labels=['validation'],
   auto_init=False,
 )

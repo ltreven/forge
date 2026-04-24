@@ -7,11 +7,11 @@ namespace: forge
 # (e.g. RabbitmqCluster CR, applied after Operator CRD is installed).
 tiltDeploy: true
 
-api:
+forgeApi:
   replicaCount: 1
   image:
-    repository: forge/api
-    tag: local         # built by Tilt from apps/api/Dockerfile
+    repository: forge/forge-api
+    tag: local         # built by Tilt from apps/forge-api/Dockerfile
     pullPolicy: Never  # never pull — always use local image built by Tilt
   resources:
     requests:
@@ -37,10 +37,29 @@ api:
   # Disable migration init container until --migrate-only flag is implemented
   runMigrations: false
 
-web:
+adminApi:
   replicaCount: 1
   image:
-    repository: forge/web
+    repository: forge/admin-api
+    tag: local
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: "200m"
+      memory: 256Mi
+  env:
+    NODE_ENV: development
+    ADMIN_PORT: "4001"
+    JWT_SECRET: "forge-local-dev-secret-change-in-prod"
+  runMigrations: false
+
+forgeWeb:
+  replicaCount: 1
+  image:
+    repository: forge/forge-web
     tag: local
     pullPolicy: Never
   resources:
@@ -57,6 +76,25 @@ web:
     API_INTERNAL_URL: "http://forge-api:4000"
     # Client-side: browser calls /api/* on the same origin → Next.js rewrites to API_INTERNAL_URL
     NEXT_PUBLIC_API_URL: "/api"
+
+adminWeb:
+  replicaCount: 1
+  image:
+    repository: forge/admin-web
+    tag: local
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: "200m"
+      memory: 256Mi
+  env:
+    NODE_ENV: development
+    PORT: "3001"
+    API_INTERNAL_URL: "http://forge-admin-api.forge-admin:4001"
+    NEXT_PUBLIC_API_URL: "/admin-api"
 
 
 ingress:

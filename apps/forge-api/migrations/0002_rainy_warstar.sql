@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ALTER COLUMN "type" SET DATA TYPE text;

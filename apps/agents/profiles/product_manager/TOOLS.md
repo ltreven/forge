@@ -24,9 +24,9 @@ Common operations:
 
 ---
 
-## Project & Task Management (Forge)
+## Task Management (Forge)
 
-For all project, task, issue, team, and request operations, you **MUST** use the native Forge MCP tools (e.g., `list_projects`, `create_task`, `list_requests`).
+For all task, team, and request operations, you **MUST** use the native Forge MCP tools (e.g., `list_tasks`, `get_task`, `create_task`, `update_task`, `list_subtasks`, `list_requests`).
 These tools are pre-installed in your environment. Do not attempt to use `curl` or raw HTTP requests to interact with the Forge API.
 
 ---

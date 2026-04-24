@@ -1,1 +1,0 @@
-ALTER TYPE "public"."activity_type" ADD VALUE 'project_updated' BEFORE 'task_created';

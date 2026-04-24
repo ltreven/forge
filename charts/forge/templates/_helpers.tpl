@@ -29,16 +29,32 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{/*
 Selector labels — API
 */}}
-{{- define "forge.api.selectorLabels" -}}
+{{- define "forge.forgeApi.selectorLabels" -}}
 app.kubernetes.io/name: forge-api
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Selector labels — Web
+Selector labels — Admin API
 */}}
-{{- define "forge.web.selectorLabels" -}}
+{{- define "forge.adminApi.selectorLabels" -}}
+app.kubernetes.io/name: forge-admin-api
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Selector labels — App Web
+*/}}
+{{- define "forge.forgeWeb.selectorLabels" -}}
 app.kubernetes.io/name: forge-web
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Selector labels — Admin Web
+*/}}
+{{- define "forge.adminWeb.selectorLabels" -}}
+app.kubernetes.io/name: forge-admin-web
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
@@ -51,7 +67,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Return the PostgreSQL service hostname
+Return the PostgreSQL service hostname (always in the app namespace)
 */}}
 {{- define "forge.postgresql.host" -}}
 {{- printf "forge-postgresql.%s.svc.cluster.local" .Values.namespace }}
@@ -62,4 +78,11 @@ Return the PostgreSQL connection string (only for embedded mode)
 */}}
 {{- define "forge.postgresql.connectionString" -}}
 {{- printf "postgresql://%s:%s@%s:%d/%s" .Values.postgresql.username .Values.postgresql.password (include "forge.postgresql.host" .) (int .Values.postgresql.port) .Values.postgresql.database }}
+{{- end }}
+
+{{/*
+Return the PostgreSQL Admin connection string (only for embedded mode)
+*/}}
+{{- define "forge.postgresql.adminConnectionString" -}}
+{{- printf "postgresql://%s:%s@%s:%d/forge_admin" .Values.postgresql.username .Values.postgresql.password (include "forge.postgresql.host" .) (int .Values.postgresql.port) }}
 {{- end }}

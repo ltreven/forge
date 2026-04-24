@@ -61,7 +61,7 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 
 	// Model env vars
 	modelProvider := "openai"
-	modelName := "gpt-4.1"
+	modelName := "gpt-5.4"
 	if cr.Spec.Model != nil {
 		if cr.Spec.Model.Provider != "" {
 			modelProvider = cr.Spec.Model.Provider

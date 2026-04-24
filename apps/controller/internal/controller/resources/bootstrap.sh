@@ -76,8 +76,8 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
   MODEL_NAME="${ACTIVE_MODEL_NAME:-}"
 
   if [ "$PROVIDER" = "openai" ]; then
-    PRIMARY_MODEL="openai/${MODEL_NAME:-gpt-4o}"
-    FALLBACK_MODEL="openai/gpt-4o-mini"
+    PRIMARY_MODEL="openai/${MODEL_NAME:-gpt-5.4}"
+    FALLBACK_MODEL="openai/gpt-5.4"
   elif [ "$PROVIDER" = "gemini" ]; then
     PRIMARY_MODEL="google/${MODEL_NAME:-gemini-2.5-flash}"
     FALLBACK_MODEL="google/gemini-2.0-flash"
@@ -117,81 +117,6 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
   }
 }
 EOF
-
-  # ── Linear MCP (packages pre-installed in image) ─────────────────────────
-  ENABLE_LINEAR_MCP=false
-  if [ "${LINEAR_ENABLED:-false}" = "true" ] && [ -n "${LINEAR_API_KEY:-}" ]; then
-    ENABLE_LINEAR_MCP=true
-    echo "==> Linear MCP enabled"
-  fi
-
-  if [ "$ENABLE_LINEAR_MCP" = "true" ]; then
-    LINEAR_MCP_BIN="$MCP_PACKAGES_DIR/node_modules/@sylphx/linear-mcp/dist/index.js"
-    JSON_ARG="{\"command\":\"node\",\"args\":[\"$LINEAR_MCP_BIN\"],\"env\":{\"LINEAR_API_KEY\":\"${LINEAR_API_KEY}\"}}"
-    openclaw mcp set linear "$JSON_ARG"
-
-    mkdir -p "$OPENCLAW_CONFIG_DIR/workspace/skills/linear"
-    cat >"$OPENCLAW_CONFIG_DIR/workspace/skills/linear/SKILL.md" <<'SKILL_EOF'
----
-name: linear
-description: Manage Linear issues, projects, and teams natively via MCP.
-metadata: { "openclaw": { "emoji": "🔗" } }
----
-
-# Linear Integration
-
-You have direct access to Linear through native MCP tools.
-
-## Available Native Tools:
-- `linear_issue_search`, `linear_issue_get`, `linear_issue_create`, `linear_issue_update`
-- `linear_team_list`, `linear_project_list`
-SKILL_EOF
-  fi
-
-  # ── GitHub MCP (packages pre-installed in image) ──────────────────────────
-  ENABLE_GITHUB_MCP=false
-  GITHUB_AUTH_MODE="${GITHUB_AUTH_MODE:-pat}"
-  if [ "${GITHUB_ENABLED:-false}" = "true" ]; then
-    if [ "$GITHUB_AUTH_MODE" = "pat" ] && [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
-      ENABLE_GITHUB_MCP=true
-      echo "==> GitHub MCP enabled (PAT mode)"
-    elif [ "$GITHUB_AUTH_MODE" = "app" ] && [ -n "${GITHUB_APP_ID:-}" ]; then
-      ENABLE_GITHUB_MCP=true
-      echo "==> GitHub MCP enabled (App mode)"
-    fi
-  fi
-
-  if [ "$ENABLE_GITHUB_MCP" = "true" ]; then
-    GITHUB_MCP_BIN="$MCP_PACKAGES_DIR/node_modules/@modelcontextprotocol/server-github/dist/index.js"
-
-    if [ "$GITHUB_AUTH_MODE" = "pat" ]; then
-      JSON_ARG="{\"command\":\"node\",\"args\":[\"$GITHUB_MCP_BIN\"],\"env\":{\"GITHUB_PERSONAL_ACCESS_TOKEN\":\"${GITHUB_PERSONAL_ACCESS_TOKEN}\"}}"
-    else
-      JSON_ARG="{\"command\":\"node\",\"args\":[\"$GITHUB_MCP_BIN\"],\"env\":{\"GITHUB_APP_ID\":\"${GITHUB_APP_ID}\",\"GITHUB_INSTALLATION_ID\":\"${GITHUB_INSTALLATION_ID}\",\"GITHUB_APP_PRIVATE_KEY\":\"${GITHUB_APP_PRIVATE_KEY}\"}}"
-    fi
-
-    openclaw mcp set github "$JSON_ARG"
-
-    mkdir -p "$OPENCLAW_CONFIG_DIR/workspace/skills/github"
-    cat >"$OPENCLAW_CONFIG_DIR/workspace/skills/github/SKILL.md" <<'SKILL_EOF'
----
-name: github
-description: Manage repositories, pull requests, and issues in GitHub via MCP.
-metadata: { "openclaw": { "emoji": "🐙" } }
----
-
-# GitHub Integration
-
-You have direct access to GitHub through native MCP tools.
-Use these tools for repository discovery, issue triage, and pull-request workflows.
-SKILL_EOF
-  fi
-
-  # ── Forge API MCP ─────────────────────────────────────────────────────────
-  echo "==> Configuring Forge API MCP"
-  FORGE_API_URL="http://forge-api.forge.svc.cluster.local:4000/mcp/sse?token=${OPENCLAW_GATEWAY_TOKEN:-}"
-  FORGE_JSON_ARG="{\"type\":\"sse\",\"url\":\"$FORGE_API_URL\",\"headers\":{\"Authorization\":\"Bearer ${OPENCLAW_GATEWAY_TOKEN:-}\"}}"
-  openclaw mcp set forge "$FORGE_JSON_ARG"
 
   # ── Seed profile files (FIRST BOOT ONLY) ─────────────────────────────────
   # Source: /opt/forge/profiles/{AGENT_PROFILE}/ (baked into the image)
@@ -235,6 +160,84 @@ EOF
 else
   echo "==> Already bootstrapped — skipping (PVC state preserved)"
 fi
+
+# ── Linear MCP (packages pre-installed in image) ─────────────────────────
+# Runs every boot to pick up new API keys
+ENABLE_LINEAR_MCP=false
+if [ "${LINEAR_ENABLED:-false}" = "true" ] && [ -n "${LINEAR_API_KEY:-}" ]; then
+  ENABLE_LINEAR_MCP=true
+  echo "==> Linear MCP enabled"
+fi
+
+if [ "$ENABLE_LINEAR_MCP" = "true" ]; then
+  LINEAR_MCP_BIN="$MCP_PACKAGES_DIR/node_modules/@sylphx/linear-mcp/dist/index.js"
+  JSON_ARG="{\"command\":\"node\",\"args\":[\"$LINEAR_MCP_BIN\"],\"env\":{\"LINEAR_API_KEY\":\"${LINEAR_API_KEY}\"}}"
+  openclaw mcp set linear "$JSON_ARG"
+
+  mkdir -p "$OPENCLAW_CONFIG_DIR/workspace/skills/linear"
+  cat >"$OPENCLAW_CONFIG_DIR/workspace/skills/linear/SKILL.md" <<'SKILL_EOF'
+---
+name: linear
+description: Manage Linear issues, projects, and teams natively via MCP.
+metadata: { "openclaw": { "emoji": "🔗" } }
+---
+
+# Linear Integration
+
+You have direct access to Linear through native MCP tools.
+
+## Available Native Tools:
+- `mcp_linear_list_issues`, `mcp_linear_get_issue`, `mcp_linear_create_issue`, `mcp_linear_update_issue`
+- `mcp_linear_list_teams`, `mcp_linear_list_projects`, `mcp_linear_create_comment`
+SKILL_EOF
+fi
+
+# ── GitHub MCP (packages pre-installed in image) ──────────────────────────
+# Runs every boot to pick up new tokens/keys
+ENABLE_GITHUB_MCP=false
+GITHUB_AUTH_MODE="${GITHUB_AUTH_MODE:-pat}"
+if [ "${GITHUB_ENABLED:-false}" = "true" ]; then
+  if [ "$GITHUB_AUTH_MODE" = "pat" ] && [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
+    ENABLE_GITHUB_MCP=true
+    echo "==> GitHub MCP enabled (PAT mode)"
+  elif [ "$GITHUB_AUTH_MODE" = "app" ] && [ -n "${GITHUB_APP_ID:-}" ]; then
+    ENABLE_GITHUB_MCP=true
+    echo "==> GitHub MCP enabled (App mode)"
+  fi
+fi
+
+if [ "$ENABLE_GITHUB_MCP" = "true" ]; then
+  GITHUB_MCP_BIN="$MCP_PACKAGES_DIR/node_modules/@modelcontextprotocol/server-github/dist/index.js"
+
+  if [ "$GITHUB_AUTH_MODE" = "pat" ]; then
+    JSON_ARG="{\"command\":\"node\",\"args\":[\"$GITHUB_MCP_BIN\"],\"env\":{\"GITHUB_PERSONAL_ACCESS_TOKEN\":\"${GITHUB_PERSONAL_ACCESS_TOKEN}\"}}"
+  else
+    JSON_ARG="{\"command\":\"node\",\"args\":[\"$GITHUB_MCP_BIN\"],\"env\":{\"GITHUB_APP_ID\":\"${GITHUB_APP_ID}\",\"GITHUB_INSTALLATION_ID\":\"${GITHUB_INSTALLATION_ID}\",\"GITHUB_APP_PRIVATE_KEY\":\"${GITHUB_APP_PRIVATE_KEY}\"}}"
+  fi
+
+  openclaw mcp set github "$JSON_ARG"
+
+  mkdir -p "$OPENCLAW_CONFIG_DIR/workspace/skills/github"
+  cat >"$OPENCLAW_CONFIG_DIR/workspace/skills/github/SKILL.md" <<'SKILL_EOF'
+---
+name: github
+description: Manage repositories, pull requests, and issues in GitHub via MCP.
+metadata: { "openclaw": { "emoji": "🐙" } }
+---
+
+# GitHub Integration
+
+You have direct access to GitHub through native MCP tools.
+Use these tools for repository discovery, issue triage, and pull-request workflows.
+SKILL_EOF
+fi
+
+# ── Forge API MCP ─────────────────────────────────────────────────────────
+# Runs every boot
+echo "==> Configuring Forge API MCP"
+FORGE_API_URL="http://forge-api.forge.svc.cluster.local:4000/mcp/sse?token=${OPENCLAW_GATEWAY_TOKEN:-}"
+FORGE_JSON_ARG="{\"type\":\"sse\",\"url\":\"$FORGE_API_URL\",\"headers\":{\"Authorization\":\"Bearer ${OPENCLAW_GATEWAY_TOKEN:-}\"}}"
+openclaw mcp set forge "$FORGE_JSON_ARG"
 
 # ── Telegram channel (runs every boot) ───────────────────────────────────────────
 #

@@ -84,8 +84,8 @@ if [ ! -f "$OPENCLAW_CONFIG_DIR/.bootstrapped" ]; then
   MODEL_NAME="${ACTIVE_MODEL_NAME:-}"
 
   if [ "$PROVIDER" = "openai" ]; then
-    PRIMARY_MODEL="openai/${MODEL_NAME:-gpt-4.1}"
-    FALLBACK_MODEL="openai/gpt-4.1-mini"
+    PRIMARY_MODEL="openai/${MODEL_NAME:-gpt-5.4}"
+    FALLBACK_MODEL="openai/gpt-5.4"
   elif [ "$PROVIDER" = "gemini" ]; then
     PRIMARY_MODEL="google/${MODEL_NAME:-gemini-2.5-flash}"
     FALLBACK_MODEL="google/gemini-2.0-flash"

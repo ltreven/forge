@@ -13,10 +13,10 @@ Whether you are building software, running customer support, or coordinating any
 ```
 forge/
 ├── apps/
-│   ├── web/              # Next.js SaaS frontend (port 3000)
-│   │   └── tests/        # Web unit & integration tests
-│   ├── api/              # Node.js/Express REST API (port 4000)
-│   │   └── tests/        # API unit & integration tests
+│   ├── forge-web/        # Application Plane — Client Portal (port 3000)
+│   ├── admin-web/        # Control Plane — Marketing & Admin Portal (port 3001)
+│   ├── forge-api/        # Application Plane — Teams & Tasks (port 4000)
+│   ├── admin-api/        # Control Plane — Users, Workspaces & Meta (port 4001)
 │   └── agents/           # Per-tenant agent runtime (Kubernetes workload)
 │       ├── profiles/     # Agent persona markdown files (IDENTITY, SOUL, PROCESS, …)
 │       ├── helm/         # Helm chart — deploys one namespace per customer tenant
@@ -39,7 +39,7 @@ forge/
 └── .github/workflows/    # CI/CD pipelines
 ```
 
-> **Deployment convention:** each app that runs on Kubernetes will have its Dockerfile and Helm chart under a `deploy/` subfolder (e.g., `apps/web/deploy/`, `apps/api/deploy/`). ArgoCD will point to those paths per environment.
+> **Deployment convention:** each app that runs on Kubernetes will have its Dockerfile and Helm chart under a `deploy/` subfolder (e.g., `apps/web/deploy/`, `apps/forge-api/deploy/`). ArgoCD will point to those paths per environment.
 
 **Stack:**
 - **Frontend:** Next.js 16, Tailwind CSS, shadcn/ui, i18n (EN + ZH)
@@ -47,15 +47,22 @@ forge/
 - **Agents:** OpenClaw, containerized via Docker/Kubernetes, deployed via Helm
 - **Integrations:** Linear (Engineering template)
 
+## Architecture overview
+
+Forge separates the platform into two distinct planes:
+
+- **Control Plane (`admin-api` + `admin-web`):** Global SaaS layer. Manages users, workspaces, billing, and marketing. Runs in the `forge-admin` namespace.
+- **Application Plane (`forge-api` + `forge-web`):** Tenant execution layer. Manages teams, agents, and tasks for specific workspaces. Runs in the `forge` namespace.
+
 ---
 
 ## Multi-tenant model
 
-Each paying Forge customer gets their own **isolated Kubernetes namespace**, provisioned via the Helm chart in `apps/agents/helm/`. This means:
+Forge uses a **Cell-based Architecture** for maximum tenant isolation:
 
-- 1 shared deployment of `apps/web` and `apps/api` (the SaaS layer)
-- N namespaces, one per customer, each running that customer's agent team
-- Future additions per namespace: RabbitMQ, dedicated PostgreSQL, Ingress, monitoring
+- **Shared SaaS Layer:** Shared deployments of `apps/admin-web` and `apps/admin-api` (Control Plane).
+- **Tenant Cells:** Each workspace runs its own agent team in an isolated Kubernetes namespace (`forge-ws-*`), consuming the Application Plane (`forge-api` + `forge-web`).
+- **Regional Scaling:** The Application Plane and agents can be deployed in different regions to stay close to the customer data.
 
 ---
 
@@ -85,8 +92,8 @@ The entire stack (Web, API, PostgreSQL) runs inside local Kubernetes via **Tilt*
 
 ```bash
 # 1. Configure the API environment
-cp apps/api/.env.example apps/api/.env
-# Edit apps/api/.env and set JWT_SECRET to any local secret
+cp apps/forge-api/.env.example apps/forge-api/.env
+# Edit apps/forge-api/.env and set JWT_SECRET to any local secret
 ```
 
 ### Start the stack
@@ -130,16 +137,23 @@ Once the stack is running:
 ## Available make commands
 
 ```
-make web            Start web dev server (localhost:3000)
-make web-install    Install web dependencies
-make web-build      Build web for production
-make web-kill       Kill any running web dev server
+make forge-web      Start client portal (localhost:3000)
+make forge-web-install  Install dependencies
 
-make api            Start API dev server (localhost:4000)
-make api-install    Install API dependencies
-make db-migrate     Run Drizzle migrations
-make db-seed        Seed the database with demo data
-make docker-db      Start local PostgreSQL via Docker
+make admin-web      Start marketing/admin portal (localhost:3001)
+make admin-install  Install dependencies
+
+make forge-api      Start Forge API (localhost:4000)
+make forge-api-install  Install dependencies
+make db-migrate     Run Forge App Drizzle migrations
+make db-seed        Seed the app database (requires WORKSPACE_ID)
+
+make admin-api      Start Admin API dev server (localhost:4001)
+make admin-install  Install Admin API dependencies
+make admin-migrate  Run Admin Drizzle migrations
+make admin-seed     Seed the admin database (Users, Workspaces, Types)
+
+make docker-db      Start local PostgreSQL via Docker (forge & forge_admin)
 
 make agents-test    Run agent Helm test deployment (requires .env)
 make clean          Remove build artifacts
@@ -151,21 +165,23 @@ make clean          Remove build artifacts
 
 All responses use the envelope: `{ success, data, error }`.
 
-### Auth
+### Control Plane (admin-api:4001)
 
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/auth/signup` | Create user + workspace, return JWT |
 | `POST` | `/auth/login` | Validate credentials, return JWT |
-| `GET` | `/auth/me` | Return current user (requires Bearer token) |
+| `GET` | `/meta/team-types` | List available team templates |
+| `GET` | `/meta/agent-roles` | List available agent roles |
 
-### Teams & Agents
+### Application Plane (forge-forge-api:4000)
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/health` | Health check |
-| `POST` | `/teams` | Create team + agents atomically |
-| `GET` | `/teams` | List all teams |
+| `GET` | `/auth/me` | Return current actor identity |
+| `POST` | `/teams` | Create team + agents |
+| `GET` | `/teams` | List teams in workspace |
 | `GET` | `/teams/:id` | Get team by ID |
 | `PUT` | `/teams/:id` | Update team |
 | `DELETE` | `/teams/:id` | Delete team |
@@ -179,7 +195,7 @@ All responses use the envelope: `{ success, data, error }`.
 
 **Team templates:** `starter` · `engineering` · `customer_support`
 
-### Environment variables (apps/api/.env)
+### Environment variables (apps/forge-api/.env)
 
 | Variable | Default | Description |
 |---|---|---|
@@ -233,13 +249,13 @@ Drizzle ships a local web GUI — **Drizzle Studio** — that lets you browse ta
 
 ```bash
 # Open Drizzle Studio (runs against the local k8s PostgreSQL via port-forward)
-cd apps/api
+cd apps/forge-api
 pnpm drizzle-kit studio
 ```
 
 This starts the studio at **https://local.drizzle.studio** and opens it in your browser automatically.
 
-> **Note:** The `DATABASE_URL` in `apps/api/.env` must point to the running database. When using Tilt, PostgreSQL is port-forwarded to `localhost:5432` automatically, so no changes are needed.
+> **Note:** The `DATABASE_URL` in `apps/forge-api/.env` must point to the running database. When using Tilt, PostgreSQL is port-forwarded to `localhost:5432` automatically, so no changes are needed.
 
 Alternatively, connect to the database directly via `psql`:
 
@@ -253,10 +269,10 @@ kubectl exec -n forge statefulset/forge-postgresql -- psql -U forge -d forge
 | Step | What happens |
 |---|---|
 | Detects file changes | Syncs changed files directly into running pods (live_update) |
-| `apps/api/src/**` changed | TypeScript recompiled inside pod → API restarts in ~3s |
+| `apps/forge-api/src/**` changed | TypeScript recompiled inside pod → API restarts in ~3s |
 | `apps/web/app/**` changed | Files synced → Next.js HMR picks it up in ~2s |
 | `charts/forge/**` changed | Rerenders Helm templates → applies diff to cluster |
-| `apps/api/Dockerfile` changed | Full image rebuild → redeploy |
+| `apps/forge-api/Dockerfile` changed | Full image rebuild → redeploy |
 
 ### Accessing the services
 
@@ -264,34 +280,29 @@ kubectl exec -n forge statefulset/forge-postgresql -- psql -U forge -d forge
 |---|---|---|
 | **Web** | http://forge.localhost | via Ingress (NGINX) |
 | **Web** (direct) | http://localhost:3000 | via Tilt port-forward |
-| **API health** | http://localhost:4000/health | `{"status":"ok"}` |
-| **PostgreSQL** | `localhost:5432` | user: `forge` / pass: `forge_local_only` |
+| **API health** | http://localhost:4000/health | Application Plane |
+| **Admin API health** | http://localhost:4001/health | Control Plane |
+| **PostgreSQL** | `localhost:5432` | user: `forge` / DBs: `forge`, `forge_admin` |
 | **Tilt dashboard** | http://localhost:10350 | logs, status, live_update |
 
 ### Troubleshooting commands
 
 ```bash
 # --- Pod status ---
-kubectl get pods -n forge                          # list all pods and their state
-kubectl get pods -n forge -w                       # watch for changes (Ctrl+C to exit)
+kubectl get pods -A | grep forge                     # list all forge pods across namespaces
 
 # --- Logs ---
-kubectl logs -n forge deployment/forge-api -f      # API logs (follow)
-kubectl logs -n forge deployment/forge-web -f      # Web logs (follow)
-kubectl logs -n forge statefulset/forge-postgresql  # PostgreSQL logs
-
-# --- Pod details (when a pod won't start) ---
-kubectl describe pod -n forge -l app.kubernetes.io/name=forge-api
-kubectl describe pod -n forge -l app.kubernetes.io/name=forge-web
-
-# --- Quick health checks ---
-curl http://localhost:4000/health                   # API health (via port-forward)
-curl -I http://forge.localhost                      # Web via Ingress
+kubectl logs -n forge-admin deployment/forge-admin-api -f  # Admin API logs
+kubectl logs -n forge deployment/forge-api -f              # Forge API logs
+kubectl logs -n forge deployment/forge-web -f              # Web logs
+kubectl logs -n forge statefulset/forge-postgresql -f      # PostgreSQL logs
 
 # --- Connect to PostgreSQL (for manual queries) ---
 kubectl exec -n forge statefulset/forge-postgresql -- \
   psql -U forge -d forge
-
+kubectl exec -n forge statefulset/forge-postgresql -- \
+  psql -U forge -d forge_admin
+```
 # --- Force a pod restart without full rebuild ---
 kubectl rollout restart -n forge deployment/forge-api
 kubectl rollout restart -n forge deployment/forge-web
@@ -328,15 +339,13 @@ Your browser
      ▼
 forge.localhost (port 80)
      │  NGINX Ingress (ingress-nginx namespace)
-     ▼
-forge-web:3000  (ClusterIP)     ← Next.js
-     │
-     │ internal cluster call
-     ▼
-forge-api:4000  (ClusterIP, never exposed externally)  ← Express/TS
-     │
-     ▼
-forge-postgresql:5432 (ClusterIP)  ← PostgreSQL 16
+     ├── /api/* ──▶ forge-web (proxy to forge-forge-api:4000)
+     └── /      ──▶ forge-web:3000
+     
+  (Development Port-forwards)
+  localhost:4000  ──▶ forge-api (Application Plane, forge ns)
+  localhost:4001  ──▶ forge-admin-api (Control Plane, forge-admin ns)
+  localhost:5432  ──▶ forge-postgresql (DB: forge, forge_admin)
 ```
 
 The API has **no Ingress rule** — it is only reachable from within the cluster (from the web pod). This mirrors the production security model.

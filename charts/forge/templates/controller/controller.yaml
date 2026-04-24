@@ -91,7 +91,7 @@ spec:
           imagePullPolicy: {{ .Values.controller.image.pullPolicy | default "IfNotPresent" }}
           args:
             - --leader-election-namespace={{ .Values.namespace }}
-            - --api-base-url=http://forge-api:{{ .Values.api.port }}
+            - --api-base-url=http://forge-api:{{ .Values.forgeApi.port }}
             - --agent-image={{ .Values.controller.agentImage | default "ghcr.io/ltreven/forge-agent:latest" }}
             - --agent-image-pull-policy={{ .Values.controller.agentImagePullPolicy | default "IfNotPresent" }}
             - --consumer-image={{ .Values.controller.consumerImage }}

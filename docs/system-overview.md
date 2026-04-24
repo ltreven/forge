@@ -9,6 +9,24 @@ The architecture is designed to work across environments:
 - grow into customer-configurable Kubernetes deployments
 - later add automation for infrastructure provisioning and operational monitoring
 
+## Architectural Model
+
+Forge separates the platform into two distinct planes, enabling a **Cell-based Architecture** for infinite scalability and data isolation:
+
+### 1. Control Plane (Admin/Global)
+The **Control Plane** manages global state, user identities, and marketing. It is the entry point for administrative operations.
+- **Frontend:** `admin-web` (www.forge.com) - Marketing, Docs, Login, Signup.
+- **Backend:** `admin-api` (Port 4001) - Global registry.
+- **Database:** `forge_admin` (Global).
+- **Namespace:** `forge-admin`.
+
+### 2. Application Plane (App/Regional)
+The **Application Plane** manages the actual execution of agent teams. These "cells" can be deployed in different regions to stay close to customer data.
+- **Frontend:** `forge-web` (app.forge.com or customer.forge.com) - Client Portal.
+- **Backend:** `api` (Port 4000) - Team & Task logic.
+- **Database:** `forge` (Tenant-specific).
+- **Namespace:** `forge`.
+
 ## Core Concepts
 
 ### Team

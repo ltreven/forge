@@ -5,14 +5,15 @@ nameOverride: ""
 fullnameOverride: ""
 
 namespace: forge
+adminNamespace: forge-admin
 
-# ── API ───────────────────────────────────────────────────────────────────────
-api:
+# ── Forge API (Application Plane) ───────────────────────────────────────────
+forgeApi:
   enabled: true
   replicaCount: 1
 
   image:
-    repository: forge/api
+    repository: forge/forge-api
     tag: "latest"
     pullPolicy: IfNotPresent
 
@@ -47,7 +48,7 @@ api:
 
 
   # Run Drizzle migrations as an init container before the API starts.
-  # DISABLED: requires --migrate-only flag in apps/api/src/index.ts (not yet implemented).
+  # DISABLED: requires --migrate-only flag in apps/forge-api/src/index.ts (not yet implemented).
   # When implemented, re-enable here and in values-local.yaml.
   runMigrations: false
 
@@ -74,13 +75,68 @@ api:
     periodSeconds: 10
     failureThreshold: 3
 
-# ── Web ───────────────────────────────────────────────────────────────────────
-web:
+# ── Admin API ─────────────────────────────────────────────────────────────────
+adminApi:
   enabled: true
   replicaCount: 1
 
   image:
-    repository: forge/web
+    repository: forge/admin-api
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  # Port the Express server listens on
+  port: 4001
+
+  service:
+    type: ClusterIP
+    port: 4001
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "500m"
+      memory: 512Mi
+
+  # Environment variables injected from a Kubernetes Secret.
+  existingSecret: ""
+
+  env:
+    NODE_ENV: production
+    ADMIN_PORT: "4001"
+    HOST: "0.0.0.0"
+
+  runMigrations: false
+
+  livenessProbe:
+    exec:
+      command:
+        - sh
+        - -c
+        - curl -sf http://127.0.0.1:4001/health
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    failureThreshold: 3
+
+  readinessProbe:
+    exec:
+      command:
+        - sh
+        - -c
+        - curl -sf http://127.0.0.1:4001/health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+
+# ── Forge Web (Client Portal) ────────────────────────────────────────────────
+forgeWeb:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: forge/forge-web
     tag: "latest"
     pullPolicy: IfNotPresent
 
@@ -101,7 +157,6 @@ web:
   env:
     NODE_ENV: production
     PORT: "3000"
-    # NEXT_PUBLIC_API_URL is set per-environment in values-*.yaml
 
   livenessProbe:
     httpGet:
@@ -114,6 +169,48 @@ web:
     httpGet:
       path: /
       port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+# ── Admin Web (Marketing/Admin Portal) ───────────────────────────────────────
+adminWeb:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: forge/admin-web
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  port: 3001
+
+  service:
+    type: ClusterIP
+    port: 3001
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "500m"
+      memory: 512Mi
+
+  env:
+    NODE_ENV: production
+    PORT: "3001"
+
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 3001
+    initialDelaySeconds: 20
+    periodSeconds: 30
+
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 3001
     initialDelaySeconds: 10
     periodSeconds: 10
 

@@ -49,7 +49,7 @@ At the start of each session:
 
 ---
 
-## Ticket Assignment
+## Ticket Assignment via Requests
 
 Before assigning any ticket:
 
@@ -60,27 +60,24 @@ Before assigning any ticket:
 - No ambiguous dependencies ✓
 
 If not ready:
-→ Clarify or refine before assigning
+→ Clarify or refine before assigning. You MUST read available data and enrich the ticket/task to ensure it is actionable.
 
-### Assignment Rules
+### Execution via MCP
 
-- Respect WIP limit: **1 active ticket per agent**
-- Match task complexity to agent capability
-- Prefer parallelization when possible
-
-### Execution
-
-- Assign owner
-- Confirm understanding
-- Only then mark as **IN PROGRESS**
+You must use native MCP tools for all assignments.
+- Assign owner using the `create_request` MCP tool.
+- Provide a concise `title` summarizing the request.
+- Provide the `inputData` with all necessary context from the ticket.
+- Define a strict `responseContract` outlining exactly what the target agent must return.
+- Only mark the task as **IN PROGRESS** after the request is created and accepted.
 
 ---
 
 ## Work Distribution & Flow Control
 
-- No task remains unassigned if capacity exists
-- No agent remains idle if backlog exists
-- Rebalance work proactively
+- No task remains unassigned if capacity exists.
+- No agent remains idle if backlog exists.
+- Rebalance work proactively.
 
 ### Signals to act:
 
@@ -95,15 +92,13 @@ If not ready:
 
 When a blocker is identified:
 
-1. Comment on ticket with full context
-2. Mark ticket as **BLOCKED**
-3. Attempt resolution within team:
-   - Ask clarifying questions
-   - Reassign if needed
-   - Break task down further
-
-4. If unresolved after 1 session:
-   → Escalate to operator (e.g., Telegram)
+1. Attempt resolution within team:
+   - Ask clarifying questions via requests.
+   - Reassign if needed.
+   - Break task down further.
+2. Document the blocker: Use the MCP tools `create_issue_comment` or `create_project_comment` to document exactly what is blocking the work with full context.
+3. If unresolved:
+   → Escalate to operator (e.g., Telegram) and request intervention.
 
 ---
 

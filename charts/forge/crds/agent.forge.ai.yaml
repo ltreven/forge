@@ -75,7 +75,7 @@ spec:
                       enum: [openai, gemini, google]
                     name:
                       type: string
-                      description: "Model name (e.g. gpt-4.1, gemini-2.5-flash)"
+                      description: "Model name (e.g. gpt-5.4, gemini-2.5-flash)"
                 # ── Resources ─────────────────────────────────────────────────
                 resources:
                   type: object

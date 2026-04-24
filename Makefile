@@ -1,4 +1,4 @@
-.PHONY: help web web-install web-kill web-build api api-install db-migrate db-seed docker-db agents-test \
+.PHONY: help forge-web admin-web forge-web-install web-kill web-build forge-api forge-api-install db-migrate db-seed docker-db agents-test \
         tilt-up tilt-down k8s-lint k8s-render k8s-namespace clean-k8s clean
 
 # Default target
@@ -6,20 +6,32 @@ help:
 	@echo ""
 	@echo "  Forge — Dev Commands"
 	@echo ""
-	@echo "  Web (apps/web)"
+	@echo "  Forge Web (apps/forge-web) - Client Portal"
 	@echo "  ─────────────────────────────────────"
-	@echo "  make web            Start web dev server (localhost:3000)"
-	@echo "  make web-install    Install web dependencies"
-	@echo "  make web-build      Build web for production"
-	@echo "  make web-kill       Kill any running web dev server"
+	@echo "  make forge-web      Start client portal (localhost:3000)"
+	@echo "  make forge-web-install  Install dependencies"
 	@echo ""
-	@echo "  API (apps/api)"
+	@echo "  Admin Web (apps/admin-web) - Marketing/Admin Portal"
 	@echo "  ─────────────────────────────────────"
-	@echo "  make api            Start API dev server (localhost:4000)"
-	@echo "  make api-install    Install API dependencies"
+	@echo "  make admin-web      Start admin portal (localhost:3001)"
+	@echo "  make admin-install  Install dependencies"
+	@echo ""
+	@echo "  Forge API (apps/forge-api)"
+	@echo "  ─────────────────────────────────────"
+	@echo "  make forge-api      Start App API (localhost:4000)"
+	@echo "  make forge-api-install  Install dependencies"
 	@echo "  make db-migrate     Run Drizzle migrations"
-	@echo "  make db-seed        Seed the database with demo data"
-	@echo "  make docker-db      Start local PostgreSQL via Docker"
+	@echo "  make db-seed        Seed with demo data (requires WORKSPACE_ID)"
+	@echo ""
+	@echo "  Admin API (apps/admin-api)"
+	@echo "  ─────────────────────────────────────"
+	@echo "  make admin-api      Start Admin API dev server (localhost:4001)"
+	@echo "  make admin-install  Install Admin API dependencies"
+	@echo "  make admin-migrate  Run Admin Drizzle migrations"
+	@echo ""
+	@echo "  Infrastructure"
+	@echo "  ─────────────────────────────────────"
+	@echo "  make docker-db      Start local PostgreSQL via Docker (forge & forge_admin)"
 	@echo ""
 	@echo "  Agents (apps/agents)"
 	@echo "  ─────────────────────────────────────"
@@ -41,33 +53,54 @@ help:
 
 # ── Web ────────────────────────────────────────────────────────────────────────
 
-web: web-kill
-	cd apps/web && npm run dev
+forge-web: web-kill
+	cd apps/forge-web && npm run dev
 
-web-install:
-	cd apps/web && npm install
+forge-web-install:
+	cd apps/forge-web && npm install
+
+admin-web: web-kill
+	cd apps/admin-web && npm run dev
+
+admin-install:
+	cd apps/admin-web && npm install
 
 web-build:
-	cd apps/web && npm run build
+	cd apps/forge-web && npm run build
+	cd apps/admin-web && npm run build
 
 web-kill:
 	@pkill -f "next dev" 2>/dev/null || true
-	@rm -rf apps/web/.next/dev/lock 2>/dev/null || true
-	@echo "✓ Web dev server stopped"
+	@rm -rf apps/forge-web/.next/dev/lock apps/admin-web/.next/dev/lock 2>/dev/null || true
+	@echo "✓ Web dev servers stopped"
 
 # ── API ────────────────────────────────────────────────────────────────────────
 
-api:
-	cd apps/api && pnpm dev
+forge-api:
+	cd apps/forge-api && pnpm dev
 
-api-install:
-	cd apps/api && pnpm install
+forge-api-install:
+	cd apps/forge-api && pnpm install
 
 db-migrate:
-	cd apps/api && pnpm db:migrate
+	cd apps/forge-api && pnpm db:migrate
 
 db-seed:
-	cd apps/api && pnpm db:seed
+	cd apps/forge-api && pnpm db:seed $(WORKSPACE_ID)
+
+# ── Admin API ──────────────────────────────────────────────────────────────────
+
+admin-api:
+	cd apps/admin-api && npm run dev
+
+admin-install:
+	cd apps/admin-api && npm install
+
+admin-migrate:
+	cd apps/admin-api && npm run db:migrate
+
+admin-seed:
+	cd apps/admin-api && npm run db:seed
 
 docker-db:
 	@docker run --rm --name forge-postgres \
@@ -75,7 +108,11 @@ docker-db:
 		-e POSTGRES_PASSWORD=forge \
 		-e POSTGRES_DB=forge \
 		-p 5432:5432 \
-		postgres:16-alpine
+		-d postgres:16-alpine
+	@echo "Waiting for postgres to start..."
+	@sleep 5
+	@docker exec -it forge-postgres psql -U forge -d postgres -c "CREATE DATABASE forge_admin;" || true
+	@docker attach forge-postgres
 
 # ── Agents ────────────────────────────────────────────────────────────────────
 
@@ -121,8 +158,9 @@ clean-k8s:
 	@echo ""
 	@printf "  Type 'yes' to confirm: "; read CONFIRM; \
 	if [ "$$CONFIRM" = "yes" ]; then \
-		echo "→ Deleting namespace/forge..."; \
+		echo "→ Deleting namespace forge and forge-admin..."; \
 		kubectl delete namespace forge --ignore-not-found; \
+		kubectl delete namespace forge-admin --ignore-not-found; \
 		echo "→ Deleting forge-ws-* namespaces..."; \
 		kubectl get namespace -o name | grep 'namespace/forge-ws-' | xargs -r kubectl delete --ignore-not-found; \
 		echo "✓ Done. Run 'make tilt-up' to start fresh."; \
@@ -133,6 +171,6 @@ clean-k8s:
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
 clean: web-kill
-	rm -rf apps/web/.next apps/api/dist
+	rm -rf apps/forge-web/.next apps/admin-web/.next apps/forge-api/dist apps/admin-api/dist
 	@echo "✓ Clean done"
 
