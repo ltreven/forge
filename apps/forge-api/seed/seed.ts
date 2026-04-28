@@ -46,22 +46,27 @@ async function main() {
 
   console.log("→ Seeding Team Meta Capabilities...");
   const teamMetaCapabilitiesData = [
-    { teamTypeId: "engineering", name: "Resolve a bug", triggers: ["bug.reported"], description: "Analyze a reported bug, identify root cause, propose or implement a fix, and validate the result.", inputsDescription: "Bug description and identification if present (id, etc) + customer identification, reproduction steps, expected behavior, actual behavior, logs or screenshots if available.", expectedOutputsDescription: "Root cause analysis, proposed fix, implementation notes, validation result, and updated task status.", expectedEventsOutput: ["bug.solved", "bug.analyzed", "bug.fix_requested", "feature.requested"] },
-    { teamTypeId: "engineering", name: "Request a feature", triggers: null, description: "Turn a product idea or customer request into a structured feature proposal or user story.", inputsDescription: "Problem statement, target user, expected outcome, constraints, priority, and relevant context.", expectedOutputsDescription: "Clear user story, acceptance criteria, implementation notes, and suggested priority.", expectedEventsOutput: null },
-    { teamTypeId: "engineering", name: "Plan technical work", triggers: ["technical.plan_requested"], description: "Analyze a technical problem and produce an implementation plan.", inputsDescription: "Technical goal, current architecture context, constraints, risks, and affected systems.", expectedOutputsDescription: "Technical plan, trade-offs, risks, implementation steps, and validation strategy.", expectedEventsOutput: null },
-    { teamTypeId: "engineering", name: "Review implementation", triggers: ["implementation.review_requested"], description: "Review a code change or implementation plan for quality, risks, and completeness.", inputsDescription: "Pull request, code diff, task description, architecture context, and acceptance criteria.", expectedOutputsDescription: "Review comments, risks, required changes, and approval recommendation.", expectedEventsOutput: null },
-    { teamTypeId: "customer_support", name: "Triage open tickets", triggers: ["support.tickets_triage_requested"], description: "Review open customer tickets, classify them, prioritize them, and suggest next actions.", inputsDescription: "List of open tickets, customer priority, SLA information, product area, and recent context.", expectedOutputsDescription: "Prioritized ticket list, classification, owner recommendation, and next action for each ticket.", expectedEventsOutput: null },
-    { teamTypeId: "customer_support", name: "Answer a customer ticket", triggers: ["support.ticket_response_requested"], description: "Draft a clear and helpful response to a specific customer ticket.", inputsDescription: "Ticket content, customer history, product documentation, known issues, and desired tone.", expectedOutputsDescription: "Suggested customer response, internal notes, and follow-up actions.", expectedEventsOutput: null },
-    { teamTypeId: "customer_support", name: "Escalate a bug to engineering", triggers: ["support.bug_escalation_requested"], description: "Convert a customer issue into a structured engineering bug report.", inputsDescription: "Customer ticket, reproduction steps, impact, affected account, logs, screenshots, and urgency.", expectedOutputsDescription: "Engineering-ready bug report with impact, reproduction steps, priority, and supporting evidence.", expectedEventsOutput: null },
-    { teamTypeId: "customer_support", name: "Write knowledge base article", triggers: ["support.knowledge_base_article_requested"], description: "Create or improve a knowledge base article based on repeated customer questions or resolved tickets.", inputsDescription: "Topic, resolved ticket examples, product behavior, troubleshooting steps, and target audience.", expectedOutputsDescription: "Knowledge base draft with title, summary, steps, screenshots placeholders, and related links.", expectedEventsOutput: null },
-    { teamTypeId: "starter", name: "Ask anything", triggers: null, description: "Ask the team any general question or request help with thinking, writing, planning, or analysis.", inputsDescription: "User question, goal, relevant context, and preferred output format.", expectedOutputsDescription: "Helpful answer, recommendation, summary, draft, or next-step proposal.", expectedEventsOutput: null },
-    { teamTypeId: "starter", name: "Summarize content", triggers: null, description: "Summarize text, notes, documents, tickets, or long context into a concise output.", inputsDescription: "Content to summarize, desired length, audience, and focus areas.", expectedOutputsDescription: "Clear summary with key points, decisions, risks, and action items when relevant.", expectedEventsOutput: null },
-    { teamTypeId: "starter", name: "Translate text", triggers: ["assistant.translation_requested"], description: "Translate text while preserving meaning, tone, and professional context.", inputsDescription: "Source text, source language if known, target language, tone preference, and context.", expectedOutputsDescription: "Translated text, optionally with notes about nuance or alternative phrasing.", expectedEventsOutput: null },
-    { teamTypeId: "starter", name: "Research a topic", triggers: ["assistant.research_requested"], description: "Research a topic and produce a structured explanation or recommendation.", inputsDescription: "Topic, question, desired depth, constraints, and preferred format.", expectedOutputsDescription: "Structured research summary, findings, trade-offs, recommendation, and sources if available.", expectedEventsOutput: null },
-    { teamTypeId: "starter", name: "Create a plan", triggers: ["assistant.plan_requested"], description: "Turn a goal into a practical plan with steps, risks, and milestones.", inputsDescription: "Goal, deadline, constraints, resources, and success criteria.", expectedOutputsDescription: "Action plan, milestones, assumptions, risks, and next steps.", expectedEventsOutput: null }
+    { teamTypeId: "engineering", name: "Resolve a bug", identifier: "resolve-a-bug", triggers: ["bug.reported"], instructions: "Analyze a reported bug, identify root cause, propose or implement a fix, and validate the result.", inputsDescription: "Bug description and identification if present (id, etc) + customer identification, reproduction steps, expected behavior, actual behavior, logs or screenshots if available.", expectedOutputsDescription: "Root cause analysis, proposed fix, implementation notes, validation result, and updated task status.", expectedEventsOutput: ["bug.solved", "bug.analyzed", "bug.fix_requested", "feature.requested"], isFavorite: true },
+    { teamTypeId: "engineering", name: "Request a feature", identifier: "request-a-feature", triggers: null, instructions: "Turn a product idea or customer request into a structured feature proposal or user story.", inputsDescription: "Problem statement, target user, expected outcome, constraints, priority, and relevant context.", expectedOutputsDescription: "Clear user story, acceptance criteria, implementation notes, and suggested priority.", expectedEventsOutput: null },
+    { teamTypeId: "engineering", name: "Plan technical work", identifier: "plan-technical-work", triggers: ["technical.plan_requested"], instructions: "Analyze a technical problem and produce an implementation plan.", inputsDescription: "Technical goal, current architecture context, constraints, risks, and affected systems.", expectedOutputsDescription: "Technical plan, trade-offs, risks, implementation steps, and validation strategy.", expectedEventsOutput: null },
+    { teamTypeId: "engineering", name: "Review implementation", identifier: "review-implementation", triggers: ["implementation.review_requested"], instructions: "Review a code change or implementation plan for quality, risks, and completeness.", inputsDescription: "Pull request, code diff, task description, architecture context, and acceptance criteria.", expectedOutputsDescription: "Review comments, risks, required changes, and approval recommendation.", expectedEventsOutput: null },
+    { teamTypeId: "customer_support", name: "Triage open tickets", identifier: "triage-open-tickets", triggers: ["support.tickets_triage_requested"], instructions: "Review open customer tickets, classify them, prioritize them, and suggest next actions.", inputsDescription: "List of open tickets, customer priority, SLA information, product area, and recent context.", expectedOutputsDescription: "Prioritized ticket list, classification, owner recommendation, and next action for each ticket.", expectedEventsOutput: null },
+    { teamTypeId: "customer_support", name: "Answer a customer ticket", identifier: "answer-a-customer-ticket", triggers: ["support.ticket_response_requested"], instructions: "Draft a clear and helpful response to a specific customer ticket.", inputsDescription: "Ticket content, customer history, product documentation, known issues, and desired tone.", expectedOutputsDescription: "Suggested customer response, internal notes, and follow-up actions.", expectedEventsOutput: null },
+    { teamTypeId: "customer_support", name: "Escalate a bug to engineering", identifier: "escalate-a-bug-to-engineering", triggers: ["support.bug_escalation_requested"], instructions: "Convert a customer issue into a structured engineering bug report.", inputsDescription: "Customer ticket, reproduction steps, impact, affected account, logs, screenshots, and urgency.", expectedOutputsDescription: "Engineering-ready bug report with impact, reproduction steps, priority, and supporting evidence.", expectedEventsOutput: null },
+    { teamTypeId: "customer_support", name: "Write knowledge base article", identifier: "write-knowledge-base-article", triggers: ["support.knowledge_base_article_requested"], instructions: "Create or improve a knowledge base article based on repeated customer questions or resolved tickets.", inputsDescription: "Topic, resolved ticket examples, product behavior, troubleshooting steps, and target audience.", expectedOutputsDescription: "Knowledge base draft with title, summary, steps, screenshots placeholders, and related links.", expectedEventsOutput: null },
+    { teamTypeId: "starter", name: "Ask anything", identifier: "ask-anything", triggers: null, instructions: "Ask the team any general question or request help with thinking, writing, planning, or analysis.", inputsDescription: "User question, goal, relevant context, and preferred output format.", expectedOutputsDescription: "Helpful answer, recommendation, summary, draft, or next-step proposal.", expectedEventsOutput: null, isFavorite: true },
+    { teamTypeId: "starter", name: "Summarize content", identifier: "summarize-content", triggers: null, instructions: "Summarize text, notes, documents, tickets, or long context into a concise output.", inputsDescription: "Content to summarize, desired length, audience, and focus areas.", expectedOutputsDescription: "Clear summary with key points, decisions, risks, and action items when relevant.", expectedEventsOutput: null, isFavorite: true },
+    { teamTypeId: "starter", name: "Translate text", identifier: "translate-text", triggers: ["assistant.translation_requested"], instructions: "Translate text while preserving meaning, tone, and professional context.", inputsDescription: "Source text, source language if known, target language, tone preference, and context.", expectedOutputsDescription: "Translated text, optionally with notes about nuance or alternative phrasing.", expectedEventsOutput: null },
+    { teamTypeId: "starter", name: "Research a topic", identifier: "research-a-topic", triggers: ["assistant.research_requested"], instructions: "Research a topic and produce a structured explanation or recommendation.", inputsDescription: "Topic, question, desired depth, constraints, and preferred format.", expectedOutputsDescription: "Structured research summary, findings, trade-offs, recommendation, and sources if available.", expectedEventsOutput: null },
+    { teamTypeId: "starter", name: "Create a plan", identifier: "create-a-plan", triggers: ["assistant.plan_requested"], instructions: "Turn a goal into a practical plan with steps, risks, and milestones.", inputsDescription: "Goal, deadline, constraints, resources, and success criteria.", expectedOutputsDescription: "Action plan, milestones, assumptions, risks, and next steps.", expectedEventsOutput: null }
+
   ];
+  
+  // Clear existing to prevent duplicates on re-runs (since IDs are generated UUIDs)
+  await db.delete(schema.teamMetaCapabilities);
+  
   for (const cap of teamMetaCapabilitiesData) {
-    await db.insert(schema.teamMetaCapabilities).values(cap).onConflictDoNothing();
+    await db.insert(schema.teamMetaCapabilities).values(cap);
   }
   console.log("  ✓ Team meta capabilities seeded.\n");
 
@@ -119,21 +124,7 @@ async function main() {
     team = row;
     console.log(`  ✓ Created: Product Delivery (${team.id})`);
 
-    // Create default task types
-    await db.insert(schema.taskTypes).values([
-      { teamId: team.id, name: "Task", emoji: "✅", backgroundColor: "#4f46e5", isDefault: true },
-      { teamId: team.id, name: "Bug", emoji: "🐛", backgroundColor: "#ef4444", isDefault: false },
-      { teamId: team.id, name: "Feature", emoji: "✨", backgroundColor: "#10b981", isDefault: false },
-      { teamId: team.id, name: "Plan", emoji: "📅", backgroundColor: "#8b5cf6", isDefault: false },
-      { teamId: team.id, name: "Research", emoji: "🔬", backgroundColor: "#f59e0b", isDefault: false }
-    ]);
-    
-    // Create some default labels
-    await db.insert(schema.labels).values([
-      { teamId: team.id, name: "frontend", color: "#3b82f6" },
-      { teamId: team.id, name: "backend", color: "#10b981" },
-      { teamId: team.id, name: "urgent", color: "#ef4444" },
-    ]);
+
 
     // Copy meta capabilities to the team capabilities
     const templateCapabilities = await db.query.teamMetaCapabilities.findMany({
@@ -145,11 +136,13 @@ async function main() {
         templateCapabilities.map(cap => ({
           teamId: team!.id,
           name: cap.name,
+          identifier: cap.identifier,
           triggers: cap.triggers,
-          description: cap.description,
+          instructions: cap.instructions,
           inputsDescription: cap.inputsDescription,
           expectedOutputsDescription: cap.expectedOutputsDescription,
           expectedEventsOutput: cap.expectedEventsOutput,
+          isFavorite: cap.isFavorite,
         }))
       );
     }
@@ -182,23 +175,16 @@ async function main() {
   // ── 3. Tasks ─────────────────────────────────────────────────────────────────
   console.log("\n→ Tasks...");
   let task1 = await db.query.tasks.findFirst({ 
-    where: (t, { eq, and }) => and(eq(t.teamId, team!.id), eq(t.number, 1)) 
+    where: (t, { eq, and }) => and(eq(t.teamId, team!.id), eq(t.title, "Initial System Setup")) 
   });
   if (!task1) {
-    const taskType = await db.query.taskTypes.findFirst({ where: eq(schema.taskTypes.teamId, team!.id) });
-    if (taskType) {
-      const [row] = await db.insert(schema.tasks).values({
-        teamId: team!.id,
-        number: 1,
-        identifier: `${team!.identifierPrefix}-1`,
-        taskTypeId: taskType.id,
-        title: "Initial System Setup",
-        shortSummary: "Configure the repository and initial settings.",
-        status: 1,
-      }).returning();
-      task1 = row;
-      console.log(`  ✓ Created Task: ${task1.identifier}`);
-    }
+    const [row] = await db.insert(schema.tasks).values({
+      teamId: team!.id,
+      title: "Initial System Setup",
+      plan: "Configure the repository and initial settings.",
+    }).returning();
+    task1 = row;
+    console.log(`  ✓ Created Task: ${task1.id}`);
   }
 
   console.log("\n✅ Application seed complete!\n");

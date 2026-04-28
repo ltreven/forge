@@ -1,0 +1,8 @@
+#!/usr/bin/expect -f
+set timeout -1
+spawn npx drizzle-kit generate
+expect -re ".*(create|rename) column.*" {
+    send "\r"
+    exp_continue
+}
+expect eof

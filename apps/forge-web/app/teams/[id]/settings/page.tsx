@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Loader2, Trash2, Plus, Wand2, Check, Briefcase, 
   GitBranch, FileText, Globe, LayoutTemplate, Send, ChevronDown, CheckCircle2,
-  X, Search, Edit2, Info
+  X, Search, Edit2, Info, Star
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -41,14 +41,12 @@ interface Integration {
 }
 
 interface Capability {
-  id: string; name: string; instructions: string; triggers: string[] | null;
+  id: string; name: string; identifier: string; instructions: string; triggers: string[] | null;
   inputsDescription: string | null; expectedOutputsDescription: string | null;
-  expectedEventsOutput: string[] | null; isEnabled: boolean; scheduleConfig: Record<string, any> | null;
-  assignedAgentId: string | null; assignedRole: string | null;
+  expectedEventsOutput: string[] | null; suggestedNextCapabilities: string[] | null; isEnabled: boolean; scheduleConfig: Record<string, any> | null;
+  assignedAgentId: string | null; assignedRole: string | null; isFavorite: boolean;
 }
 
-interface TaskType { id: string; name: string; emoji: string; backgroundColor: string; isDefault: boolean; }
-interface Label { id: string; name: string; color: string; }
 
 const ALL_INTEGRATIONS: { key: IntegrationProvider; label: string; icon: React.ReactNode; category: string }[] = [
   { key: "linear", label: "Linear", icon: SVGS.linear, category: "Project Management" },
@@ -143,34 +141,6 @@ function AvatarPicker({ icon, color, onIconChange, onColorChange, onClose }: {
   );
 }
 
-function EmojiPicker({ selected, onSelect }: { selected: string, onSelect: (e: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-  
-  return (
-    <div className="relative" ref={ref}>
-      <button 
-        type="button" 
-        onClick={() => setOpen(!open)} 
-        className="flex h-10 w-10 items-center justify-center rounded-md border border-input bg-transparent text-lg shadow-sm hover:bg-muted"
-      >
-        {selected}
-      </button>
-      {open && (
-        <div className="absolute left-0 top-11 z-50 w-48 rounded-md border bg-popover p-2 shadow-md outline-none animate-in fade-in zoom-in-95 grid grid-cols-5 gap-1">
-          {TT_EMOJIS.map(e => (
-            <button key={e} onClick={() => { onSelect(e); setOpen(false); }} className="flex h-8 w-8 items-center justify-center rounded hover:bg-muted">{e}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function AIInsightsChat({ field, value, onApply, onClose }: { field: string, value: string, onApply: (val: string) => void, onClose: () => void }) {
   const [messages, setMessages] = useState<{role: 'ai'|'user', content: string}[]>([
@@ -246,17 +216,11 @@ export default function TeamSettingsPage() {
   // Workflow Settings
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [agents, setAgents] = useState<{id: string, name: string, type: string}[]>([]);
-  const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
-  const [labels, setLabels] = useState<Label[]>([]);
+
+  const [teamEvents, setTeamEvents] = useState<{identifier: string}[]>([]);
   const [capFilter, setCapFilter] = useState<"all" | "scheduled" | "not_scheduled" | "enabled" | "disabled">("all");
   const [capSearch, setCapSearch] = useState("");
-  const [viewingCap, setViewingCap] = useState<Capability | null>(null);
   
-  // New TaskType/Label State
-  const [newTtName, setNewTtName] = useState("");
-  const [newTtEmoji, setNewTtEmoji] = useState("📌");
-  const [newLbgName, setNewLbName] = useState("");
-  const [newLbColor, setNewLbColor] = useState(LABEL_COLORS[0]);
 
   // Integrations Settings
   const [integrations, setIntegrations] = useState<Integration[]>([]);
@@ -268,13 +232,12 @@ export default function TeamSettingsPage() {
     if (!token) return;
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const [teamRes, capRes, ttRes, lbRes, intRes, agentsRes] = await Promise.all([
+      const [teamRes, capRes, intRes, agentsRes, evRes] = await Promise.all([
         fetch(`${API_BASE}/teams/${teamId}`, { headers }),
         fetch(`${API_BASE}/teams/${teamId}/capabilities`, { headers }),
-        fetch(`${API_BASE}/teams/${teamId}/task-types`, { headers }),
-        fetch(`${API_BASE}/teams/${teamId}/labels`, { headers }),
         fetch(`${API_BASE}/teams/${teamId}/integrations`, { headers }),
-        fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers })
+        fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers }),
+        fetch(`${API_BASE}/teams/${teamId}/events`, { headers })
       ]);
 
       if (teamRes.ok) {
@@ -287,9 +250,9 @@ export default function TeamSettingsPage() {
         setWaysOfWorking(d.data.waysOfWorking || "");
       }
       if (capRes.ok) setCapabilities((await capRes.json()).data || []);
-      if (ttRes.ok) setTaskTypes((await ttRes.json()).data || []);
-      if (lbRes.ok) setLabels((await lbRes.json()).data || []);
-      if (agentsRes && agentsRes.ok) setAgents((await agentsRes.json()).data || []);
+
+      if (agentsRes.ok) setAgents((await agentsRes.json()).data || []);
+      if (evRes.ok) setTeamEvents((await evRes.json()).data || []);
       if (intRes.ok) {
         const ints = (await intRes.json()).data || [];
         setIntegrations(ints);
@@ -365,39 +328,6 @@ export default function TeamSettingsPage() {
     setEnabledIntegrations(p => ({ ...p, [provider]: on }));
   };
 
-  // Task Types & Labels
-  const addTaskType = async () => {
-    if(!newTtName || !token) return;
-    const res = await fetch(`${API_BASE}/teams/${teamId}/task-types`, {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      // API requires backgroundColor, so we send transparent and UI handles it
-      body: JSON.stringify({ name: newTtName, emoji: newTtEmoji, backgroundColor: "transparent" })
-    });
-    if(res.ok) { setTaskTypes([...taskTypes, (await res.json()).data]); setNewTtName(""); }
-  };
-  const setTaskTypeDefault = async (id: string) => {
-    if(!token) return;
-    await fetch(`${API_BASE}/teams/${teamId}/task-types/${id}/set-default`, { method: "PUT", headers: { Authorization: `Bearer ${token}` }});
-    setTaskTypes(taskTypes.map(tt => ({ ...tt, isDefault: tt.id === id })));
-  };
-  const deleteTaskType = async (id: string) => {
-    if(!token) return;
-    await fetch(`${API_BASE}/teams/${teamId}/task-types/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` }});
-    setTaskTypes(taskTypes.filter(tt => tt.id !== id));
-  };
-  const addLabel = async () => {
-    if(!newLbgName || !token) return;
-    const res = await fetch(`${API_BASE}/teams/${teamId}/labels`, {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: newLbgName, color: newLbColor })
-    });
-    if(res.ok) { setLabels([...labels, (await res.json()).data]); setNewLbName(""); }
-  };
-  const deleteLabel = async (id: string) => {
-    if(!token) return;
-    await fetch(`${API_BASE}/teams/${teamId}/labels/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` }});
-    setLabels(labels.filter(lb => lb.id !== id));
-  };
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -492,77 +422,33 @@ export default function TeamSettingsPage() {
           {/* WORKFLOW */}
           {activeTab === "workflow" && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="rounded-xl border border-border bg-card shadow-sm p-6 flex flex-col">
-                  <h2 className="text-lg font-semibold mb-1">Task Types</h2>
-                  <p className="text-sm text-muted-foreground mb-4">Classify work items in this team.</p>
-                  <div className="space-y-2 flex-1">
-                    {taskTypes.map(tt => (
-                      <div key={tt.id} className="flex justify-between items-center text-sm p-2 bg-background rounded-lg border group">
-                        <div className="flex items-center gap-2">
-                          <span className="flex size-6 items-center justify-center text-lg">{tt.emoji}</span> 
-                          <span className="font-medium">{tt.name}</span> 
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {tt.isDefault ? 
-                            <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-0.5 rounded">Default</span>
-                            : <button onClick={() => setTaskTypeDefault(tt.id)} className="text-[10px] text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">Set default</button>
-                          }
-                          {!tt.isDefault && <button onClick={() => deleteTaskType(tt.id)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="size-3.5"/></button>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex gap-2 pt-4 border-t border-border">
-                    <EmojiPicker selected={newTtEmoji} onSelect={setNewTtEmoji} />
-                    <Input className="flex-1" placeholder="New Type..." value={newTtName} onChange={e => setNewTtName(e.target.value)} onKeyDown={e => e.key==='Enter' && addTaskType()}/>
-                    <Button variant="secondary" onClick={addTaskType}>Add</Button>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border bg-card shadow-sm p-6 flex flex-col">
-                  <h2 className="text-lg font-semibold mb-1">Labels</h2>
-                  <p className="text-sm text-muted-foreground mb-4">Tag and organize tasks visually.</p>
-                  <div className="flex flex-wrap gap-2 flex-1 content-start">
-                    {labels.map(lb => (
-                      <div key={lb.id} className="group relative flex items-center text-xs px-2.5 py-1 rounded-md text-white font-medium shadow-sm transition-transform hover:scale-105" style={{ backgroundColor: lb.color }}>
-                        {lb.name}
-                        <button onClick={() => deleteLabel(lb.id)} className="absolute -top-1.5 -right-1.5 hidden size-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow group-hover:flex"><Trash2 className="size-2.5"/></button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-border">
-                    <div className="flex gap-1 flex-wrap mb-3">
-                      {LABEL_COLORS.map(c => (
-                        <button key={c} onClick={() => setNewLbColor(c)} className={cn("size-5 rounded-full transition-all", newLbColor === c && "ring-2 ring-primary ring-offset-2")} style={{ background: c }} />
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input className="flex-1" placeholder="New Label..." value={newLbgName} onChange={e => setNewLbName(e.target.value)} onKeyDown={e => e.key==='Enter' && addLabel()}/>
-                      <Button variant="secondary" onClick={addLabel}>Add</Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div className="rounded-xl border border-border bg-card shadow-sm p-6 space-y-6">
                 <div className="flex justify-between items-start">
                   <div>
                     <h2 className="text-lg font-semibold">What this team can do</h2>
                     <p className="text-sm text-muted-foreground">Manage the active capabilities of your agents.</p>
                   </div>
-                  <Button onClick={() => setViewingCap({ id: "new", name: "", instructions: "", inputsDescription: "", expectedOutputsDescription: "", triggers: null, expectedEventsOutput: null, isEnabled: true, scheduleConfig: null, assignedAgentId: null, assignedRole: null } as Capability)}>
-                    <Plus className="size-4 mr-2" /> New Capability
-                  </Button>
+                  <Link href={`/teams/${teamId}/settings/capabilities/new`}>
+                    <Button>
+                      <Plus className="size-4 mr-2" /> New Capability
+                    </Button>
+                  </Link>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row justify-between gap-4">
-                  <div className="flex gap-2 text-sm overflow-x-auto pb-2 scrollbar-none">
-                    {["all", "scheduled", "not_scheduled", "enabled", "disabled"].map(f => (
-                      <button key={f} onClick={() => setCapFilter(f as any)} className={cn("px-3 py-1 rounded-full border transition-colors whitespace-nowrap", capFilter === f ? "bg-primary text-primary-foreground border-primary" : "bg-muted text-muted-foreground border-transparent hover:border-border")}>
-                        {f.charAt(0).toUpperCase() + f.slice(1).replace('_', ' ')}
-                      </button>
-                    ))}
+                  <div className="relative w-full sm:max-w-[180px]">
+                    <select
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring appearance-none"
+                      value={capFilter}
+                      onChange={(e) => setCapFilter(e.target.value as any)}
+                    >
+                      <option value="all">All</option>
+                      <option value="scheduled">Scheduled</option>
+                      <option value="not_scheduled">Not Scheduled</option>
+                      <option value="enabled">Enabled</option>
+                      <option value="disabled">Disabled</option>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 opacity-50 pointer-events-none" />
                   </div>
                   <div className="relative w-full sm:max-w-xs">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -577,13 +463,20 @@ export default function TeamSettingsPage() {
                     <div key={cap.id} className={cn("flex items-center justify-between p-3 border-b last:border-b-0 transition-colors", cap.isEnabled ? "bg-card" : "bg-muted/40 opacity-80")}>
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateCapability(cap.id, { isFavorite: !cap.isFavorite })}
+                            className="text-muted-foreground hover:text-amber-500 transition-colors"
+                          >
+                            <Star className={cn("size-4", cap.isFavorite ? "fill-amber-500 text-amber-500" : "")} />
+                          </button>
                           <span className="font-medium text-sm text-foreground">{cap.name}</span>
                           {cap.scheduleConfig && <span className="text-[9px] uppercase tracking-wider bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">Scheduled</span>}
                         </div>
                         <span className="text-xs text-muted-foreground truncate max-w-lg">{cap.instructions}</span>
                       </div>
                       <div className="flex items-center gap-4">
-                        <button onClick={() => setViewingCap(cap)} className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"><Info className="size-3"/> Details</button>
+                        <Link href={`/teams/${teamId}/settings/capabilities/${cap.id}`} className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"><Info className="size-3"/> Details</Link>
                         <label className="flex items-center cursor-pointer">
                           <div className="relative">
                             <input type="checkbox" className="sr-only" checked={cap.isEnabled} onChange={(e) => updateCapability(cap.id, { isEnabled: e.target.checked })} />
@@ -678,143 +571,6 @@ export default function TeamSettingsPage() {
           )}
         </div>
       </div>
-      
-      {/* Capability Modal Overlay */}
-      {viewingCap && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border shadow-xl rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-            <div className="p-5 border-b flex justify-between items-center bg-muted/20 shrink-0">
-              <h3 className="text-lg font-bold flex items-center gap-2">Edit Capability</h3>
-              <button onClick={() => setViewingCap(null)} className="text-muted-foreground hover:bg-muted p-1 rounded-full"><X className="size-4"/></button>
-            </div>
-            
-            <div className="p-6 space-y-5 overflow-y-auto flex-1 scrollbar-thin">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Name</label>
-                <Input value={viewingCap.name} onChange={e => setViewingCap({...viewingCap, name: e.target.value})} />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-                  <span>Instructions</span>
-                  <span className="text-[10px] lowercase font-normal opacity-70">Describe what this capability does and how it behaves</span>
-                </label>
-                <textarea 
-                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[120px]" 
-                  value={viewingCap.instructions} 
-                  onChange={e => setViewingCap({...viewingCap, instructions: e.target.value})} 
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-                  <span>Inputs</span>
-                  <span className="text-[10px] lowercase font-normal opacity-70">Required/optional inputs and their formats</span>
-                </label>
-                <textarea 
-                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px]" 
-                  value={viewingCap.inputsDescription || ""} 
-                  onChange={e => setViewingCap({...viewingCap, inputsDescription: e.target.value})} 
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex justify-between items-center">
-                  <span>Expected Output</span>
-                  <span className="text-[10px] lowercase font-normal opacity-70">Acceptance criteria or expected result</span>
-                </label>
-                <textarea 
-                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px]" 
-                  value={viewingCap.expectedOutputsDescription || ""} 
-                  onChange={e => setViewingCap({...viewingCap, expectedOutputsDescription: e.target.value})} 
-                />
-              </div>
-
-              <div className="space-y-3 pt-2 border-t">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Who can execute this?</label>
-                <div className="flex gap-2">
-                  <select 
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    value={viewingCap.assignedAgentId ? 'agent' : (viewingCap.assignedRole ? 'role' : 'any')}
-                    onChange={e => {
-                      const val = e.target.value;
-                      if (val === 'any') setViewingCap({...viewingCap, assignedAgentId: null, assignedRole: null});
-                      else if (val === 'agent') setViewingCap({...viewingCap, assignedAgentId: agents[0]?.id || "", assignedRole: null});
-                      else if (val === 'role') {
-                        const uniqueRoles = Array.from(new Set(agents.map(a => a.type)));
-                        setViewingCap({...viewingCap, assignedAgentId: null, assignedRole: uniqueRoles[0] || ""});
-                      }
-                    }}
-                  >
-                    <option value="any">Anyone (First available)</option>
-                    <option value="agent">Specific Agent</option>
-                    <option value="role">Specific Role</option>
-                  </select>
-                  {viewingCap.assignedAgentId !== null && (
-                    <select
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      value={viewingCap.assignedAgentId || ""}
-                      onChange={e => setViewingCap({...viewingCap, assignedAgentId: e.target.value, assignedRole: null})}
-                    >
-                      <option value="" disabled>Select agent...</option>
-                      {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </select>
-                  )}
-                  {viewingCap.assignedRole !== null && (
-                    <select
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      value={viewingCap.assignedRole || ""}
-                      onChange={e => setViewingCap({...viewingCap, assignedRole: e.target.value, assignedAgentId: null})}
-                    >
-                      <option value="" disabled>Select role...</option>
-                      {Array.from(new Set(agents.map(a => a.type))).map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-3 pt-2 border-t">
-                <div className="flex justify-between items-center">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Routine Schedule</label>
-                  <label className="flex items-center cursor-pointer">
-                    <div className="relative">
-                      <input type="checkbox" className="sr-only" checked={!!viewingCap.scheduleConfig} onChange={(e) => setViewingCap({...viewingCap, scheduleConfig: e.target.checked ? { cron: "0 0 * * *" } : null})} />
-                      <div className={cn("block w-8 h-5 rounded-full transition-colors", viewingCap.scheduleConfig ? "bg-primary" : "bg-muted-foreground/30")}></div>
-                      <div className={cn("dot absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform", viewingCap.scheduleConfig && "transform translate-x-3")}></div>
-                    </div>
-                  </label>
-                </div>
-                {viewingCap.scheduleConfig && (
-                  <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-200">
-                    <label className="text-xs text-muted-foreground">Cron Expression</label>
-                    <Input 
-                      placeholder="e.g. 0 0 * * * (Daily at midnight)" 
-                      value={viewingCap.scheduleConfig.cron || ""} 
-                      onChange={e => setViewingCap({...viewingCap, scheduleConfig: { ...viewingCap.scheduleConfig, cron: e.target.value }})} 
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="p-4 border-t bg-muted/10 shrink-0 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setViewingCap(null)}>Cancel</Button>
-              <Button onClick={() => {
-                updateCapability(viewingCap.id, {
-                  name: viewingCap.name,
-                  instructions: viewingCap.instructions,
-                  inputsDescription: viewingCap.inputsDescription,
-                  expectedOutputsDescription: viewingCap.expectedOutputsDescription,
-                  scheduleConfig: viewingCap.scheduleConfig,
-                  assignedAgentId: viewingCap.assignedAgentId,
-                  assignedRole: viewingCap.assignedRole
-                });
-                setViewingCap(null);
-              }}>Save Changes</Button>
-            </div>
-          </div>
-        </div>
-      )}
       
     </div>
   );

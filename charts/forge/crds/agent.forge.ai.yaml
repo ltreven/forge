@@ -62,6 +62,12 @@ spec:
                 operatorName:
                   type: string
                   description: "Name of the human operator this agent works for"
+                teamName:
+                  type: string
+                  description: "Name of the team this agent belongs to"
+                teamId:
+                  type: string
+                  description: "ID of the team this agent belongs to"
                 # ── Credentials ───────────────────────────────────────────────
                 credentialsSecretRef:
                   type: string

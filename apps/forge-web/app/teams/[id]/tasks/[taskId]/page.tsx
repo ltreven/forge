@@ -5,42 +5,19 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Plus,
   Loader2,
   ListTodo,
-  User,
-  Save,
   Trash2,
   MessageSquare,
   Users,
-  Tag
+  Activity,
+  ClipboardList,
+  CheckSquare
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
-import { cn } from "@/lib/utils";
-import { Team, Task, Agent, Comment, TaskType, Label } from "@/lib/types";
-import { StatusIcon, PriorityIcon, Button, CommentsList } from "@/components/shared-ui";
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const STATUS_LABELS: Record<number, string> = {
-  0: "Backlog",
-  1: "To Do",
-  2: "In Progress",
-  3: "In Review",
-  4: "Done",
-  5: "Cancelled",
-};
-
-const PRIORITY_LABELS: Record<number, string> = {
-  0: "None",
-  1: "Low",
-  2: "Medium",
-  3: "High",
-  4: "Urgent",
-};
-
-// ── Main Page ─────────────────────────────────────────────────────────────────
+import { Team, Task, Agent, Comment } from "@/lib/types";
+import { Button, CommentsList } from "@/components/shared-ui";
 
 export default function TaskPage() {
   const { token, isLoading: authLoading } = useAuth();
@@ -51,25 +28,13 @@ export default function TaskPage() {
   const taskId = String(params.taskId);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [team, setTeam]         = useState<Team | null>(null);
   const [task, setTask]         = useState<Task | null>(null);
-  const [subTasks, setSubTasks] = useState<Task[]>([]);
   const [agents, setAgents]     = useState<Agent[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
-  const [teamLabels, setTeamLabels] = useState<Label[]>([]);
+
   const [newComment, setNewComment] = useState("");
   const [isPostingComment, setIsPostingComment] = useState(false);
-
-  // Form state
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState(0);
-  const [priority, setPriority] = useState(0);
-  const [assignedToId, setAssignedToId] = useState<string | null>(null);
-  const [taskTypeId, setTaskTypeId] = useState<string | null>(null);
-  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
 
   const headers = useCallback((): HeadersInit => ({
     "Content-Type": "application/json",
@@ -83,13 +48,10 @@ export default function TaskPage() {
     Promise.all([
       fetch(`${API_BASE}/teams/${teamId}`, { headers: headers() }),
       fetch(`${API_BASE}/tasks/${taskId}`, { headers: headers() }),
-      fetch(`${API_BASE}/tasks/by-team/${teamId}`, { headers: headers() }),
       fetch(`${API_BASE}/agents?teamId=${teamId}`, { headers: headers() }),
       fetch(`${API_BASE}/tasks/${taskId}/comments`, { headers: headers() }),
-      fetch(`${API_BASE}/teams/${teamId}/task-types`, { headers: headers() }),
-      fetch(`${API_BASE}/teams/${teamId}/labels`, { headers: headers() }),
     ])
-      .then(async ([teamRes, taskRes, allTasksRes, agentsRes, commentsRes, typesRes, labelsRes]) => {
+      .then(async ([teamRes, taskRes, agentsRes, commentsRes]) => {
         if (!taskRes.ok) {
           toast.error("Task not found.");
           router.replace(`/teams/${teamId}`);
@@ -97,31 +59,13 @@ export default function TaskPage() {
         }
         const tm: Team = (await teamRes.json()).data;
         const t: Task = (await taskRes.json()).data;
-        const all: Task[] = (await allTasksRes.json()).data ?? [];
         const a: Agent[] = (await agentsRes.json()).data ?? [];
         const c: Comment[] = commentsRes.ok ? (await commentsRes.json()).data ?? [] : [];
-        const types: TaskType[] = typesRes.ok ? (await typesRes.json()).data ?? [] : [];
-        const labs: Label[] = labelsRes.ok ? (await labelsRes.json()).data ?? [] : [];
 
         setTeam(tm);
         setTask(t);
-        setSubTasks(all.filter(x => x.parentTaskId === t.id));
         setAgents(a);
         setComments(c);
-        setTaskTypes(types);
-        setTeamLabels(labs);
-        
-        setTitle(t.title);
-        setDescription(t.descriptionMarkdown || "");
-        setStatus(t.status);
-        setPriority(t.priority);
-        setAssignedToId(t.assignedToId || null);
-        setTaskTypeId(t.taskTypeId || null);
-        
-        // TODO: The backend tasks endpoint doesn't return joined labels yet.
-        // We will assume t.labels exists if we updated the backend to return it.
-        // For now, if it's there, map it, otherwise empty array.
-        setSelectedLabels(t.labels || []);
       })
       .catch((err) => {
         console.error("Failed to load task data:", err);
@@ -133,35 +77,6 @@ export default function TaskPage() {
   useEffect(() => {
     if (!authLoading) loadData();
   }, [authLoading, loadData]);
-
-  const handleSaveTask = async () => {
-    if (!task || isSaving) return;
-    setIsSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
-        method: "PUT",
-        headers: headers(),
-        body: JSON.stringify({
-          title,
-          descriptionMarkdown: description,
-          status,
-          priority,
-          assignedToId,
-          taskTypeId,
-          labels: selectedLabels
-        }),
-      });
-
-      if (!res.ok) throw new Error();
-      const updated = (await res.json()).data;
-      setTask(updated);
-      toast.success("Task updated successfully");
-    } catch {
-      toast.error("Failed to save task changes");
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleDeleteTask = async () => {
     if (!task) return;
@@ -177,32 +92,6 @@ export default function TaskPage() {
       router.replace(`/teams/${teamId}`);
     } catch {
       toast.error("Failed to delete task");
-    }
-  };
-
-  const handleCreateSubTask = async () => {
-    const subTitle = prompt("Sub-task title:");
-    if (!subTitle) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/tasks`, {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({
-          teamId,
-          title: subTitle,
-          parentTaskId: taskId,
-          status: 1, 
-          priority: 1
-        }),
-      });
-
-      if (!res.ok) throw new Error();
-      const newSub = (await res.json()).data;
-      setSubTasks(p => [newSub, ...p]);
-      toast.success("Sub-task created");
-    } catch {
-      toast.error("Failed to create sub-task.");
     }
   };
 
@@ -242,12 +131,6 @@ export default function TaskPage() {
     }
   };
 
-  const toggleLabel = (labelId: string) => {
-    setSelectedLabels(prev => 
-      prev.includes(labelId) ? prev.filter(id => id !== labelId) : [...prev, labelId]
-    );
-  };
-
   if (authLoading || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -258,7 +141,7 @@ export default function TaskPage() {
 
   if (!task || !team) return null;
 
-  const currentType = taskTypes.find(t => t.id === taskTypeId);
+  const assignedAgent = agents.find(a => a.id === task.assignedToId);
 
   return (
     <div className="min-h-screen bg-background">
@@ -270,15 +153,12 @@ export default function TaskPage() {
               {team.name}
             </Link>
             <div className="h-4 w-px bg-border" />
-            <span className="text-[10px] font-mono font-medium text-muted-foreground">{task.identifier}</span>
+            <span className="text-[10px] font-mono font-medium text-muted-foreground">ID: {task.id.substring(0, 8)}</span>
           </div>
           
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" className="h-8 gap-2 border-destructive/20 text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={handleDeleteTask}>
               <Trash2 className="size-3.5" /> Delete
-            </Button>
-            <Button variant="primary" size="sm" className="h-8 gap-2" onClick={handleSaveTask} disabled={isSaving}>
-              {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />} Save Changes
             </Button>
           </div>
         </div>
@@ -286,44 +166,50 @@ export default function TaskPage() {
 
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-8">
+          <div className="lg:col-span-2 space-y-10">
             <div className="space-y-4">
-              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-transparent text-3xl font-bold tracking-tight outline-none focus:ring-0" />
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest"><ListTodo className="size-3.5" /> Description</div>
-                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="min-h-[250px] w-full resize-none rounded-xl border border-border bg-card p-4 text-sm outline-none transition-all focus:border-primary/50" />
-              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">{task.title}</h1>
             </div>
 
-            <div className="pt-10 space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-                  <ListTodo className="size-3.5" /> Subtasks
+            {task.plan && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest"><ListTodo className="size-3.5" /> Plan</div>
+                <div className="rounded-xl border border-border bg-card p-5 text-sm whitespace-pre-wrap leading-relaxed">
+                  {task.plan}
                 </div>
-                <Button variant="outline" size="sm" onClick={handleCreateSubTask} className="h-7 text-xs">
-                  <Plus className="size-3.5 mr-1" /> Add Subtask
-                </Button>
               </div>
-              
-              {subTasks.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                  No subtasks yet. Break this work down into smaller pieces.
+            )}
+
+            {task.taskList && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest"><CheckSquare className="size-3.5" /> Task List</div>
+                <div className="rounded-xl border border-border bg-card p-5 text-sm whitespace-pre-wrap leading-relaxed font-mono">
+                  {task.taskList}
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {subTasks.map(st => (
-                    <Link key={st.id} href={`/teams/${teamId}/tasks/${st.identifier}`} className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/50 group">
-                      <StatusIcon status={st.status} className="size-4 shrink-0" />
-                      <div className="flex-1 min-w-0 flex items-center gap-2">
-                        <span className="text-xs font-mono font-medium text-muted-foreground shrink-0">{st.identifier}</span>
-                        <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{st.title}</p>
-                      </div>
-                      <PriorityIcon priority={st.priority} className="size-3.5 shrink-0 opacity-50" />
-                    </Link>
+              </div>
+            )}
+
+            {task.executionLog && task.executionLog.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest"><Activity className="size-3.5" /> Execution Log</div>
+                <div className="rounded-xl border border-border bg-card p-5 text-sm whitespace-pre-wrap leading-relaxed bg-zinc-950 text-zinc-300 font-mono overflow-x-auto">
+                  {task.executionLog.map((log, idx) => (
+                    <div key={idx} className="border-b border-white/5 pb-3 mb-3 last:border-0 last:pb-0 last:mb-0">
+                      {log}
+                    </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {task.workSummary && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest"><ClipboardList className="size-3.5" /> Work Summary</div>
+                <div className="rounded-xl border border-border bg-card p-5 text-sm whitespace-pre-wrap leading-relaxed bg-primary/5 border-primary/20">
+                  {task.workSummary}
+                </div>
+              </div>
+            )}
 
             <div className="pt-10 space-y-6">
               <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest"><MessageSquare className="size-3.5" /> Comments</div>
@@ -340,60 +226,16 @@ export default function TaskPage() {
               <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Properties</h3>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">Type</label>
-                  <select value={taskTypeId || ""} onChange={(e) => setTaskTypeId(e.target.value || null)} className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer max-w-[120px]">
-                    <option value="">No Type</option>
-                    {taskTypes.map(t => (
-                      <option key={t.id} value={t.id}>{t.emoji} {t.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">Status</label>
-                  <select value={status} onChange={(e) => setStatus(Number(e.target.value))} className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer">
-                    {Object.entries(STATUS_LABELS).map(([val, label]) => (
-                      <option key={val} value={val}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">Priority</label>
-                  <select value={priority} onChange={(e) => setPriority(Number(e.target.value))} className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer">
-                    {Object.entries(PRIORITY_LABELS).map(([val, label]) => (
-                      <option key={val} value={val}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="h-px bg-border my-2" />
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">Assignee</label>
-                  <select value={assignedToId || ""} onChange={(e) => setAssignedToId(e.target.value || null)} className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer max-w-[120px]">
-                    <option value="">Unassigned</option>
-                    {agents.map(a => (
-                      <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="h-px bg-border my-2" />
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Labels</label>
-                  <div className="flex flex-wrap gap-2">
-                    {teamLabels.map(label => {
-                      const isActive = selectedLabels.includes(label.id);
-                      return (
-                        <button
-                          key={label.id}
-                          onClick={() => toggleLabel(label.id)}
-                          className={cn(
-                            "px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all border",
-                            isActive ? "border-transparent text-white" : "border-border text-muted-foreground hover:bg-muted"
-                          )}
-                          style={isActive ? { backgroundColor: label.color } : {}}
-                        >
-                          {label.name}
-                        </button>
-                      );
-                    })}
+                  <label className="text-xs font-medium text-muted-foreground">Worked On By</label>
+                  <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    {assignedAgent ? (
+                      <>
+                        <span>{assignedAgent.icon}</span>
+                        <span>{assignedAgent.name}</span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">Unassigned</span>
+                    )}
                   </div>
                 </div>
               </div>

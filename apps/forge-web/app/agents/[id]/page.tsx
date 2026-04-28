@@ -50,21 +50,8 @@ function ChatArea({ agentId, agentName, agentIcon, agentColor, userName, token, 
   }), [token]);
 
   useEffect(() => {
-    setIsInitializing(true);
-    fetch(`${API_BASE}/conversations?agentId=${agentId}`, { headers: headers() })
-      .then(r => r.json())
-      .then(d => {
-        const latest = d.data?.[0];
-        if (latest) {
-          setConv(latest);
-          return fetch(`${API_BASE}/conversations/${latest.id}/messages`, { headers: headers() }).then(r => r.json());
-        }
-        return { data: [] };
-      })
-      .then(d => setMessages(d.data || []))
-      .catch(() => {})
-      .finally(() => setIsInitializing(false));
-  }, [agentId, headers]);
+    setIsInitializing(false);
+  }, []);
 
   useEffect(() => {
     if (newChatTrigger > 0) {

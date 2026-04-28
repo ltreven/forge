@@ -81,6 +81,7 @@ func AgentDeployment(cr *forgev1alpha1.Agent, ownerRef *metav1.OwnerReference, a
 		{Name: "AGENT_NAME", Value: cr.Spec.AgentName},
 		{Name: "AGENT_OPERATOR_NAME", Value: cr.Spec.OperatorName},
 		{Name: "TEAM_NAME", Value: cr.Spec.TeamName},
+		{Name: "TEAM_ID", Value: cr.Spec.TeamId},
 		// AGENT_ID is needed by the consumer sidecar to bind the correct queue.
 		{Name: "AGENT_ID", Value: cr.Name},
 	}

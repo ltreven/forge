@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerTaskTools } from "./tools/tasks";
 import { registerTeamTools } from "./tools/teams";
 import { registerRequestTools } from "./tools/requests";
+import { registerCapabilityTools } from "./tools/capabilities";
 
 export function createMcpServerForActor(actor: any, authHeader: string) {
   const server = new McpServer({
@@ -13,6 +14,7 @@ export function createMcpServerForActor(actor: any, authHeader: string) {
   registerTaskTools(server, actor, authHeader);
   registerTeamTools(server, actor, authHeader);
   registerRequestTools(server, actor, authHeader);
+  registerCapabilityTools(server, actor, authHeader);
 
   return server;
 }

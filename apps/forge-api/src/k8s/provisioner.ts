@@ -129,6 +129,7 @@ export async function applyForgeAgentCR(
       profile:              agent.type,
       operatorName:         String(metadata.operatorName ?? ""),
       teamName:             teamName,
+      teamId:               agent.teamId,
       credentialsSecretRef: `${agent.id}-creds`,
       model: {
         provider: String(metadata.modelProvider ?? process.env.PLATFORM_MODEL_PROVIDER ?? "openai"),

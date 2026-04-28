@@ -8,11 +8,13 @@ export function registerTaskTools(server: McpServer, actor: any, authHeader: str
     "list_tasks",
     "List all tasks for a team",
     {
-      teamId: z.string().describe("The ID of the team"),
+      teamId: z.string().optional().describe("The ID of the team (Optional, defaults to your own team)"),
     },
     async ({ teamId }) => {
       try {
-        const data = await internalFetch(`/tasks/by-team/${teamId}`, authHeader);
+        const resolvedTeamId = teamId || actor?.teamId;
+        if (!resolvedTeamId) throw new Error("teamId is required but could not be resolved from your context.");
+        const data = await internalFetch(`/tasks/by-team/${resolvedTeamId}`, authHeader);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       } catch (err: any) {
         return { isError: true, content: [{ type: "text", text: err.message }] };
@@ -20,21 +22,6 @@ export function registerTaskTools(server: McpServer, actor: any, authHeader: str
     }
   );
 
-  server.tool(
-    "list_subtasks",
-    "List all subtasks of a specific task",
-    {
-      idOrIdentifier: z.string().describe("The ID or human-readable identifier of the parent task"),
-    },
-    async ({ idOrIdentifier }) => {
-      try {
-        const data = await internalFetch(`/tasks/${idOrIdentifier}/subtasks`, authHeader);
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-      } catch (err: any) {
-        return { isError: true, content: [{ type: "text", text: err.message }] };
-      }
-    }
-  );
 
   server.tool(
     "get_task",
@@ -56,20 +43,24 @@ export function registerTaskTools(server: McpServer, actor: any, authHeader: str
     "create_task",
     "Create a new task for a team",
     {
-      teamId: z.string().describe("The ID of the team"),
+      teamId: z.string().optional().describe("The ID of the team (Optional, defaults to your own team)"),
       title: z.string().describe("The title of the task"),
-      shortSummary: z.string().optional().describe("A short summary of the task"),
-      descriptionMarkdown: z.string().optional().describe("The task description in markdown"),
-      status: z.number().optional().describe("0: Backlog, 1: To Do, 2: In Progress, 3: In Review, 4: Done, 5: Cancelled"),
-      priority: z.number().optional().describe("0: None, 1: Low, 2: Medium, 3: High, 4: Urgent"),
+      plan: z.string().optional().describe("The agent's plan to accomplish the task"),
+      taskList: z.string().optional().describe("A markdown or text list of steps/to-dos to follow during execution"),
+      executionLog: z.array(z.string()).optional().describe("Array of log entries describing decisions and actions taken during execution"),
+      workSummary: z.string().optional().describe("Final summary of what was done"),
       assignedToId: z.string().optional().describe("Agent ID or User ID assigned to the task"),
-      parentTaskId: z.string().optional().describe("ID of the parent task if this is a subtask"),
+      requestId: z.string().optional().describe("ID of the request this task is fulfilling"),
     },
     async (params) => {
       try {
+        const resolvedTeamId = params.teamId || actor?.teamId;
+        if (!resolvedTeamId) throw new Error("teamId is required but could not be resolved from your context.");
+        
+        const payload = { ...params, teamId: resolvedTeamId };
         const data = await internalFetch(`/tasks`, authHeader, {
           method: "POST",
-          body: JSON.stringify(params),
+          body: JSON.stringify(payload),
         });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       } catch (err: any) {
@@ -84,11 +75,12 @@ export function registerTaskTools(server: McpServer, actor: any, authHeader: str
     {
       idOrIdentifier: z.string().describe("The ID or human-readable identifier of the task"),
       title: z.string().optional(),
-      shortSummary: z.string().optional(),
-      descriptionMarkdown: z.string().optional(),
-      status: z.number().optional(),
-      priority: z.number().optional(),
+      plan: z.string().optional(),
+      taskList: z.string().optional(),
+      executionLog: z.array(z.string()).optional(),
+      workSummary: z.string().optional(),
       assignedToId: z.string().optional(),
+      requestId: z.string().optional(),
     },
     async ({ idOrIdentifier, ...body }) => {
       try {

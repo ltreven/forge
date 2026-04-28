@@ -36,6 +36,11 @@ type AgentSpec struct {
 	// +optional
 	TeamName string `json:"teamName,omitempty"`
 
+	// ID of the team this agent belongs to.
+	// Injected as TEAM_ID env var and used in profile template files.
+	// +optional
+	TeamId string `json:"teamId,omitempty"`
+
 	// Name of the Secret in the same namespace containing all agent credentials.
 	CredentialsSecretRef string `json:"credentialsSecretRef"`
 

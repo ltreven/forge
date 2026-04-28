@@ -25,36 +25,16 @@ export interface Team {
   createdAt: string;
 }
 
-export interface TaskType {
-  id: string;
-  teamId: string;
-  name: string;
-  emoji: string;
-  backgroundColor: string;
-  isDefault: boolean;
-}
 
-export interface Label {
-  id: string;
-  teamId: string;
-  name: string;
-  color: string;
-}
 
 export interface Task {
   id: string;
-  number: number;
-  identifier: string;
-  taskTypeId?: string | null;
   title: string;
-  parentTaskId?: string | null;
-  shortSummary?: string | null;
-  descriptionMarkdown?: string | null;
-  descriptionRichText?: any | null;
-  status: number;
-  priority: number;
+  plan?: string | null;
+  taskList?: string | null;
+  executionLog?: string[] | null;
+  workSummary?: string | null;
   assignedToId?: string | null;
-  labels?: string[]; // we can store label IDs here for simplicity in UI
   updatedAt: string;
 }
 
@@ -62,6 +42,8 @@ export type RequestStatus = "created" | "processing" | "responded";
 
 export interface TeamRequest {
   id: string;
+  number: number;
+  identifier: string;
   teamId: string;
   requesterId: string;
   requesterType: "human" | "agent";

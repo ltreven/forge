@@ -1,26 +1,32 @@
 import { db } from "../db/client";
-import { teamActivities, type NewTeamActivity } from "../db/schema";
+import { activities, type NewActivity } from "../db/schema";
 
-export async function logActivity(
-  teamId: string,
-  actorId: string,
-  actorType: "human" | "agent",
-  type: NewTeamActivity["type"],
-  entityType: string,
-  entityId: string,
-  payload?: any
-) {
+export async function logActivity(params: {
+  teamId: string;
+  requestId?: string;
+  taskId?: string;
+  actorId: string;
+  actorType: "human" | "agent";
+  changeType: "data" | "status" | "relationship" | "creation" | "deletion";
+
+  oldState?: any;
+  newState?: any;
+  activityTitle: string;
+}) {
   try {
-    await db.insert(teamActivities).values({
-      teamId,
-      actorId,
-      actorType,
-      type,
-      entityType,
-      entityId,
-      payload: payload || null,
+    await db.insert(activities).values({
+      teamId: params.teamId,
+      requestId: params.requestId,
+      taskId: params.taskId,
+      actorId: params.actorId,
+      actorType: params.actorType,
+      changeType: params.changeType,
+
+      oldState: params.oldState || null,
+      newState: params.newState || null,
+      activityTitle: params.activityTitle,
     });
   } catch (error) {
-    console.error(`Failed to log activity [${type}] for entity [${entityType}:${entityId}]:`, error);
+    console.error(`Failed to log activity [${params.changeType}] for request/task:`, error);
   }
 }

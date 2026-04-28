@@ -4,15 +4,23 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, Bot, FolderKanban, Plus, Activity, AlertCircle, CheckCircle2, ChevronRight, Crown
+  ArrowLeft, Bot, FolderKanban, Plus, Activity, AlertCircle, CheckCircle2, ChevronRight, ChevronDown, Crown, ListTodo, Filter
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Team, Task, Agent, HealthStatus } from "@/lib/types";
-import { StatusIcon, PriorityIcon } from "@/components/shared-ui";
+
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuCheckboxItem,
+} from "@/components/ui/dropdown-menu";
 
 function computeHealth(a: Agent): HealthStatus {
   const k8s = a.k8sStatus;
@@ -21,8 +29,117 @@ function computeHealth(a: Agent): HealthStatus {
   return "starting";
 }
 
+function RequestRow({ req, teamId, level = 0 }: { req: any, teamId: string, level?: number }) {
+  const { token } = useAuth();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [subRequests, setSubRequests] = useState<any[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleExpand = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!isExpanded && !hasLoaded) {
+      setIsLoading(true);
+      const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+      try {
+        const [tasksRes, reqsRes] = await Promise.all([
+          fetch(`${API_BASE}/teams/${teamId}/requests/${req.identifier}/tasks`, { headers }),
+          fetch(`${API_BASE}/teams/${teamId}/requests?parentRequestId=${req.id}`, { headers })
+        ]);
+        if (tasksRes.ok) setTasks((await tasksRes.json()).data ?? []);
+        if (reqsRes.ok) setSubRequests((await reqsRes.json()).data ?? []);
+        setHasLoaded(true);
+      } catch (err) {
+        console.error("Failed to load children", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    setIsExpanded(!isExpanded);
+  };
+
+  const statusLabel = req.status === "completed" 
+    ? (req.resolution === "success" ? "ok" : "failed") 
+    : req.status === "open" ? "created" : req.status.replace("_", " ");
+
+  const statusColorClass = req.status === "draft" ? "bg-muted text-muted-foreground" :
+    req.status === "open" ? "bg-blue-500/10 text-blue-500" :
+    req.status === "in_progress" ? "bg-amber-500/10 text-amber-500" :
+    req.status === "waiting_user" ? "bg-purple-500/10 text-purple-500" :
+    req.status === "completed" ? (
+      req.resolution === "success" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+    ) :
+    req.status === "cancelled" ? "bg-gray-500/10 text-gray-500" :
+    "bg-emerald-500/10 text-emerald-500";
+
+  return (
+    <div className="flex flex-col border-b last:border-0 border-border/50 w-full">
+      <div 
+        className={cn("flex flex-col sm:flex-row sm:items-center gap-3 p-3 hover:bg-muted/30 transition-colors group", level > 0 && "bg-muted/5")} 
+        style={{ paddingLeft: `${1 + level * 1.5}rem`, paddingRight: '1rem' }}
+      >
+        <button 
+          onClick={handleExpand} 
+          className="flex size-6 items-center justify-center rounded-md hover:bg-muted text-muted-foreground shrink-0 focus:outline-none"
+        >
+          {isLoading ? (
+            <div className="size-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          ) : isExpanded ? (
+            <ChevronDown className="size-4" />
+          ) : (
+            <ChevronRight className="size-4" />
+          )}
+        </button>
+        <Link href={req.status === 'draft' ? `/teams/${teamId}/requests/new?requestId=${req.identifier}` : `/teams/${teamId}/requests/${req.identifier}`} className="flex items-center gap-3 min-w-0 flex-1 hover:underline">
+          <span className="text-xs font-mono text-muted-foreground">{req.identifier}</span>
+          <span className="text-sm font-medium truncate">{req.title}</span>
+        </Link>
+        <div className="flex items-center gap-4 shrink-0 sm:ml-auto">
+          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium capitalize", statusColorClass)}>
+            {statusLabel}
+          </span>
+        </div>
+      </div>
+      
+      {isExpanded && (
+        <div className="flex flex-col w-full">
+          {(!hasLoaded && isLoading) && (
+            <div className="p-3 text-xs text-muted-foreground text-center" style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}>
+              Loading...
+            </div>
+          )}
+          {hasLoaded && tasks.length === 0 && subRequests.length === 0 && (
+            <div className="p-3 text-xs text-muted-foreground/50 italic" style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}>
+              No tasks or nested requests.
+            </div>
+          )}
+          {tasks.map(task => (
+            <Link 
+              key={task.id} 
+              href={`/teams/${teamId}/tasks/${task.id}`} 
+              className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 hover:bg-muted/30 transition-colors border-b border-border/30 last:border-0" 
+              style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem`, paddingRight: '1rem' }}
+            >
+              <div className="flex size-6 items-center justify-center shrink-0">
+                <FolderKanban className="size-3.5 text-muted-foreground/70" />
+              </div>
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <span className="text-sm text-muted-foreground font-medium truncate">{task.title}</span>
+              </div>
+            </Link>
+          ))}
+          {subRequests.map(subReq => (
+            <RequestRow key={subReq.id} req={subReq} teamId={teamId} level={level + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TeamDetailPage() {
-  const { token, isLoading: authLoading } = useAuth();
+  const { token, user, isLoading: authLoading } = useAuth();
   const params = useParams();
   const router = useRouter();
   const teamId = String(params.id);
@@ -30,10 +147,32 @@ export default function TeamDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [team, setTeam] = useState<Team | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
-  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
-  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [capabilities, setCapabilities] = useState<any[]>([]);
+
+  // Filters
+  const [showOnlyMine, setShowOnlyMine] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string[]>(["draft", "open", "in_progress", "waiting_user"]);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedMine = localStorage.getItem(`forge_team_${teamId}_showOnlyMine`);
+      if (savedMine !== null) setShowOnlyMine(savedMine === "true");
+      const savedStatus = localStorage.getItem(`forge_team_${teamId}_statusFilter`);
+      if (savedStatus !== null) setStatusFilter(JSON.parse(savedStatus));
+    } catch (e) {}
+    setFiltersLoaded(true);
+  }, [teamId]);
+
+  useEffect(() => {
+    if (!filtersLoaded) return;
+    try {
+      localStorage.setItem(`forge_team_${teamId}_showOnlyMine`, String(showOnlyMine));
+      localStorage.setItem(`forge_team_${teamId}_statusFilter`, JSON.stringify(statusFilter));
+    } catch (e) {}
+  }, [teamId, showOnlyMine, statusFilter, filtersLoaded]);
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -70,9 +209,10 @@ export default function TeamDetailPage() {
       fetch(`${API_BASE}/teams/${teamId}`, { headers }),
       fetchAgents(),
       fetchActivities(),
-      fetch(`${API_BASE}/tasks/by-team/${teamId}`, { headers }),
+      fetch(`${API_BASE}/teams/${teamId}/requests?parentRequestId=null`, { headers }),
+      fetch(`${API_BASE}/teams/${teamId}/capabilities`, { headers }),
     ])
-      .then(async ([teamRes, _a, _act, tasksRes]) => {
+      .then(async ([teamRes, _a, _act, requestsRes, capsRes]) => {
         if (teamRes && teamRes.ok) {
           const d = await teamRes.json();
           setTeam(d.data);
@@ -81,10 +221,8 @@ export default function TeamDetailPage() {
           router.replace("/teams");
         }
         
-        if (tasksRes && tasksRes.ok) {
-          const d = await tasksRes.json();
-          setTasks(d.data ?? []);
-        }
+        if (requestsRes && requestsRes.ok) setRequests((await requestsRes.json()).data ?? []);
+        if (capsRes && capsRes.ok) setCapabilities((await capsRes.json()).data ?? []);
       })
       .finally(() => setIsLoading(false));
 
@@ -94,22 +232,6 @@ export default function TeamDetailPage() {
     }, 5000);
     return () => clearInterval(intervalId);
   }, [authLoading]);
-
-  const submitNewTask = async (title: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/tasks`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ teamId, title, status: 1, priority: 1 }),
-      });
-      if (!res.ok) throw new Error();
-      const newTask = (await res.json()).data;
-      setTasks(p => [newTask, ...p]);
-      toast.success("Task created");
-    } catch { toast.error("Failed to create task"); }
-    setIsTaskDialogOpen(false);
-    setNewTaskTitle("");
-  };
 
   if (authLoading || isLoading) {
     return (
@@ -123,7 +245,21 @@ export default function TeamDetailPage() {
 
   const teamLead = agents.find((a) => a.type === "team_lead");
   const otherAgents = agents.filter((a) => a.type !== "team_lead");
-  const activeTasks = tasks.filter(t => t.status >= 1 && t.status <= 4).sort((a,b) => b.priority - a.priority);
+  const openedRequests = requests.filter(r => r.status !== "completed" && r.status !== "cancelled");
+  
+  const displayRequests = requests.filter(r => {
+    if (showOnlyMine && r.requesterUserId !== user?.id) return false;
+    if (!statusFilter.includes(r.status)) return false;
+    return true;
+  });
+
+  const favoriteCapabilities = capabilities.filter(c => c.isFavorite);
+
+  const toggleStatusFilter = (status: string) => {
+    setStatusFilter(prev => 
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-12">
@@ -157,24 +293,25 @@ export default function TeamDetailPage() {
                 New Request
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => { setNewTaskTitle("[Bug] "); setIsTaskDialogOpen(true); }}>
-                <AlertCircle className="mr-2 size-4" />
-                Bug Report
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem asChild>
+                <Link href={`/teams/${teamId}/requests/new`} className="cursor-pointer font-medium">
+                  Ask the team anything
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { setNewTaskTitle("[Feature] "); setIsTaskDialogOpen(true); }}>
-                <Plus className="mr-2 size-4" />
-                Feature Request
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { setNewTaskTitle("[Investigate] "); setIsTaskDialogOpen(true); }}>
-                <Activity className="mr-2 size-4" />
-                Investigation
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => { setNewTaskTitle(""); setIsTaskDialogOpen(true); }}>
-                <FolderKanban className="mr-2 size-4" />
-                Generic Task
-              </DropdownMenuItem>
+              {favoriteCapabilities.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider">Favorites</DropdownMenuLabel>
+                  {favoriteCapabilities.map(cap => (
+                    <DropdownMenuItem key={cap.id} asChild>
+                      <Link href={`/teams/${teamId}/requests/new?capabilityId=${cap.id}`} className="cursor-pointer">
+                        {cap.name}
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -195,9 +332,9 @@ export default function TeamDetailPage() {
             </div>
           </div>
           <div className="flex flex-col gap-1 p-4 rounded-lg bg-muted/50 border border-border/50">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Active Tasks</span>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Opened Requests</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold">{activeTasks.length}</span>
+              <span className="text-2xl font-bold">{openedRequests.length}</span>
               <span className="text-xs text-muted-foreground">in pipeline</span>
             </div>
           </div>
@@ -216,35 +353,77 @@ export default function TeamDetailPage() {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Left Column - Team Work */}
         <div className="lg:col-span-2 space-y-6">
+          
           <section className="rounded-xl border bg-card overflow-hidden">
-            <div className="border-b px-5 py-4 flex items-center justify-between bg-muted/20">
+            <div className="border-b px-5 py-3 flex items-center justify-between bg-muted/20">
               <div className="flex items-center gap-2">
-                <FolderKanban className="size-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Team Work</h3>
+                <ListTodo className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Requests</h3>
               </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground">
+                    <Filter className="size-3.5" />
+                    Filters
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Ownership</DropdownMenuLabel>
+                  <DropdownMenuCheckboxItem 
+                    checked={showOnlyMine} 
+                    onCheckedChange={setShowOnlyMine}
+                  >
+                    Only my requests
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Status</DropdownMenuLabel>
+                  <DropdownMenuCheckboxItem 
+                    checked={statusFilter.includes("draft")} 
+                    onCheckedChange={() => toggleStatusFilter("draft")}
+                  >
+                    Draft
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem 
+                    checked={statusFilter.includes("open")} 
+                    onCheckedChange={() => toggleStatusFilter("open")}
+                  >
+                    Created
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem 
+                    checked={statusFilter.includes("in_progress")} 
+                    onCheckedChange={() => toggleStatusFilter("in_progress")}
+                  >
+                    In Progress
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem 
+                    checked={statusFilter.includes("waiting_user")} 
+                    onCheckedChange={() => toggleStatusFilter("waiting_user")}
+                  >
+                    Waiting User
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem 
+                    checked={statusFilter.includes("completed")} 
+                    onCheckedChange={() => toggleStatusFilter("completed")}
+                  >
+                    Completed
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem 
+                    checked={statusFilter.includes("cancelled")} 
+                    onCheckedChange={() => toggleStatusFilter("cancelled")}
+                  >
+                    Cancelled
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <div className="divide-y">
-              {activeTasks.length === 0 ? (
+            <div className="flex flex-col w-full">
+              {displayRequests.length === 0 ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">
-                  No active tasks in the pipeline.
+                  No requests.
                 </div>
               ) : (
-                activeTasks.map(task => (
-                  <Link 
-                    key={task.id} 
-                    href={`/teams/${teamId}/tasks/${task.identifier}`}
-                    className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <span className="text-xs font-mono text-muted-foreground">{task.identifier}</span>
-                      <StatusIcon status={task.status} />
-                      <span className="text-sm font-medium truncate">{task.title}</span>
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0 sm:ml-auto">
-                      <PriorityIcon priority={task.priority} />
-                      <ChevronRight className="size-4 text-muted-foreground" />
-                    </div>
-                  </Link>
+                displayRequests.map(req => (
+                  <RequestRow key={req.id} req={req} teamId={teamId} />
                 ))
               )}
             </div>
@@ -309,7 +488,7 @@ export default function TeamDetailPage() {
                 activities.slice(0, 5).map((act) => {
                   const isHuman = act.actorType === "human";
                   const agent = isHuman ? null : agents.find((a) => a.id === act.actorId);
-                  const title = act.payload?.title || act.entityId.substring(0, 8);
+                  const title = act.activityTitle || act.payload?.title || act.entityId?.substring(0, 8) || act.requestId?.substring(0, 8) || act.taskId?.substring(0, 8) || "an item";
                   
                   return (
                     <div key={act.id} className="flex gap-3 items-start">
@@ -319,8 +498,14 @@ export default function TeamDetailPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-xs leading-tight">
                           <span className="font-medium text-foreground">{isHuman ? "You" : agent?.name || "Agent"}</span>
-                          <span className="text-muted-foreground"> updated </span>
-                          <span className="font-medium text-foreground">{title}</span>
+                          {act.activityTitle ? (
+                            <span className="text-muted-foreground"> {act.activityTitle}</span>
+                          ) : (
+                            <>
+                              <span className="text-muted-foreground"> updated </span>
+                              <span className="font-medium text-foreground">{title}</span>
+                            </>
+                          )}
                         </p>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           {new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -334,32 +519,6 @@ export default function TeamDetailPage() {
           </section>
         </div>
       </div>
-
-      {isTaskDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-background p-6 shadow-lg border">
-            <h3 className="text-lg font-semibold mb-4">Create New Task</h3>
-            <input 
-              autoFocus
-              className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Task title..."
-              value={newTaskTitle}
-              onChange={e => setNewTaskTitle(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter" && newTaskTitle.trim()) {
-                  submitNewTask(newTaskTitle);
-                } else if (e.key === "Escape") {
-                  setIsTaskDialogOpen(false);
-                }
-              }}
-            />
-            <div className="mt-6 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setIsTaskDialogOpen(false)}>Cancel</Button>
-              <Button onClick={() => newTaskTitle.trim() && submitNewTask(newTaskTitle)}>Create Task</Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

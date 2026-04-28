@@ -8,13 +8,15 @@ export function registerRequestTools(server: McpServer, actor: any, authHeader: 
     "list_requests",
     "List team requests (work requests for agents or team members)",
     {
-      teamId: z.string().describe("The ID of the team"),
+      teamId: z.string().optional().describe("The ID of the team (Optional, defaults to your own team)"),
       targetAgentId: z.string().uuid().optional().describe("Filter by the target agent ID (e.g., your own UUID) to only see your requests"),
-      status: z.string().optional().describe("Filter by status (e.g. 'created', 'processing', 'responded')"),
+      status: z.string().optional().describe("Filter by status (e.g. 'open', 'in_progress', 'completed')"),
     },
     async ({ teamId, targetAgentId, status }) => {
       try {
-        let url = `/teams/${teamId}/requests?`;
+        const resolvedTeamId = teamId || actor?.teamId;
+        if (!resolvedTeamId) throw new Error("teamId is required but could not be resolved from your context.");
+        let url = `/teams/${resolvedTeamId}/requests?`;
         if (status) url += `status=${status}&`;
         if (targetAgentId) url += `targetAgentId=${targetAgentId}&`;
         const data = await internalFetch(url, authHeader);
@@ -29,12 +31,14 @@ export function registerRequestTools(server: McpServer, actor: any, authHeader: 
     "get_request",
     "Get details of a specific request",
     {
-      teamId: z.string().describe("The ID of the team"),
+      teamId: z.string().optional().describe("The ID of the team (Optional, defaults to your own team)"),
       requestId: z.string().describe("The ID of the request"),
     },
     async ({ teamId, requestId }) => {
       try {
-        const data = await internalFetch(`/teams/${teamId}/requests/${requestId}`, authHeader);
+        const resolvedTeamId = teamId || actor?.teamId;
+        if (!resolvedTeamId) throw new Error("teamId is required but could not be resolved from your context.");
+        const data = await internalFetch(`/teams/${resolvedTeamId}/requests/${requestId}`, authHeader);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       } catch (err: any) {
         return { isError: true, content: [{ type: "text", text: err.message }] };
@@ -46,18 +50,20 @@ export function registerRequestTools(server: McpServer, actor: any, authHeader: 
     "create_request",
     "Create a new request for another agent in the team",
     {
-      teamId: z.string().describe("The ID of the team"),
+      teamId: z.string().optional().describe("The ID of the team (Optional, defaults to your own team)"),
       title: z.string().describe("A brief summary or title of what this request is about"),
       targetAgentId: z.string().uuid().describe("The ID of the target agent that will process this request"),
-      inputData: z.any().optional().describe("Input data or context for the target agent (JSON object or string)"),
+      requestDetails: z.string().optional().describe("Input data or context for the target agent (Markdown string)"),
+      instructions: z.string().optional().describe("Summary of instructions for the agent"),
+      priority: z.number().int().min(0).max(4).optional().describe("Priority level (0-4)"),
       responseContract: z.string().optional().describe("Instructions on what the target agent should return (Markdown string)"),
-      teamTaskId: z.string().uuid().optional().describe("Associated team task ID, if any"),
-      projectIssueId: z.string().uuid().optional().describe("Associated project issue ID, if any"),
     },
     async ({ teamId, ...rest }) => {
       try {
-        const payload = { requesterId: actor.id, requesterType: actor.type, ...rest };
-        const data = await internalFetch(`/teams/${teamId}/requests`, authHeader, {
+        const resolvedTeamId = teamId || actor?.teamId;
+        if (!resolvedTeamId) throw new Error("teamId is required but could not be resolved from your context.");
+        const payload = { requesterId: actor.id, ...rest };
+        const data = await internalFetch(`/teams/${resolvedTeamId}/requests`, authHeader, {
           method: "POST",
           body: JSON.stringify(payload),
         });
@@ -72,16 +78,18 @@ export function registerRequestTools(server: McpServer, actor: any, authHeader: 
     "update_request_status",
     "Update the status of a request",
     {
-      teamId: z.string().describe("The ID of the team"),
+      teamId: z.string().optional().describe("The ID of the team (Optional, defaults to your own team)"),
       requestId: z.string().describe("The ID of the request"),
-      status: z.enum(["created", "processing", "responded", "rejected"]).describe("The new status"),
-      responseStatusCode: z.number().optional().describe("Numeric status code (e.g. 200 for success, 400 for bad input, 500 for error). Required when status is responded or rejected"),
-      responseMetadata: z.any().optional().describe("Data or result payload returned upon completion or rejection"),
+      status: z.enum(["draft", "open", "in_progress", "waiting_user", "completed", "cancelled"]).describe("The new status. Use 'completed' with 'failed' resolution to reject."),
+      resolution: z.enum(["success", "failed"]).optional().describe("Resolution status. Required when status is completed"),
+      response: z.string().optional().describe("Data or result payload returned upon completion or rejection (e.g., the reason for rejection)"),
     },
-    async ({ teamId, requestId, status, responseStatusCode, responseMetadata }) => {
+    async ({ teamId, requestId, status, resolution, response }) => {
       try {
-        const payload = { status, responseStatusCode, responseMetadata };
-        const data = await internalFetch(`/teams/${teamId}/requests/${requestId}`, authHeader, {
+        const resolvedTeamId = teamId || actor?.teamId;
+        if (!resolvedTeamId) throw new Error("teamId is required but could not be resolved from your context.");
+        const payload = { status, resolution, response };
+        const data = await internalFetch(`/teams/${resolvedTeamId}/requests/${requestId}`, authHeader, {
           method: "PATCH",
           body: JSON.stringify(payload),
         });

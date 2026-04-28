@@ -43,35 +43,30 @@ export const counterpartTypeEnum = pgEnum("counterpart_type", [
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
 
 export const actorTypeEnum = pgEnum("actor_type", ["human", "agent"]);
-export const requestStatusEnum = pgEnum("request_status", ["created", "processing", "responded"]);
-export const activityTypeEnum = pgEnum("activity_type", [
-  "request_created",
-  "request_received",
-  "request_responded",
-  "task_created",
-  "task_updated",
-  "task_blocked",
-  "task_unblocked",
-  "task_finished",
-  "task_deleted"
-]);
+export const requestStatusEnum = pgEnum("request_status", ["draft", "open", "in_progress", "waiting_user", "completed", "cancelled"]);
+export const requestResolutionEnum = pgEnum("request_resolution", ["success", "failed"]);
 
-export const teamActivities = pgTable("team_activities", {
+export const changeTypeEnum = pgEnum("change_type", ["data", "status", "relationship", "creation", "deletion"]);
+
+export const activities = pgTable("activities", {
   id: uuid("id").primaryKey().defaultRandom(),
   teamId: uuid("team_id")
     .notNull()
     .references(() => teams.id, { onDelete: "cascade" }),
+  requestId: uuid("request_id").references((): AnyPgColumn => requests.id, { onDelete: "cascade" }),
+  taskId: uuid("task_id").references((): AnyPgColumn => tasks.id, { onDelete: "cascade" }),
   actorId: uuid("actor_id").notNull(),
   actorType: actorTypeEnum("actor_type").notNull(),
-  type: activityTypeEnum("type").notNull(),
-  entityType: text("entity_type").notNull(),
-  entityId: uuid("entity_id").notNull(),
-  payload: jsonb("payload"),
+
+  changeType: changeTypeEnum("change_type").notNull(),
+  oldState: jsonb("old_state"),
+  newState: jsonb("new_state"),
+  activityTitle: text("activity_title").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export type TeamActivity = typeof teamActivities.$inferSelect;
-export type NewTeamActivity = typeof teamActivities.$inferInsert;
+export type Activity = typeof activities.$inferSelect;
+export type NewActivity = typeof activities.$inferInsert;
 
 // ── Users (Logical Reference) ──────────────────────────────────────────────
 
@@ -206,103 +201,70 @@ export const messages = pgTable("messages", {
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 
-// ── Task Management (Kanban, Types, Labels) ────────────────────────────────
-
-export const taskTypes = pgTable("task_types", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  teamId: uuid("team_id")
-    .notNull()
-    .references(() => teams.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  emoji: text("emoji").notNull(),
-  backgroundColor: text("background_color").notNull(),
-  isDefault: boolean("is_default").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type TaskType = typeof taskTypes.$inferSelect;
-export type NewTaskType = typeof taskTypes.$inferInsert;
-
-export const labels = pgTable("labels", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  teamId: uuid("team_id")
-    .notNull()
-    .references(() => teams.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  color: text("color").notNull().default("#333333"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type Label = typeof labels.$inferSelect;
-export type NewLabel = typeof labels.$inferInsert;
+// ── Task Management (Kanban) ────────────────────────────────────────────────
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
   teamId: uuid("team_id")
     .notNull()
     .references(() => teams.id, { onDelete: "cascade" }),
-  parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => tasks.id, { onDelete: "set null" }),
-  taskTypeId: uuid("task_type_id").references(() => taskTypes.id, { onDelete: "set null" }),
-  number: integer("number").notNull(),
-  identifier: text("identifier").notNull(),
+  requestId: uuid("request_id").references((): AnyPgColumn => requests.id, { onDelete: "set null" }),
   title: text("title").notNull(),
-  shortSummary: text("short_summary"),
-  descriptionMarkdown: text("description_markdown"),
-  descriptionRichText: jsonb("description_rich_text"),
-  status: integer("status").notNull().default(0),
-  priority: integer("priority").notNull().default(0),
+  plan: text("plan"),
+  taskList: text("task_list"),
+  executionLog: jsonb("execution_log").$type<string[]>(),
+  workSummary: text("work_summary"),
   assignedToId: uuid("assigned_to_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => ({
-  unq_team_task_number: unique().on(t.teamId, t.number),
-  unq_task_identifier: unique().on(t.teamId, t.identifier),
-}));
-
-export type Task = typeof tasks.$inferSelect;
-export type NewTask = typeof tasks.$inferInsert;
-
-export const taskLabels = pgTable("task_labels", {
-  taskId: uuid("task_id")
-    .notNull()
-    .references(() => tasks.id, { onDelete: "cascade" }),
-  labelId: uuid("label_id")
-    .notNull()
-    .references(() => labels.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => ({
-  pk: primaryKey({ columns: [t.taskId, t.labelId] }),
-}));
-
-export type TaskLabel = typeof taskLabels.$inferSelect;
-export type NewTaskLabel = typeof taskLabels.$inferInsert;
-
-
-// ── Team Requests (Agent-to-Agent / Human-to-Agent) ─────────────────────────
-
-export const teamRequests = pgTable("team_requests", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  teamId: uuid("team_id")
-    .notNull()
-    .references(() => teams.id, { onDelete: "cascade" }),
-  requesterId: uuid("requester_id").notNull(),
-  requesterType: actorTypeEnum("requester_type").notNull(),
-  targetAgentId: uuid("target_agent_id")
-    .notNull()
-    .references(() => agents.id, { onDelete: "cascade" }),
-  taskId: uuid("task_id").references((): AnyPgColumn => tasks.id, { onDelete: "set null" }),
-  title: text("title").notNull().default("New Request"),
-  inputData: jsonb("input_data"),
-  responseContract: text("response_contract"),
-  status: requestStatusEnum("status").notNull().default("created"),
-  responseStatusCode: integer("response_status_code"),
-  responseMetadata: jsonb("response_metadata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export type TeamRequest = typeof teamRequests.$inferSelect;
-export type NewTeamRequest = typeof teamRequests.$inferInsert;
+export type Task = typeof tasks.$inferSelect;
+export type NewTask = typeof tasks.$inferInsert;
+
+
+
+
+// ── Requests (Agent-to-Agent / Human-to-Agent) ─────────────────────────
+
+export const requests = pgTable("requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  number: integer("number").notNull(),
+  identifier: text("identifier").notNull(),
+  requesterUserId: uuid("requester_user_id").references(() => users.id, { onDelete: "cascade" }),
+  requesterAgentId: uuid("requester_agent_id").references(() => agents.id, { onDelete: "cascade" }),
+
+  parentRequestId: uuid("parent_request_id").references((): AnyPgColumn => requests.id, { onDelete: "cascade" }),
+  
+  title: text("title").notNull().default("New Request"),
+  requestDetails: text("request_details"),
+  instructions: text("instructions"),
+  priority: integer("priority").notNull().default(0),
+  
+  targetRole: text("target_role"),
+  targetAgentId: uuid("target_agent_id").references(() => agents.id, { onDelete: "set null" }),
+  assignedAgentId: uuid("assigned_agent_id").references(() => agents.id, { onDelete: "set null" }),
+  
+  responseContract: text("response_contract"),
+  requestCapabilities: jsonb("request_capabilities"),
+  
+  status: requestStatusEnum("status").notNull().default("open"),
+  resolution: requestResolutionEnum("resolution"),
+  response: text("response"),
+  
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (t) => ({
+  unq_team_request_number: unique().on(t.teamId, t.number),
+  unq_team_request_identifier: unique().on(t.teamId, t.identifier),
+}));
+
+export type Request = typeof requests.$inferSelect;
+export type NewRequest = typeof requests.$inferInsert;
 
 // ── Comments ────────────────────────────────────────────────────────────────
 
@@ -312,6 +274,7 @@ export const comments = pgTable("comments", {
     .notNull()
     .references(() => teams.id, { onDelete: "cascade" }),
   taskId: uuid("task_id").references((): AnyPgColumn => tasks.id, { onDelete: "cascade" }),
+  requestId: uuid("request_id").references((): AnyPgColumn => requests.id, { onDelete: "cascade" }),
   
   actorId: uuid("actor_id").notNull(),
   actorType: actorTypeEnum("actor_type").notNull(),
@@ -345,11 +308,14 @@ export const teamMetaCapabilities = pgTable("team_meta_capabilities", {
     .notNull()
     .references(() => teamTypes.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  identifier: text("identifier").notNull(),
   triggers: jsonb("triggers"), // Array of string identifiers
   instructions: text("instructions").notNull(),
   inputsDescription: text("inputs_description"),
   expectedOutputsDescription: text("expected_outputs_description"),
   expectedEventsOutput: jsonb("expected_events_output"), // Array of strings
+  suggestedNextCapabilities: jsonb("suggested_next_capabilities"), // Array of string identifiers
+  isFavorite: boolean("is_favorite").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -363,21 +329,40 @@ export const teamCapabilities = pgTable("team_capabilities", {
     .notNull()
     .references(() => teams.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  identifier: text("identifier").notNull(),
   triggers: jsonb("triggers"),
   instructions: text("instructions").notNull(),
   inputsDescription: text("inputs_description"),
   expectedOutputsDescription: text("expected_outputs_description"),
   expectedEventsOutput: jsonb("expected_events_output"),
+  suggestedNextCapabilities: jsonb("suggested_next_capabilities"),
   isEnabled: boolean("is_enabled").notNull().default(true),
+  isFavorite: boolean("is_favorite").notNull().default(false),
   scheduleConfig: jsonb("schedule_config"),
   assignedAgentId: uuid("assigned_agent_id").references(() => agents.id, { onDelete: "set null" }),
   assignedRole: text("assigned_role"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  unq_team_capability_identifier: unique().on(t.teamId, t.identifier),
+}));
 
 export type TeamCapability = typeof teamCapabilities.$inferSelect;
 export type NewTeamCapability = typeof teamCapabilities.$inferInsert;
+
+export const teamEvents = pgTable("team_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  identifier: text("identifier").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  unq_team_event_identifier: unique().on(t.teamId, t.identifier),
+}));
+
+export type TeamEvent = typeof teamEvents.$inferSelect;
+export type NewTeamEvent = typeof teamEvents.$inferInsert;
 
 export const agentRoles = pgTable("agent_roles", {
   id: text("id").primaryKey(), // Using text IDs like 'software_engineer'

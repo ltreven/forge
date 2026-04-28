@@ -5,43 +5,29 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1776960445115,
-      "tag": "0000_absurd_imperial_guard",
+      "when": 1777275242103,
+      "tag": "0000_rainy_leper_queen",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1776962759018,
-      "tag": "0001_brave_eternity",
+      "when": 1777278094365,
+      "tag": "0001_curly_true_believers",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1776963041484,
-      "tag": "0002_rainy_warstar",
+      "when": 1777313247379,
+      "tag": "0002_nice_thunderbolt_ross",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1777002951581,
-      "tag": "0003_blushing_roulette",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1777018688073,
-      "tag": "0004_unknown_roulette",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1777019376054,
-      "tag": "0005_overrated_thunderbird",
+      "when": 1777313264915,
+      "tag": "0003_unique_black_knight",
       "breakpoints": true
     }
   ]

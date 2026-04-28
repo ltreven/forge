@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { randomBytes } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { workspaces, teams, agents, taskTypes } from "../db/schema";
+import { workspaces, teams, agents } from "../db/schema";
 import { createTeamSchema, updateTeamSchema } from "../schemas/team.schema";
 import { success, failure } from "../lib/response";
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -14,8 +14,8 @@ import {
   applyRabbitMQCredentialsSecret,
 } from "../k8s/provisioner";
 import { provisionTenant } from "../lib/rabbitmq";
-import { requestsRouter } from "./team-requests";
-import { activitiesRouter } from "./team-activities";
+import { requestsRouter } from "./requests";
+import { activitiesRouter } from "./activities";
 
 export const teamsRouter = Router();
 
@@ -91,14 +91,6 @@ teamsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: 
         })
         .returning();
 
-      // Create default task types
-      await tx.insert(taskTypes).values([
-        { teamId: team.id, name: "Task", emoji: "✅", backgroundColor: "#4f46e5", isDefault: true },
-        { teamId: team.id, name: "Bug", emoji: "🐛", backgroundColor: "#ef4444", isDefault: false },
-        { teamId: team.id, name: "Feature", emoji: "✨", backgroundColor: "#10b981", isDefault: false },
-        { teamId: team.id, name: "Plan", emoji: "📅", backgroundColor: "#8b5cf6", isDefault: false },
-        { teamId: team.id, name: "Research", emoji: "🔬", backgroundColor: "#f59e0b", isDefault: false }
-      ]);
 
       // Create agents provided by the caller, or fall back to a default team lead.
       const agentInputs =
@@ -126,11 +118,13 @@ teamsRouter.post("/", authMiddleware, async (req: Request, res: Response, next: 
           templateCapabilities.map((cap) => ({
             teamId: team.id,
             name: cap.name,
+            identifier: cap.identifier,
             triggers: cap.triggers,
             instructions: cap.instructions,
             inputsDescription: cap.inputsDescription,
             expectedOutputsDescription: cap.expectedOutputsDescription,
             expectedEventsOutput: cap.expectedEventsOutput,
+            suggestedNextCapabilities: cap.suggestedNextCapabilities,
           }))
         );
       }
@@ -261,88 +255,29 @@ teamsRouter.delete("/:id", async (req: Request, res: Response, next: NextFunctio
   }
 });
 
-// ── GET /teams/:id/task-types ────────────────────────────────────────────────
-teamsRouter.get("/:id/task-types", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+
+
+// ── GET /teams/:id/events ──────────────────────────────────────────────────
+teamsRouter.get("/:id/events", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { taskTypes } = await import("../db/schema");
-    const rows = await db.select().from(taskTypes).where(eq(taskTypes.teamId, String(req.params.id)));
+    const { teamEvents } = await import("../db/schema");
+    const rows = await db.select().from(teamEvents).where(eq(teamEvents.teamId, String(req.params.id)));
     res.json(success(rows));
   } catch (err) { next(err); }
 });
 
-teamsRouter.post("/:id/task-types", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { taskTypes } = await import("../db/schema");
-    const [created] = await db.insert(taskTypes).values({
-      teamId: String(req.params.id),
-      name: String(req.body.name),
-      emoji: String(req.body.emoji || "✅"),
-      backgroundColor: String(req.body.backgroundColor || "#4f46e5"),
-      isDefault: Boolean(req.body.isDefault || false)
-    }).returning();
-    res.json(success(created));
-  } catch (err) { next(err); }
-});
-
-teamsRouter.delete("/:id/task-types/:typeId", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { taskTypes } = await import("../db/schema");
-    const { and } = await import("drizzle-orm");
-    await db.delete(taskTypes).where(and(eq(taskTypes.id, String(req.params.typeId)), eq(taskTypes.teamId, String(req.params.id))));
-    res.json(success({ deleted: true }));
-  } catch (err) { next(err); }
-});
-
-teamsRouter.put("/:id/task-types/:typeId/set-default", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { taskTypes } = await import("../db/schema");
-    const { and } = await import("drizzle-orm");
-    
-    await db.transaction(async (tx) => {
-      // Unset all other defaults for this team
-      await tx.update(taskTypes)
-        .set({ isDefault: false })
-        .where(eq(taskTypes.teamId, String(req.params.id)));
-      
-      // Set the specified one as default
-      await tx.update(taskTypes)
-        .set({ isDefault: true })
-        .where(and(eq(taskTypes.id, String(req.params.typeId)), eq(taskTypes.teamId, String(req.params.id))));
-    });
-    
-    res.json(success({ updated: true }));
-  } catch (err) { next(err); }
-});
-
-// ── GET /teams/:id/labels ────────────────────────────────────────────────
-teamsRouter.get("/:id/labels", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { labels } = await import("../db/schema");
-    const rows = await db.select().from(labels).where(eq(labels.teamId, String(req.params.id)));
-    res.json(success(rows));
-  } catch (err) { next(err); }
-});
-
-teamsRouter.post("/:id/labels", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { labels } = await import("../db/schema");
-    const [created] = await db.insert(labels).values({
-      teamId: String(req.params.id),
-      name: String(req.body.name),
-      color: String(req.body.color || "#3b82f6")
-    }).returning();
-    res.json(success(created));
-  } catch (err) { next(err); }
-});
-
-teamsRouter.delete("/:id/labels/:labelId", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { labels } = await import("../db/schema");
-    const { and } = await import("drizzle-orm");
-    await db.delete(labels).where(and(eq(labels.id, String(req.params.labelId)), eq(labels.teamId, String(req.params.id))));
-    res.json(success({ deleted: true }));
-  } catch (err) { next(err); }
-});
+// Helper to upsert events
+async function upsertEvents(teamId: string, events: string[] | null) {
+  if (!events || events.length === 0) return;
+  const { teamEvents } = await import("../db/schema");
+  const cleanEvents = events.map(e => e.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '')).filter(Boolean);
+  if (cleanEvents.length === 0) return;
+  for (const ev of cleanEvents) {
+    await db.insert(teamEvents)
+      .values({ teamId, identifier: ev })
+      .onConflictDoNothing({ target: [teamEvents.teamId, teamEvents.identifier] });
+  }
+}
 
 // ── GET /teams/:id/capabilities ─────────────────────────────────────────────
 teamsRouter.get("/:id/capabilities", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
@@ -357,25 +292,41 @@ teamsRouter.post("/:id/capabilities", authMiddleware, async (req: Request, res: 
   try {
     const { teamCapabilities } = await import("../db/schema");
     
+    const generateSlug = (str: string) => str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const name = String(req.body.name || "New Capability");
+    const identifier = req.body.identifier ? String(req.body.identifier) : generateSlug(name);
+    
     const [created] = await db.insert(teamCapabilities).values({
       teamId: String(req.params.id),
-      name: String(req.body.name || "New Capability"),
+      name,
+      identifier,
       instructions: String(req.body.instructions || ""),
       inputsDescription: req.body.inputsDescription ? String(req.body.inputsDescription) : null,
       expectedOutputsDescription: req.body.expectedOutputsDescription ? String(req.body.expectedOutputsDescription) : null,
       assignedAgentId: req.body.assignedAgentId ? String(req.body.assignedAgentId) : null,
       assignedRole: req.body.assignedRole ? String(req.body.assignedRole) : null,
       isEnabled: Boolean(req.body.isEnabled ?? true),
-      scheduleConfig: req.body.scheduleConfig || null
+      isFavorite: Boolean(req.body.isFavorite ?? false),
+      scheduleConfig: req.body.scheduleConfig || null,
+      triggers: req.body.triggers || null,
+      expectedEventsOutput: req.body.expectedEventsOutput || null,
+      suggestedNextCapabilities: req.body.suggestedNextCapabilities || null
     }).returning();
+    
+    // Upsert any new events provided
+    const allEvents = [
+      ...(req.body.triggers || []),
+      ...(req.body.expectedEventsOutput || [])
+    ];
+    await upsertEvents(String(req.params.id), allEvents);
     
     // Sync K8s CronJob
     const { workspaces, teams } = await import("../db/schema");
-    const [team] = await db.select().from(teams).where(eq(teams.id, req.params.id));
+    const [team] = await db.select().from(teams).where(eq(teams.id, String(req.params.id)));
     const [workspace] = team ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId)) : [];
     if (workspace?.k8sNamespace) {
       const { upsertCapabilityCronJob } = await import("../k8s/cronjob");
-      await upsertCapabilityCronJob(created, req.params.id, workspace.k8sNamespace);
+      await upsertCapabilityCronJob(created, String(req.params.id), workspace.k8sNamespace);
     }
     
     res.status(201).json(success(created));
@@ -387,36 +338,70 @@ teamsRouter.put("/:id/capabilities/:capId", authMiddleware, async (req: Request,
     const { teamCapabilities } = await import("../db/schema");
     const { and } = await import("drizzle-orm");
     
+    // Fetch existing to check if identifier is changing
+    const [existing] = await db.select().from(teamCapabilities)
+      .where(and(eq(teamCapabilities.id, String(req.params.capId)), eq(teamCapabilities.teamId, String(req.params.id))));
+      
+    if (!existing) {
+      return res.status(404).json(failure("Capability not found"));
+    }
+    
     const updateData: any = {};
     if (req.body.isEnabled !== undefined) updateData.isEnabled = Boolean(req.body.isEnabled);
+    if (req.body.isFavorite !== undefined) updateData.isFavorite = Boolean(req.body.isFavorite);
     if (req.body.scheduleConfig !== undefined) updateData.scheduleConfig = req.body.scheduleConfig;
     if (req.body.name !== undefined) updateData.name = String(req.body.name);
+    if (req.body.identifier !== undefined) updateData.identifier = String(req.body.identifier);
     if (req.body.instructions !== undefined) updateData.instructions = String(req.body.instructions);
     if (req.body.inputsDescription !== undefined) updateData.inputsDescription = req.body.inputsDescription ? String(req.body.inputsDescription) : null;
     if (req.body.expectedOutputsDescription !== undefined) updateData.expectedOutputsDescription = req.body.expectedOutputsDescription ? String(req.body.expectedOutputsDescription) : null;
     if (req.body.assignedAgentId !== undefined) updateData.assignedAgentId = req.body.assignedAgentId ? String(req.body.assignedAgentId) : null;
     if (req.body.assignedRole !== undefined) updateData.assignedRole = req.body.assignedRole ? String(req.body.assignedRole) : null;
+    if (req.body.triggers !== undefined) updateData.triggers = req.body.triggers;
+    if (req.body.expectedEventsOutput !== undefined) updateData.expectedEventsOutput = req.body.expectedEventsOutput;
+    if (req.body.suggestedNextCapabilities !== undefined) updateData.suggestedNextCapabilities = req.body.suggestedNextCapabilities;
     
     const [updated] = await db.update(teamCapabilities)
       .set({ ...updateData, updatedAt: new Date() })
       .where(and(eq(teamCapabilities.id, String(req.params.capId)), eq(teamCapabilities.teamId, String(req.params.id))))
       .returning();
       
+    // Cascade update suggestedNextCapabilities if identifier changed
+    if (updated && existing.identifier !== updated.identifier) {
+      const allCaps = await db.select().from(teamCapabilities).where(eq(teamCapabilities.teamId, String(req.params.id)));
+      for (const cap of allCaps) {
+        if (cap.id === updated.id) continue;
+        const suggestions = cap.suggestedNextCapabilities as string[] | null;
+        if (suggestions && Array.isArray(suggestions) && suggestions.includes(existing.identifier)) {
+          const newSuggestions = suggestions.map(id => id === existing.identifier ? updated.identifier : id);
+          await db.update(teamCapabilities)
+            .set({ suggestedNextCapabilities: newSuggestions })
+            .where(eq(teamCapabilities.id, cap.id));
+        }
+      }
+    }
+      
     // Sync K8s CronJob
     if (updated) {
       const { workspaces, teams } = await import("../db/schema");
-      const [team] = await db.select().from(teams).where(eq(teams.id, req.params.id));
+      const [team] = await db.select().from(teams).where(eq(teams.id, String(req.params.id)));
       const [workspace] = team ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId)) : [];
       if (workspace?.k8sNamespace) {
         const { upsertCapabilityCronJob } = await import("../k8s/cronjob");
-        await upsertCapabilityCronJob(updated, req.params.id, workspace.k8sNamespace);
+        await upsertCapabilityCronJob(updated, String(req.params.id), workspace.k8sNamespace);
       }
     }
+      
+    // Upsert any new events provided
+    const allEvents = [
+      ...(req.body.triggers || []),
+      ...(req.body.expectedEventsOutput || [])
+    ];
+    await upsertEvents(String(req.params.id), allEvents);
       
     res.json(success(updated));
   } catch (err) { next(err); }
 });
-
 // ── GET /teams/:id/integrations ─────────────────────────────────────────────
 teamsRouter.get("/:id/integrations", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {

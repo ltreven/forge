@@ -128,6 +128,8 @@ tilt-up:
 ## Stop Tilt and remove all deployed resources from the local cluster
 tilt-down:
 	tilt down
+	@echo "→ Removing old agent PVCs from workspace namespaces to ensure fresh state on next boot..."
+	@kubectl get namespace -o name | grep 'namespace/forge-ws-' | sed 's/namespace\///' | xargs -r -I {} kubectl delete pvc --all -n {} --ignore-not-found
 
 ## Lint the Helm chart against all environment values files
 k8s-lint:

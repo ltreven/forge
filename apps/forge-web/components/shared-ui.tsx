@@ -2,14 +2,6 @@
 
 import React from "react";
 import { 
-  Circle, 
-  CircleDot, 
-  CircleDashed, 
-  CheckCircle2, 
-  SignalLow, 
-  SignalMedium, 
-  SignalHigh, 
-  Flame,
   Trash2,
   Loader2
 } from "lucide-react";
@@ -17,28 +9,7 @@ import { cn } from "@/lib/utils";
 import { Comment, Agent } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 
-export function StatusIcon({ status, className }: { status: number; className?: string }) {
-  switch (status) {
-    case 0: return <Circle className={cn("size-3.5 text-muted-foreground/40", className)} />;
-    case 1: return <Circle className={cn("size-3.5 text-muted-foreground", className)} />;
-    case 2: return <CircleDot className={cn("size-3.5 text-amber-500 animate-pulse", className)} />;
-    case 3: return <CircleDashed className={cn("size-3.5 text-blue-500", className)} />;
-    case 4: return <CheckCircle2 className={cn("size-3.5 text-emerald-500", className)} />;
-    case 5: return <Circle className={cn("size-3.5 text-red-500/50", className)} />;
-    default: return <Circle className={cn("size-3.5 text-muted-foreground", className)} />;
-  }
-}
 
-export function PriorityIcon({ priority, className }: { priority: number; className?: string }) {
-  switch (priority) {
-    case 0: return <Circle className={cn("size-3 text-muted-foreground/20", className)} />;
-    case 1: return <SignalLow className={cn("size-3 text-blue-500/70", className)} />;
-    case 2: return <SignalMedium className={cn("size-3 text-amber-500/70", className)} />;
-    case 3: return <SignalHigh className={cn("size-3 text-orange-500", className)} />;
-    case 4: return <Flame className={cn("size-3 text-red-500", className)} />;
-    default: return null;
-  }
-}
 
 export function Button({ 
   className, variant, size, ...props 

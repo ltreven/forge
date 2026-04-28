@@ -5,12 +5,13 @@ import { agents, workspaces, teams, users } from "../db/schema";
 import { success, failure } from "../lib/response";
 import { applyRabbitMQCredentialsSecret, rolloutRestartDeployment, ensureNamespace } from "../k8s/provisioner";
 import { provisionTenant } from "../lib/rabbitmq";
-import { teamCapabilities, tasks, teamRequests, conversations, messages, teamActivities } from "../db/schema";
+import { teamCapabilities, tasks, requests, conversations, messages, activities } from "../db/schema";
 import { createTaskInternal } from "./tasks";
 import { randomBytes } from "crypto";
 import { publishToAgent, tenantVhost, tenantExchange } from "../lib/rabbitmq";
-import { desc, and } from "drizzle-orm";
-
+import { desc, and, sql } from "drizzle-orm";
+import { assignAgentToRequest } from "../lib/agent-assignment";
+import { buildTeamRequestMessage } from "../lib/messages";
 /**
  * Internal routes — NOT exposed via the external Ingress.
  * Protected by NetworkPolicy: only the Agent Controller pod can reach these.
@@ -249,62 +250,7 @@ internalRouter.post(
       }
 
       // 1. Select Agent
-      let targetAgentId = capability.assignedAgentId;
-      if (!targetAgentId) {
-        // Find available agent
-        let agentQuery = db
-          .select({ id: agents.id })
-          .from(agents)
-          .where(and(eq(agents.teamId, capability.teamId), eq(agents.availability, "available" as any)));
-
-        const availableAgents = await agentQuery;
-        
-        let filteredAgents = availableAgents;
-        if (capability.assignedRole) {
-           const agentsWithRole = await db.select({ id: agents.id }).from(agents).where(and(eq(agents.teamId, capability.teamId), eq(agents.type, capability.assignedRole), eq(agents.availability, "available" as any)));
-           if (agentsWithRole.length > 0) {
-             filteredAgents = agentsWithRole;
-           }
-        }
-
-        if (filteredAgents.length === 0) {
-          // Fallback to any agent in the team if none available
-          const anyAgent = await db.select({ id: agents.id }).from(agents).where(eq(agents.teamId, capability.teamId)).limit(1);
-          if (anyAgent.length > 0) targetAgentId = anyAgent[0].id;
-        } else if (filteredAgents.length === 1) {
-          targetAgentId = filteredAgents[0].id;
-        } else {
-          // Find the one least recently active
-          const agentIds = filteredAgents.map(a => a.id);
-          // Just simple query to find latest activity per agent
-          const recentActivities = await db
-            .select({ actorId: teamActivities.actorId, maxDate: teamActivities.createdAt })
-            .from(teamActivities)
-            .where(eq(teamActivities.teamId, capability.teamId))
-            .orderBy(desc(teamActivities.createdAt));
-            
-          // Find the agent in agentIds that appears LAST in recentActivities, or doesn't appear at all
-          const activeAgentIds = recentActivities.map(a => a.actorId);
-          let selected = agentIds[0];
-          for (const id of agentIds) {
-            if (!activeAgentIds.includes(id)) {
-              selected = id;
-              break; // Has no activities, pick it!
-            }
-          }
-          // If all have activities, pick the one that appears last in activeAgentIds
-          if (selected === agentIds[0]) {
-             const reversed = [...activeAgentIds].reverse();
-             for (const id of reversed) {
-               if (agentIds.includes(id)) {
-                 selected = id;
-                 break;
-               }
-             }
-          }
-          targetAgentId = selected;
-        }
-      }
+      const targetAgentId = await assignAgentToRequest(capability.teamId, capability.assignedAgentId, capability.assignedRole);
 
       if (!targetAgentId) {
         res.status(400).json(failure("No agent available to assign task"));
@@ -313,30 +259,36 @@ internalRouter.post(
 
       const SYSTEM_ACTOR = { id: "00000000-0000-0000-0000-000000000000", type: "human" as const };
 
-      // 2. Create Task
-      const taskInput = {
-        teamId: capability.teamId,
-        title: capability.name,
-        descriptionMarkdown: `${capability.instructions}\n\n**Inputs to consider:**\n${capability.inputsDescription || 'None'}\n\n**Expected Outputs:**\n${capability.expectedOutputsDescription || 'None'}`,
-        assignedToId: targetAgentId,
-        status: 0,
-        priority: 0
-      };
+      // 2. Create Team Request
+      const requestDetails = `${capability.instructions}\n\n**Inputs to consider:**\n${capability.inputsDescription || 'None'}\n\n**Expected Outputs:**\n${capability.expectedOutputsDescription || 'None'}`;
       
-      const task = await createTaskInternal(taskInput, SYSTEM_ACTOR);
+      const requestRecord = await db.transaction(async (tx) => {
+        const [team] = await tx.select({ identifierPrefix: teams.identifierPrefix }).from(teams).where(eq(teams.id, capability.teamId));
+        if (!team) throw new Error("Team not found");
 
-      // 3. Create Team Request
-      const [teamRequest] = await db.insert(teamRequests).values({
-        teamId: capability.teamId,
-        requesterId: SYSTEM_ACTOR.id,
-        requesterType: SYSTEM_ACTOR.type,
-        targetAgentId: targetAgentId,
-        taskId: task.id,
-        title: `Capability Execution: ${capability.name}`,
-        status: "created" as any
-      }).returning();
+        const nextNumResult = await tx.execute(sql`
+          SELECT COALESCE(MAX(number), 0) + 1 as next_number FROM ${requests} WHERE team_id = ${capability.teamId}
+        `);
+        const nextNumber = Number((nextNumResult.rows[0] as any).next_number);
+        const identifier = `${team.identifierPrefix}-${nextNumber}`;
 
-      // 4. Create NEW Conversation
+        const [req] = await tx.insert(requests).values({
+          teamId: capability.teamId,
+          number: nextNumber,
+          identifier,
+          requesterUserId: SYSTEM_ACTOR.id,
+          targetAgentId: capability.assignedAgentId,
+          assignedAgentId: targetAgentId,
+          targetRole: capability.assignedRole,
+          title: `Capability Execution: ${capability.name}`,
+          requestDetails: requestDetails,
+          status: "open" as any
+        }).returning();
+
+        return req;
+      });
+
+      // 3. Create NEW Conversation
       const [conversation] = await db.insert(conversations).values({
         agentId: targetAgentId,
         counterpartType: "external" as any,
@@ -344,8 +296,8 @@ internalRouter.post(
         counterpartName: "System Orchestrator"
       }).returning();
 
-      // 5. Create Message
-      const messageContent = `You received a new Team Request (ID: ${teamRequest.id}). Please fetch the request and Task ID ${task.identifier}. If accepted, update the request status accordingly and set the task to 'in progress'. Update the task with all findings and conclusions as comments. Follow the task description instructions and consider all available team contexts for decision making.`;
+      // 4. Create Message
+      const messageContent = buildTeamRequestMessage(requestRecord);
 
       const [userMessage] = await db.insert(messages).values({
         conversationId: conversation.id,
@@ -384,7 +336,7 @@ internalRouter.post(
          }
       }
 
-      res.status(200).json(success({ task, teamRequest, conversation }));
+      res.status(200).json(success({ request: requestRecord, conversation }));
     } catch (err) {
       next(err);
     }

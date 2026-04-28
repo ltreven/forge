@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { eq, or, and, desc, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { tasks, taskTypes, labels, taskLabels, comments, workspaces, teams, teamActivities } from "../db/schema";
+import { tasks, comments, workspaces, teams, activities, requests } from "../db/schema";
 import { success, failure } from "../lib/response";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { createTaskSchema, updateTaskSchema, createCommentSchema, updateCommentSchema } from "../schemas/task-management.schema";
@@ -31,69 +31,39 @@ tasksRouter.get("/by-team/:teamId", authMiddleware, async (req: Request, res: Re
 
 export async function createTaskInternal(input: any, actor: { id: string, type: "human" | "agent" }) {
   return await db.transaction(async (tx) => {
-    // Get the team to find the identifier prefix
-    const [team] = await tx.select({ identifierPrefix: teams.identifierPrefix }).from(teams).where(eq(teams.id, input.teamId));
-    if (!team) {
-      throw new Error("Team not found");
-    }
-
-    // If no taskTypeId is provided, find the default one for the team
-    let taskTypeId = input.taskTypeId;
-    if (!taskTypeId) {
-      const [defaultType] = await tx.select().from(taskTypes).where(and(eq(taskTypes.teamId, input.teamId), eq(taskTypes.isDefault, true))).limit(1);
-      if (defaultType) {
-        taskTypeId = defaultType.id;
+    let finalRequestId = input.requestId;
+    if (finalRequestId && !isUuid(finalRequestId)) {
+      const [reqRec] = await tx.select({ id: requests.id }).from(requests).where(and(eq(requests.teamId, input.teamId), eq(requests.identifier, finalRequestId)));
+      if (reqRec) {
+        finalRequestId = reqRec.id;
       } else {
-        // fallback to any
-        const [anyType] = await tx.select().from(taskTypes).where(eq(taskTypes.teamId, input.teamId)).limit(1);
-        if (anyType) taskTypeId = anyType.id;
+        throw new Error("Request not found for the given identifier");
       }
     }
-
-    // Generate the next number for this team
-    // To prevent race conditions, we can use a query that locks the max or inserts and returns
-    const nextNumResult = await tx.execute(sql`
-      SELECT COALESCE(MAX(number), 0) + 1 as next_number FROM ${tasks} WHERE team_id = ${input.teamId}
-    `);
-    const nextNumber = Number((nextNumResult.rows[0] as any).next_number);
-    const identifier = `${team.identifierPrefix}-${nextNumber}`;
 
     const [task] = await tx
       .insert(tasks)
       .values({
         teamId: input.teamId,
-        parentTaskId: input.parentTaskId,
-        taskTypeId,
-        number: nextNumber,
-        identifier,
+        requestId: finalRequestId,
         title: input.title,
-        shortSummary: input.shortSummary,
-        descriptionMarkdown: input.descriptionMarkdown,
-        descriptionRichText: input.descriptionRichText,
-        status: input.status,
-        priority: input.priority,
+        plan: input.plan,
+        taskList: input.taskList,
+        executionLog: input.executionLog,
+        workSummary: input.workSummary,
         assignedToId: input.assignedToId,
       })
       .returning();
 
-    // Insert labels if provided
-    if (input.labels && input.labels.length > 0) {
-      const labelInserts = input.labels.map((labelId: string) => ({
-        taskId: task.id,
-        labelId
-      }));
-      await tx.insert(taskLabels).values(labelInserts);
-    }
 
     // Log activity
-    await tx.insert(teamActivities).values({
+    await tx.insert(activities).values({
       teamId: input.teamId,
       actorId: actor.id,
       actorType: actor.type,
-      type: "task_created",
-      entityType: "task",
-      entityId: task.id,
-      payload: { identifier: task.identifier, title: task.title },
+      changeType: "creation",
+      taskId: task.id,
+      activityTitle: `Task created: ${task.title}`,
     });
 
     return task;
@@ -113,14 +83,17 @@ tasksRouter.post("/", authMiddleware, async (req: Request, res: Response, next: 
   }
 });
 
-// ── GET /tasks/:idOrIdentifier ────────────────────────────────────────────────
+// ── GET /tasks/:id ────────────────────────────────────────────────────────────
 
-tasksRouter.get("/:idOrIdentifier", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+tasksRouter.get("/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const idParam = String(req.params.idOrIdentifier);
-    const condition = isUuid(idParam) ? eq(tasks.id, idParam) : eq(tasks.identifier, idParam);
+    const idParam = String(req.params.id);
+    if (!isUuid(idParam)) {
+      res.status(400).json(failure("Invalid task ID"));
+      return;
+    }
 
-    const [task] = await db.select().from(tasks).where(condition);
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, idParam));
 
     if (!task) {
       res.status(404).json(failure("Task not found"));
@@ -133,75 +106,52 @@ tasksRouter.get("/:idOrIdentifier", authMiddleware, async (req: Request, res: Re
   }
 });
 
-// ── GET /tasks/:idOrIdentifier/subtasks ───────────────────────────────────────
+// ── PUT /tasks/:id ────────────────────────────────────────────────────────────
 
-tasksRouter.get("/:idOrIdentifier/subtasks", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+tasksRouter.put("/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const idParam = String(req.params.idOrIdentifier);
-    const condition = isUuid(idParam) ? eq(tasks.id, idParam) : eq(tasks.identifier, idParam);
-
-    const [parentTask] = await db.select({ id: tasks.id }).from(tasks).where(condition);
-    if (!parentTask) {
-      res.status(404).json(failure("Task not found"));
+    const idParam = String(req.params.id);
+    if (!isUuid(idParam)) {
+      res.status(400).json(failure("Invalid task ID"));
       return;
     }
-
-    const rows = await db
-      .select()
-      .from(tasks)
-      .where(eq(tasks.parentTaskId, parentTask.id))
-      .orderBy(tasks.createdAt);
-      
-    res.json(success(rows));
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ── PUT /tasks/:idOrIdentifier ────────────────────────────────────────────────
-
-tasksRouter.put("/:idOrIdentifier", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const idParam = String(req.params.idOrIdentifier);
-    const condition = isUuid(idParam) ? eq(tasks.id, idParam) : eq(tasks.identifier, idParam);
 
     const input = updateTaskSchema.parse(req.body);
 
     const result = await db.transaction(async (tx) => {
-      // Find the task ID first if an identifier was provided
-      const [existingTask] = await tx.select({ id: tasks.id, teamId: tasks.teamId, title: tasks.title, identifier: tasks.identifier }).from(tasks).where(condition);
+      // Find the task ID first
+      const [existingTask] = await tx.select({ id: tasks.id, teamId: tasks.teamId, title: tasks.title }).from(tasks).where(eq(tasks.id, idParam));
       if (!existingTask) throw new Error("Task not found");
+
+      let finalRequestId = input.requestId;
+      if (finalRequestId !== undefined && finalRequestId !== null && !isUuid(finalRequestId)) {
+        const [reqRec] = await tx.select({ id: requests.id }).from(requests).where(and(eq(requests.teamId, existingTask.teamId), eq(requests.identifier, finalRequestId)));
+        if (reqRec) {
+          finalRequestId = reqRec.id;
+        } else {
+          throw new Error("Request not found for the given identifier");
+        }
+      }
 
       const [updated] = await tx
         .update(tasks)
         .set({
           ...input,
+          requestId: finalRequestId !== undefined ? finalRequestId : input.requestId,
           updatedAt: new Date()
         })
         .where(eq(tasks.id, existingTask.id))
         .returning();
 
-      if (input.labels) {
-        // Sync labels: delete existing, insert new
-        await tx.delete(taskLabels).where(eq(taskLabels.taskId, existingTask.id));
-        if (input.labels.length > 0) {
-           const labelInserts = input.labels.map(labelId => ({
-            taskId: existingTask.id,
-            labelId
-          }));
-          await tx.insert(taskLabels).values(labelInserts);
-        }
-      }
 
       // Log activity
-      await tx.insert(teamActivities).values({
+      await tx.insert(activities).values({
         teamId: existingTask.teamId,
         actorId: req.actor!.id,
         actorType: req.actor!.type,
-        type: "task_updated",
-        entityType: "task",
-        entityId: existingTask.id,
-        payload: { identifier: existingTask.identifier, title: updated.title || existingTask.title },
+        changeType: "status",
+        taskId: existingTask.id,
+        activityTitle: `Task updated: ${updated.title || existingTask.title}`,
       });
 
       return updated;
@@ -217,29 +167,31 @@ tasksRouter.put("/:idOrIdentifier", authMiddleware, async (req: Request, res: Re
   }
 });
 
-// ── DELETE /tasks/:idOrIdentifier ─────────────────────────────────────────────
+// ── DELETE /tasks/:id ─────────────────────────────────────────────────────────
 
-tasksRouter.delete("/:idOrIdentifier", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+tasksRouter.delete("/:id", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const idParam = String(req.params.idOrIdentifier);
-    const condition = isUuid(idParam) ? eq(tasks.id, idParam) : eq(tasks.identifier, idParam);
+    const idParam = String(req.params.id);
+    if (!isUuid(idParam)) {
+      res.status(400).json(failure("Invalid task ID"));
+      return;
+    }
 
     const result = await db.transaction(async (tx) => {
-      const [deleted] = await tx.delete(tasks).where(condition).returning();
+      const [deleted] = await tx.delete(tasks).where(eq(tasks.id, idParam)).returning();
       
       if (!deleted) {
         return null;
       }
 
       // Log activity
-      await tx.insert(teamActivities).values({
+      await tx.insert(activities).values({
         teamId: deleted.teamId,
         actorId: req.actor!.id,
         actorType: req.actor!.type,
-        type: "task_deleted",
-        entityType: "task",
-        entityId: deleted.id,
-        payload: { identifier: deleted.identifier },
+        changeType: "deletion",
+        taskId: deleted.id,
+        activityTitle: `Task deleted: ${deleted.title}`,
       });
 
       return deleted;
@@ -256,14 +208,17 @@ tasksRouter.delete("/:idOrIdentifier", authMiddleware, async (req: Request, res:
   }
 });
 
-// ── GET /tasks/:idOrIdentifier/comments ───────────────────────────────────────
+// ── GET /tasks/:id/comments ───────────────────────────────────────────────────
 
-tasksRouter.get("/:idOrIdentifier/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+tasksRouter.get("/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const idParam = String(req.params.idOrIdentifier);
-    const condition = isUuid(idParam) ? eq(tasks.id, idParam) : eq(tasks.identifier, idParam);
+    const idParam = String(req.params.id);
+    if (!isUuid(idParam)) {
+      res.status(400).json(failure("Invalid task ID"));
+      return;
+    }
 
-    const [task] = await db.select({ id: tasks.id }).from(tasks).where(condition);
+    const [task] = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, idParam));
     if (!task) {
        res.status(404).json(failure("Task not found"));
        return;
@@ -281,14 +236,17 @@ tasksRouter.get("/:idOrIdentifier/comments", authMiddleware, async (req: Request
   }
 });
 
-// ── POST /tasks/:idOrIdentifier/comments ──────────────────────────────────────
+// ── POST /tasks/:id/comments ──────────────────────────────────────────────────
 
-tasksRouter.post("/:idOrIdentifier/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+tasksRouter.post("/:id/comments", authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const idParam = String(req.params.idOrIdentifier);
-    const condition = isUuid(idParam) ? eq(tasks.id, idParam) : eq(tasks.identifier, idParam);
+    const idParam = String(req.params.id);
+    if (!isUuid(idParam)) {
+      res.status(400).json(failure("Invalid task ID"));
+      return;
+    }
 
-    const [task] = await db.select({ id: tasks.id, teamId: tasks.teamId }).from(tasks).where(condition);
+    const [task] = await db.select({ id: tasks.id, teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, idParam));
     if (!task) {
        res.status(404).json(failure("Task not found"));
        return;

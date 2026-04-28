@@ -30,14 +30,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Rehydrate from localStorage on mount.
   useEffect(() => {
     try {
-      const storedToken = localStorage.getItem("forge_token");
-      const storedUser = localStorage.getItem("forge_user");
-      const storedWorkspaceId = localStorage.getItem("forge_workspace_id");
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser) as AuthUser);
+      // 1. Check for logout query param from forge-web
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("logout") === "true") {
+        localStorage.removeItem("forge_token");
+        localStorage.removeItem("forge_user");
+        localStorage.removeItem("forge_workspace_id");
+        
+        // Clean up URL to avoid redirect loops or messy sharing links
+        const url = new URL(window.location.href);
+        url.searchParams.delete("logout");
+        window.history.replaceState({}, "", url.pathname);
+      } else {
+        // 2. Load from storage
+        const storedToken = localStorage.getItem("forge_token");
+        const storedUser = localStorage.getItem("forge_user");
+        const storedWorkspaceId = localStorage.getItem("forge_workspace_id");
+        if (storedToken && storedUser) {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser) as AuthUser);
+        }
+        if (storedWorkspaceId) setWorkspaceId(storedWorkspaceId);
       }
-      if (storedWorkspaceId) setWorkspaceId(storedWorkspaceId);
     } catch {
       // Ignore malformed storage.
     } finally {

@@ -207,6 +207,10 @@ SKILL_EOF
         render_profile_file "$PROFILE_SRC/$f" "$OPENCLAW_CONFIG_DIR/workspace/$f"
       fi
     done
+
+    if [ -f "/opt/forge/profiles/shared/TEAM-OPERATING-MODEL.md" ]; then
+      render_profile_file "/opt/forge/profiles/shared/TEAM-OPERATING-MODEL.md" "$OPENCLAW_CONFIG_DIR/workspace/TEAM-OPERATING-MODEL.md"
+    fi
   else
     echo "==> No profile directory found at $PROFILE_SRC; writing minimal fallback"
     cat >"$OPENCLAW_CONFIG_DIR/workspace/AGENTS.md" <<EOF
