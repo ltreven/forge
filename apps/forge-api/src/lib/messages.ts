@@ -4,15 +4,21 @@ export function buildTeamRequestInstructions(teamRequest: { title: string; ident
 
       **BASIC RULE**: You must only respond to this Team Request after completing all work. Use the 'update_request_status' Forge MCP tool to update the status of the request to 'completed' (resolution: 'success' or 'failed') and provide your response.
 
-      ### STEP 1: Fetch Request Details
+      ### STEP 1: Fetch Request Details and start analysis
       If you haven't done so yet, please use the 'get_request' Forge MCP tool to fetch the full details of this Team Request (${teamRequest.identifier}).
+      Pay special attention to the original request from the user (field: requestDetails) and make sure to follow these instructions thoroughly to provide the best possible response and achieve the desired outcome of this request.
+      Try to fetch the comments of that request using the 'get_comments' Forge MCP tool. you might find important notes there too, as the request may have a previous history (it might be a case of a reopened request, for example).
+      Make sure you understand the response_contract field for this request.  This field tells you what information you should provide in your response and what format you should use to provide it. 
+      Check if there are any other requests linked to this request. You can use the 'list_related_requests' Forge MCP tool to find them. This can help you get even better context. 
+      If you find linked requests or tasks to the request, you SHOULD take a look at them to fully understand the context about what's being requested.
 
       ### STEP 2: Analyze Capabilities
-      Look for the field 'suggestedCapabilities' in the request data. If there are capabilities associated to the Team Request:
+      Look for the field 'suggestedCapabilities' in the request data. If there are capabilities associated to the Team Request you MUST:
       1. Iterate through them and look them up using the 'get_capability_by_identifier' Forge MCP tool.
-      2. For each capability, extract all descriptive fields.
-      3. Fully understand what each instruction is about.
-      4. Synthesize all information (capability instructions, input/output descriptions, and the request instructions).
+      2. For each capability, you MUST extract all descriptive fields.
+      3. You MUST fully understand what each instruction is about.
+      4. You MUST synthesize all information (capability instructions, input/output descriptions, and the request instructions).
+      5. That will allow you to have a bigger picture and execute better the work being requested by this Team Request
 
       ### STEP 3: Evaluate, Accept or Reject
       Evaluate if you have enough information to execute this request based on its title, description, and synthesized instructions from the associated capabilities.
@@ -36,7 +42,10 @@ export function buildTeamRequestInstructions(teamRequest: { title: string; ident
       Stay on this request until the work is completely finished. Do your best to fulfill the original request following the synthesized instructions.
       If you created a TASK in STEP 4, you SHOULD update the TASK's taskList and executionLog accordingly (using 'update_task') as you execute the work. 
       **CRITICAL RULE** during the execution of your work on this request you can never update any other task than the one you created in step 4.
-      You must explain what you did using the 'update_task' tool to update the workSummary field with the result of your work on the request (including deliverables you might have produced on the way).
+      You must explain what you did using the 'update_task' tool to update the 'workSummary' field.
+      You MUST also use the 'update_task' tool to populate the 'result' field with the deliverable or the final result of your work, regardless of its format: if its a deliverable in a different type or format or changes outside of Forge API, you may reference it using 'url' or 'markdown' format, but always include the deliverable or the final result of your work.
+      If your work requires opening new requests to request help or work from another agent of your team, you MUST link them to this request by passing the identifier of this request ('${teamRequest.identifier}') in the 'parentRequestId' parameter when using the 'create_request' Forge MCP tool. 
+      You SHOULD also update this request to indicate that you have opened a new request and that it is linked to this request.
 
       ### STEP 6: Finalize Request (Respond)
       1. Once all work is completely finished (whether successful or failed), you must finally call 'update_request_status' to update this request status to 'completed' (resolution: 'success' or 'failed'). 
@@ -50,4 +59,16 @@ export function buildTeamRequestMessage(teamRequest: { identifier: string; title
   return `You received a new Team Request from your FORGE team with the identifier: ${teamRequest.identifier} and title: ${teamRequest.title}. 
   You must use the 'get_request' Forge MCP tool passing the identifier '${teamRequest.identifier}' to fetch the details of this request.
   Read all fields without exception and follow the instructions thoroughly to provide the best possible response and achieve the desired outcome of this request.`;
+}
+
+export function buildTeamRequestFinishedMessage(completedRequest: { identifier: string; title: string; resolution: string; response?: string }) {
+  return `A Team Request you previously opened has been completed.
+  Identifier: ${completedRequest.identifier}
+  Title: ${completedRequest.title}
+  Resolution: ${completedRequest.resolution}
+  
+  You must use the 'get_request' Forge MCP tool passing the identifier '${completedRequest.identifier}' to fetch the final details and response of this request if you need more context.
+  
+  Review the result of this request. Since this request was created as part of your work on another task/request, you must now continue your work based on these new findings or deliverables. 
+  Update the original task or request you are working on, and proceed to the next steps of your plan.`;
 }

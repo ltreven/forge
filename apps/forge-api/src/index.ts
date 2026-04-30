@@ -12,6 +12,7 @@ import { tasksRouter } from "./routes/tasks";
 import { teamManagementRouter } from "./routes/team-management";
 import { mcpRouter } from "./routes/mcp";
 import { metaRouter } from "./routes/meta";
+import { notificationsRouter } from "./routes/notifications";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -72,6 +73,7 @@ app.use("/conversations", conversationsRouter);
 app.use("/teams/:id/integrations", integrationsRouter);
 app.use("/mcp", mcpRouter);
 app.use("/meta", metaRouter);
+app.use("/notifications", notificationsRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 

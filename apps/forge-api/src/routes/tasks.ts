@@ -51,6 +51,7 @@ export async function createTaskInternal(input: any, actor: { id: string, type: 
         taskList: input.taskList,
         executionLog: input.executionLog,
         workSummary: input.workSummary,
+        result: input.result,
         assignedToId: input.assignedToId,
       })
       .returning();

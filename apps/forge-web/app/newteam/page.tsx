@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth, API_BASE } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -33,48 +34,7 @@ type TeamTypeRole = {
   isLeader: boolean;
 };
 
-// ── Translation Mock ──────────────────────────────────────────────────────────
-const translate = (key: string) => {
-  const dictionary: Record<string, string> = {
-    team_type_starter: "Starter",
-    team_type_desc_starter: "Just a Team Lead to get you going. Simple and flexible.",
-    team_type_engineering: "Engineering",
-    team_type_desc_engineering: "Full software delivery squad with SDLC discipline.",
-    team_type_customer_support: "Customer Support",
-    team_type_desc_customer_support: "Automated support team.",
-    team_type_sales: "Sales",
-    team_type_desc_sales: "Automate lead qualification and outreach with AI-driven sales teams.",
-    team_type_marketing: "Marketing",
-    team_type_desc_marketing: "Generate content and manage campaigns with a creative team of AI marketers.",
-    
-    agent_role_team_lead: "Team Lead",
-    agent_desc_team_lead: "Coordinates the team and owns delivery.",
-    team_lead_suggested_name: "Team Lead",
-    
-    agent_role_software_engineer: "Software Engineer",
-    agent_desc_software_engineer: "Writes high-quality code, implements features, and fixes bugs.",
-    engineer_suggested_name: "Alice",
-    
-    agent_role_software_architect: "Software Architect",
-    agent_desc_software_architect: "Designs system architecture, defines standards, and ensures scalability.",
-    architect_suggested_name: "Bob",
-    
-    agent_role_product_manager: "Product Manager",
-    agent_desc_product_manager: "Defines product vision, gathers requirements, and prioritizes features.",
-    pm_suggested_name: "Carol",
-    
-    agent_role_support_responder: "Support Responder",
-    agent_desc_support_responder: "Handles initial customer inquiries and provides quick resolutions.",
-    responder_suggested_name: "David",
-    
-    agent_role_support_analist: "Support Analyst",
-    agent_desc_support_analist: "Deeply investigates complex issues and provides technical support.",
-    analyst_suggested_name: "Eve",
-  };
-  return dictionary[key] || key;
-};
 
-// ── Quantity Control ──────────────────────────────────────────────────────────
 
 function QuantityControl({ value, onChange, id }: {
   value: number; onChange: (v: number) => void; id: string;
@@ -137,6 +97,8 @@ function Stepper({ step, steps }: { step: number; steps: string[] }) {
 export default function NewTeamPage() {
   const { token, workspaceId } = useAuth();
   const router      = useRouter();
+  const { t } = useTranslation();
+  const translate = useCallback((key: string) => (t.db as Record<string, string>)[key] || key, [t.db]);
 
   // Navigation State
   const [step, setStep] = useState(1);
@@ -228,7 +190,7 @@ export default function NewTeamPage() {
       }
     };
     fetchRoles();
-  }, [token, selectedType]);
+  }, [token, selectedType, translate]);
 
   const updateQuantity = useCallback((roleId: string, qty: number, role: AgentRole) => {
     setQuantities((prev) => ({ ...prev, [roleId]: qty }));
@@ -253,7 +215,7 @@ export default function NewTeamPage() {
       }
       return prevLeader;
     });
-  }, []);
+  }, [translate]);
 
   const fetchAllRoles = async () => {
     if (!token) return;

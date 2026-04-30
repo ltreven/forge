@@ -57,6 +57,7 @@ export function registerRequestTools(server: McpServer, actor: any, authHeader: 
       instructions: z.string().optional().describe("Summary of instructions for the agent"),
       priority: z.number().int().min(0).max(4).optional().describe("Priority level (0-4)"),
       responseContract: z.string().optional().describe("Instructions on what the target agent should return (Markdown string)"),
+      parentRequestId: z.string().optional().describe("If this request is a child of another request, provide the parent request identifier or UUID"),
     },
     async ({ teamId, ...rest }) => {
       try {

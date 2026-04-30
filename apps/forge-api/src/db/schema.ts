@@ -43,10 +43,22 @@ export const counterpartTypeEnum = pgEnum("counterpart_type", [
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
 
 export const actorTypeEnum = pgEnum("actor_type", ["human", "agent"]);
-export const requestStatusEnum = pgEnum("request_status", ["draft", "open", "in_progress", "waiting_user", "completed", "cancelled"]);
+
+export const requestStatusEnum = pgEnum("request_status", [
+  "draft", 
+  "open", 
+  "in_progress", 
+  "waiting_user", 
+  "completed", 
+  "cancelled"
+]);
+
 export const requestResolutionEnum = pgEnum("request_resolution", ["success", "failed"]);
 
 export const changeTypeEnum = pgEnum("change_type", ["data", "status", "relationship", "creation", "deletion"]);
+
+export const notificationPriorityEnum = pgEnum("notification_priority", ["info", "normal", "high", "alert"]);
+
 
 export const activities = pgTable("activities", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -201,6 +213,32 @@ export const messages = pgTable("messages", {
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 
+// ── Notifications ──────────────────────────────────────────────────────────────
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  
+  recipientId: uuid("recipient_id").notNull(),
+  recipientType: actorTypeEnum("recipient_type").notNull(),
+  
+  title: text("title").notNull(),
+  content: text("content"),
+  priority: notificationPriorityEnum("priority").notNull().default("normal"),
+  isRead: boolean("is_read").notNull().default(false),
+  
+  relatedEntityId: uuid("related_entity_id"),
+  relatedEntityType: text("related_entity_type"),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
+
 // ── Task Management (Kanban) ────────────────────────────────────────────────
 
 export const tasks = pgTable("tasks", {
@@ -214,6 +252,7 @@ export const tasks = pgTable("tasks", {
   taskList: text("task_list"),
   executionLog: jsonb("execution_log").$type<string[]>(),
   workSummary: text("work_summary"),
+  result: text("result"),
   assignedToId: uuid("assigned_to_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

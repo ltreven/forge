@@ -12,7 +12,8 @@ import {
   Users,
   Activity,
   ClipboardList,
-  CheckSquare
+  CheckSquare,
+  FileCheck
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, API_BASE } from "@/lib/auth";
@@ -205,8 +206,17 @@ export default function TaskPage() {
             {task.workSummary && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest"><ClipboardList className="size-3.5" /> Work Summary</div>
-                <div className="rounded-xl border border-border bg-card p-5 text-sm whitespace-pre-wrap leading-relaxed bg-primary/5 border-primary/20">
+                <div className="rounded-xl border border-border bg-card p-5 text-sm whitespace-pre-wrap leading-relaxed">
                   {task.workSummary}
+                </div>
+              </div>
+            )}
+
+            {task.result && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest"><FileCheck className="size-3.5" /> Deliverable / Result</div>
+                <div className="rounded-xl border border-border bg-card p-5 text-sm whitespace-pre-wrap leading-relaxed bg-primary/5 border-primary/20">
+                  {task.result}
                 </div>
               </div>
             )}

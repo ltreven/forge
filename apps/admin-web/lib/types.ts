@@ -35,6 +35,7 @@ export interface Task {
   taskList?: string | null;
   executionLog?: string[] | null;
   workSummary?: string | null;
+  result?: string | null;
   status: number;
   priority: number;
   assignedToId?: string | null;

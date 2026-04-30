@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Menu, X, Cpu, LogOut, ChevronDown, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LangSwitcher } from "@/components/lang-switcher";
+import { NotificationBell } from "@/components/notification-bell";
 import { useTranslation } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -77,7 +78,9 @@ export function Navbar() {
           <LangSwitcher />
           {user ? (
             // ── Authenticated: user avatar dropdown ──
-            <div className="relative ml-2">
+            <>
+              <NotificationBell />
+              <div className="relative ml-2">
               <button
                 id="nav-user-menu"
                 onClick={() => setDropdownOpen((v) => !v)}
@@ -129,6 +132,7 @@ export function Navbar() {
                 </>
               )}
             </div>
+            </>
           ) : (
             // ── Unauthenticated: login / signup ──
             <>

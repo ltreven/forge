@@ -12,6 +12,7 @@ export const createTaskSchema = z.object({
   taskList: z.string().nullable().optional(),
   executionLog: z.array(z.string()).nullable().optional(),
   workSummary: z.string().nullable().optional(),
+  result: z.string().nullable().optional(),
   assignedToId: z.string().uuid().nullable().optional(),
 });
 

@@ -7,6 +7,7 @@ import { Cpu, ChevronDown, LogOut, User } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { LangSwitcher } from "@/components/lang-switcher";
+import { NotificationBell } from "@/components/notification-bell";
 
 /**
  * Logged-in application navbar. Used in authenticated app pages.
@@ -53,6 +54,7 @@ export function AppNavbar() {
         {/* Right side */}
         <div className="flex items-center gap-2">
           <LangSwitcher />
+          <NotificationBell />
 
           {/* User dropdown */}
           <div className="relative">

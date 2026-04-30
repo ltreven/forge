@@ -1,13 +1,13 @@
 import { Router } from "express";
 import { db } from "../db/client";
-import { users, requests, tasks, agents, workspaces, teams, comments, conversations, messages } from "../db/schema";
+import { users, requests, tasks, agents, workspaces, teams, comments, conversations, messages, notifications } from "../db/schema";
 import { eq, and, desc, or, sql, isNull } from "drizzle-orm";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { z } from "zod";
 import { logActivity } from "../lib/activity-logger";
 import { assignAgentToRequest } from "../lib/agent-assignment";
 import { publishToAgent, tenantVhost, tenantExchange } from "../lib/rabbitmq";
-import { buildTeamRequestMessage, buildTeamRequestInstructions } from "../lib/messages";
+import { buildTeamRequestMessage, buildTeamRequestInstructions, buildTeamRequestFinishedMessage } from "../lib/messages";
 import { randomBytes } from "crypto";
 
 export const requestsRouter = Router({ mergeParams: true });
@@ -85,6 +85,80 @@ async function handleRequestCreatedState(requestRecord: any) {
   }
 }
 
+async function handleRequestCompletedState(requestRecord: any) {
+  // 1. If human requester, insert a notification
+  if (requestRecord.requesterUserId) {
+    await db.insert(notifications).values({
+      teamId: requestRecord.teamId,
+      recipientId: requestRecord.requesterUserId,
+      recipientType: "human",
+      title: requestRecord.resolution === "failed" ? "Request Failed" : "Request Completed",
+      content: `Request ${requestRecord.identifier} has been completed with resolution: ${requestRecord.resolution}.`,
+      priority: requestRecord.resolution === "failed" ? "alert" : requestRecord.priority > 2 ? "high" : "normal",
+      relatedEntityId: requestRecord.id,
+      relatedEntityType: "request"
+    });
+  } 
+  // 2. If agent requester, dispatch a message to the agent
+  else if (requestRecord.requesterAgentId) {
+    const targetAgentId = requestRecord.requesterAgentId;
+    
+    // Create NEW Conversation with the orchestrator
+    const [conversation] = await db.insert(conversations).values({
+      agentId: targetAgentId,
+      counterpartType: "external" as any,
+      counterpartId: "system",
+      counterpartName: "System Orchestrator"
+    }).returning();
+
+    // Create Message
+    const messageContent = buildTeamRequestFinishedMessage({
+      identifier: requestRecord.identifier,
+      title: requestRecord.title,
+      resolution: requestRecord.resolution || "success",
+      response: requestRecord.response
+    });
+
+    const [userMessage] = await db.insert(messages).values({
+      conversationId: conversation.id,
+      role: "user" as any,
+      content: messageContent
+    }).returning();
+
+    // Publish to Agent
+    const [agent] = await db.select().from(agents).where(eq(agents.id, targetAgentId));
+    if (agent) {
+       const [team] = await db.select().from(teams).where(eq(teams.id, agent.teamId));
+       const [workspace] = team ? await db.select().from(workspaces).where(eq(workspaces.id, team.workspaceId)) : [];
+       
+       if (workspace) {
+         const rabbitCreds = {
+            host:     process.env.RABBITMQ_AMQP_HOST ?? "localhost",
+            amqpPort: Number(process.env.RABBITMQ_AMQP_PORT ?? 5672),
+            vhost:    tenantVhost(workspace.id),
+            username: process.env.RABBITMQ_ADMIN_USER ?? "admin",
+            password: process.env.RABBITMQ_ADMIN_PASSWORD ?? "admin",
+            exchange: tenantExchange(workspace.id),
+          };
+          
+          try {
+            await publishToAgent(rabbitCreds, {
+              tenantId:   workspace.id,
+              agentId:    agent.id,
+              sessionKey: conversation.id,
+              messageId:  randomBytes(16).toString("hex"),
+              action:     "chat_message",
+              payload:    { role: "user", content: messageContent },
+            });
+          } catch (err) {
+            console.error("[team-requests] RabbitMQ publish for completion failed:", err);
+          }
+       }
+    }
+  }
+}
+
+
 const requestSchema = z.object({
   title: z.string(),
   targetAgentId: z.string().uuid().optional().nullable(),
@@ -98,6 +172,7 @@ const requestSchema = z.object({
   resolution: z.enum(["success", "failed"]).optional().nullable(),
   response: z.string().optional(),
   assignedAgentId: z.string().uuid().optional().nullable(),
+  parentRequestId: z.string().optional().nullable(),
 });
 
 // POST /teams/:teamId/requests
@@ -121,6 +196,20 @@ requestsRouter.post("/", authMiddleware, async (req, res) => {
       const nextNumber = Number((nextNumResult.rows[0] as any).next_number);
       const identifier = `${team.identifierPrefix}-${nextNumber}`;
 
+      let resolvedParentRequestId: string | undefined = undefined;
+      if (body.parentRequestId) {
+        if (isUuid(body.parentRequestId)) {
+          resolvedParentRequestId = body.parentRequestId;
+        } else {
+          const [parentReq] = await tx.select({ id: requests.id }).from(requests).where(and(eq(requests.identifier, body.parentRequestId), eq(requests.teamId, teamId)));
+          if (parentReq) {
+            resolvedParentRequestId = parentReq.id;
+          } else {
+            throw new Error(`Parent request with identifier ${body.parentRequestId} not found.`);
+          }
+        }
+      }
+
       const [reqRecord] = await tx
         .insert(requests)
         .values({
@@ -137,6 +226,7 @@ requestsRouter.post("/", authMiddleware, async (req, res) => {
           responseContract: body.responseContract,
           requestCapabilities: body.requestCapabilities,
           status: body.status || "open",
+          parentRequestId: resolvedParentRequestId,
         })
         .returning();
 
@@ -310,6 +400,7 @@ requestsRouter.patch("/:requestId", authMiddleware, async (req, res) => {
       await logActivity({ teamId, actorId, actorType, changeType: "status", activityTitle: "Request in progress", requestId: updatedRequest.id });
     } else if (body.status === "completed" && existing.status !== "completed") {
       await logActivity({ teamId, actorId, actorType, changeType: "status", activityTitle: "Request completed", requestId: updatedRequest.id, newState: { resolution: updatedRequest.resolution } });
+      await handleRequestCompletedState(updatedRequest);
     }
 
     res.json({ data: updatedRequest });

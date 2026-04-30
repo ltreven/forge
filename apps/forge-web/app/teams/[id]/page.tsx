@@ -150,6 +150,7 @@ export default function TeamDetailPage() {
   const [requests, setRequests] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
   const [capabilities, setCapabilities] = useState<any[]>([]);
+  const [teamAlerts, setTeamAlerts] = useState<any[]>([]);
 
   // Filters
   const [showOnlyMine, setShowOnlyMine] = useState(true);
@@ -211,8 +212,9 @@ export default function TeamDetailPage() {
       fetchActivities(),
       fetch(`${API_BASE}/teams/${teamId}/requests?parentRequestId=null`, { headers }),
       fetch(`${API_BASE}/teams/${teamId}/capabilities`, { headers }),
+      fetch(`${API_BASE}/notifications?teamId=${teamId}&priority=high,alert`, { headers }),
     ])
-      .then(async ([teamRes, _a, _act, requestsRes, capsRes]) => {
+      .then(async ([teamRes, _a, _act, requestsRes, capsRes, notifsRes]) => {
         if (teamRes && teamRes.ok) {
           const d = await teamRes.json();
           setTeam(d.data);
@@ -223,6 +225,10 @@ export default function TeamDetailPage() {
         
         if (requestsRes && requestsRes.ok) setRequests((await requestsRes.json()).data ?? []);
         if (capsRes && capsRes.ok) setCapabilities((await capsRes.json()).data ?? []);
+        if (notifsRes && notifsRes.ok) {
+          const notifs = (await notifsRes.json()).data ?? [];
+          setTeamAlerts(notifs.filter((n: any) => !n.isRead));
+        }
       })
       .finally(() => setIsLoading(false));
 
@@ -316,6 +322,32 @@ export default function TeamDetailPage() {
           </DropdownMenu>
         </div>
       </header>
+
+      {/* Team Alerts Banner */}
+      {teamAlerts.length > 0 && (
+        <section className="mb-8 rounded-xl border border-destructive/20 bg-destructive/10 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle className="size-5 text-destructive" />
+            <h2 className="text-sm font-semibold text-destructive">Team Needs Your Help</h2>
+          </div>
+          <div className="flex flex-col gap-2">
+            {teamAlerts.map(alert => (
+              <div key={alert.id} className="flex flex-col gap-1 rounded-lg bg-background/50 p-3 text-sm">
+                <span className="font-medium text-foreground">{alert.title}</span>
+                {alert.content && <span className="text-muted-foreground">{alert.content}</span>}
+                {alert.relatedEntityType === "request" && alert.relatedEntityId && (
+                  <Link 
+                    href={`/teams/${teamId}/requests/${alert.relatedEntityId}`}
+                    className="mt-1 text-xs font-semibold text-primary hover:underline"
+                  >
+                    View Request
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Manager Actions Area */}
       <section className="mb-8 rounded-xl border bg-card p-5">
